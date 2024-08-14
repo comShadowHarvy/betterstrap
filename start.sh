@@ -20,15 +20,15 @@ run_script() {
 }
 
 # URLs to each script (replace with actual URLs)
-url_attack="https://yourserver.com/path/to/attack.sh"
-url_attackinstall="https://yourserver.com/path/to/attackinstall.sh"
-url_average="https://yourserver.com/path/to/average.sh"
-url_backup="https://yourserver.com/path/to/backup.sh"
-url_game="https://yourserver.com/path/to/game.sh"
-url_repo="https://yourserver.com/path/to/repo.sh"
-url_restore="https://yourserver.com/path/to/restore.sh"
-url_smb="https://yourserver.com/path/to/smb.sh"
-url_strap="https://yourserver.com/path/to/strap.sh"
+url_attack="https://github.com/comShadowHarvy/betterstrap/blob/main/attack.sh"
+url_attackinstall="https://github.com/comShadowHarvy/betterstrap/blob/main/attackinstall.sh"
+url_average="https://github.com/comShadowHarvy/betterstrap/blob/main/average.sh"
+url_backup="https://github.com/comShadowHarvy/betterstrap/blob/main/backup.sh"
+url_game="https://github.com/comShadowHarvy/betterstrap/blob/main/game.sh"
+url_repo="https://github.com/comShadowHarvy/betterstrap/blob/main/repo.sh"
+url_restore="https://github.com/comShadowHarvy/betterstrap/blob/main/restore.sh"
+url_smb="https://github.com/comShadowHarvy/betterstrap/blob/main/smb.sh"
+url_strap="https://github.com/comShadowHarvy/betterstrap/blob/main/strap.sh"
 
 # Detailed descriptions of each script
 desc_repo="The repo.sh script manages software repositories on your system. It allows you to easily add, update, or remove repositories, ensuring that your system has access to the latest software from trusted sources."
