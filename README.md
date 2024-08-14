@@ -1,6 +1,4 @@
-### **README.md**
 
-```markdown
 # My Shell Scripts Collection
 
 This repository contains a collection of useful shell scripts designed to automate various tasks, from system setup to backup and restoration. Below is a detailed description of each script included in this repository.
@@ -41,6 +39,14 @@ This script is a bootstrapper for setting up your system with a base configurati
 
 ## Usage
 
+### Quick Start
+
+To quickly start with this repository, you can run the following one-liner to download and execute the `start.sh` script:
+
+```bash
+bash <(curl -s https://raw.githubusercontent.com/comShadowHarvy/betterstrap/main/start.sh)
+```
+
 ### Backup and Restore
 To back up your configuration files and keys:
 ```bash
@@ -66,5 +72,3 @@ Feel free to contribute to this repository by submitting pull requests or openin
 
 ## License
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-
