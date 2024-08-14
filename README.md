@@ -2,6 +2,7 @@
 # My Shell Scripts Collection
 
 This repository contains a collection of useful shell scripts designed to automate various tasks, from system setup to backup and restoration. Below is a detailed description of each script included in this repository.
+My new start isnt downloading right so i included the old one.
 
 ## Scripts Included
 
