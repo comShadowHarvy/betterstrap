@@ -20,15 +20,15 @@ run_script() {
 }
 
 # URLs to each script (replace with actual URLs)
-url_attack="https://github.com/comShadowHarvy/betterstrap/blob/main/attack.sh"
-url_attackinstall="https://github.com/comShadowHarvy/betterstrap/blob/main/attackinstall.sh"
-url_average="https://github.com/comShadowHarvy/betterstrap/blob/main/average.sh"
-url_backup="https://github.com/comShadowHarvy/betterstrap/blob/main/backup.sh"
-url_game="https://github.com/comShadowHarvy/betterstrap/blob/main/game.sh"
-url_repo="https://github.com/comShadowHarvy/betterstrap/blob/main/repo.sh"
-url_restore="https://github.com/comShadowHarvy/betterstrap/blob/main/restore.sh"
-url_smb="https://github.com/comShadowHarvy/betterstrap/blob/main/smb.sh"
-url_strap="https://github.com/comShadowHarvy/betterstrap/blob/main/strap.sh"
+url_attack="https://raw.githubusercontent.com/comShadowHarvy/betterstrap/main/attack.sh"
+url_attackinstall="https://raw.githubusercontent.com/comShadowHarvy/betterstrap/main/attackinstall.sh"
+url_average="https://raw.githubusercontent.com/comShadowHarvy/betterstrap/main/average.sh"
+url_backup="https://raw.githubusercontent.com/comShadowHarvy/betterstrap/main/backup.sh"
+url_game="https://raw.githubusercontent.com/comShadowHarvy/betterstrap/main/game.sh"
+url_repo="https://raw.githubusercontent.com/comShadowHarvy/betterstrap/main/repo.sh"
+url_restore="https://raw.githubusercontent.com/comShadowHarvy/betterstrap/main/restore.sh"
+url_smb="https://raw.githubusercontent.com/comShadowHarvy/betterstrap/main/smb.sh"
+url_strap="https://raw.githubusercontent.com/comShadowHarvy/betterstrap/main/strap.sh"
 
 # Detailed descriptions of each script
 desc_repo="The repo.sh script manages software repositories on your system. It allows you to easily add, update, or remove repositories, ensuring that your system has access to the latest software from trusted sources."
