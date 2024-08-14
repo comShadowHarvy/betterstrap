@@ -1,0 +1,45 @@
+#!/bin/bash
+
+# Function to prompt and execute a script with a detailed description
+run_script() {
+    local script_name=$1
+    local script_description=$2
+
+    echo -e "\n$script_description"
+    read -p "Do you want to run $script_name? (y/n): " choice
+    if [ "$choice" = "y" ]; then
+        if [ -f "$script_name" ]; then
+            chmod +x $script_name
+            echo "Running $script_name..."
+            ./$script_name
+        else
+            echo "Error: $script_name not found in the current directory."
+        fi
+    else
+        echo "Skipping $script_name."
+    fi
+}
+
+# Detailed descriptions of each script
+desc_repo="The repo.sh script manages software repositories on your system. It allows you to easily add, update, or remove repositories, ensuring that your system has access to the latest software from trusted sources."
+desc_strap="The strap.sh script is a bootstrapper for setting up your system with a base configuration. It installs essential packages, applies system configurations, and sets up your environment according to your preferences."
+desc_attackinstall="The attackinstall.sh script installs the necessary tools and dependencies required to perform network attack simulations. It sets up your environment with tools like Nmap, Hydra, or other penetration testing utilities."
+desc_attack="The attack.sh script automates the setup and execution of a network attack simulation. It can be used to test network defenses by simulating various types of attacks such as brute force, DoS, or vulnerability scanning."
+desc_smb="The smb.sh script configures SMB (Samba) shares on your system. It simplifies the process of setting up and managing Samba shares, including setting permissions and configuring access to shared directories."
+desc_game="The game.sh script automates the installation and configuration of gaming tools and platforms on your Linux system. It sets up a gaming-ready environment by installing tools like Steam, Lutris, or MangoHud."
+desc_backup="The backup.sh script backs up important configuration files and keys, including SSH keys, GPG keys, and the .api_keys file. It also provides an option to encrypt the backup using GPG, ensuring that your sensitive data is stored securely."
+desc_restore="The restore.sh script restores previously backed-up configuration files and keys. It checks for the existence of the backup files before attempting to restore them, ensuring that your system can be reverted to a previous state with all critical configurations intact."
+desc_average="The average.sh script calculates the average value from a set of numerical inputs. It is useful for quickly determining the mean of a list of numbers, which could be provided manually or read from a file."
+
+# Optimal order to run the scripts
+run_script "repo.sh" "$desc_repo"
+run_script "strap.sh" "$desc_strap"
+run_script "attackinstall.sh" "$desc_attackinstall"
+run_script "attack.sh" "$desc_attack"
+run_script "smb.sh" "$desc_smb"
+run_script "game.sh" "$desc_game"
+run_script "backup.sh" "$desc_backup"
+run_script "restore.sh" "$desc_restore"
+run_script "average.sh" "$desc_average"
+
+echo "All selected scripts have been run."
