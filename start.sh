@@ -19,7 +19,8 @@ run_script() {
     fi
 }
 
-# URLs to each script (replace with actual URLs)
+
+# URLs to each script
 url_attack="https://raw.githubusercontent.com/comShadowHarvy/betterstrap/main/attack.sh"
 url_attackinstall="https://raw.githubusercontent.com/comShadowHarvy/betterstrap/main/attackinstall.sh"
 url_average="https://raw.githubusercontent.com/comShadowHarvy/betterstrap/main/average.sh"
@@ -29,6 +30,7 @@ url_repo="https://raw.githubusercontent.com/comShadowHarvy/betterstrap/main/repo
 url_restore="https://raw.githubusercontent.com/comShadowHarvy/betterstrap/main/restore.sh"
 url_smb="https://raw.githubusercontent.com/comShadowHarvy/betterstrap/main/smb.sh"
 url_strap="https://raw.githubusercontent.com/comShadowHarvy/betterstrap/main/strap.sh"
+
 
 # Detailed descriptions of each script
 desc_repo="The repo.sh script manages software repositories on your system. It allows you to easily add, update, or remove repositories, ensuring that your system has access to the latest software from trusted sources."
