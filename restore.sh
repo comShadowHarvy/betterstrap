@@ -32,10 +32,14 @@ echo "Restoring GPG configuration..."
 cp -r "$BACKUP_DIR/$SELECTED_BACKUP/gnupg-backup" ~/.gnupg
 chmod -R 700 ~/.gnupg
 
-# API keys restore
-echo "Restoring API keys..."
-cp -r "$BACKUP_DIR/$SELECTED_BACKUP/apikeys-backup" ~/.apikeys
-chmod -R 600 ~/.apikeys
+# API keys file restore
+if [ -f "$BACKUP_DIR/$SELECTED_BACKUP/api_keys-backup" ]; then
+    echo "Restoring API keys file..."
+    cp "$BACKUP_DIR/$SELECTED_BACKUP/api_keys-backup" ~/.api_keys
+    chmod 600 ~/.api_keys
+else
+    echo "API keys file not found in backup, skipping..."
+fi
 
 # Optional decryption (if the backup was encrypted)
 read -p "Is the backup encrypted (did you create a .tar.gz.gpg file)? (y/n): " ENCRYPTED

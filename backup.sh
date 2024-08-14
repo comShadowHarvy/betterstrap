@@ -22,9 +22,13 @@ gpg --armor --export-secret-keys $GPG_KEY_ID > "$BACKUP_DIR/private-gpg-key.asc"
 echo "Backing up GPG configuration..."
 cp -r ~/.gnupg "$BACKUP_DIR/gnupg-backup"
 
-# API keys backup
-echo "Backing up API keys..."
-cp -r ~/.apikeys "$BACKUP_DIR/apikeys-backup"
+# API keys file backup
+if [ -f "$HOME/.api_keys" ]; then
+    echo "Backing up API keys file..."
+    cp ~/.api_keys "$BACKUP_DIR/api_keys-backup"
+else
+    echo "API keys file not found, skipping..."
+fi
 
 # Optional encryption
 read -p "Would you like to encrypt the backup? (y/n): " ENCRYPT
