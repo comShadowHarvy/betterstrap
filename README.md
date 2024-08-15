@@ -13,7 +13,7 @@ This script is designed to automate the setup and execution of a network attack 
 This script installs the necessary tools and dependencies required to perform network attack simulations. It sets up your environment with tools like Nmap, Hydra, or other penetration testing utilities.
 
 ### 3. `average.sh`
-This script calculates the average value from a set of numerical inputs. It is useful for quickly determining the mean of a list of numbers, which could be provided manually or read from a file.
+This script is designed to automate the installation of recommended software on an Arch-based system. It provides detailed descriptions, advantages, and disadvantages for each software package and includes a progress bar to show installation status. The script uses yay to manage installations and checks if the software is already installed before attempting to install it.
 
 ### 4. `backup.sh`
 This script backs up important configuration files and keys, including:

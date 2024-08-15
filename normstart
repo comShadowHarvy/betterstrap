@@ -29,7 +29,7 @@ desc_smb="The smb.sh script configures SMB (Samba) shares on your system. It sim
 desc_game="The game.sh script automates the installation and configuration of gaming tools and platforms on your Linux system. It sets up a gaming-ready environment by installing tools like Steam, Lutris, or MangoHud."
 desc_backup="The backup.sh script backs up important configuration files and keys, including SSH keys, GPG keys, and the .api_keys file. It also provides an option to encrypt the backup using GPG, ensuring that your sensitive data is stored securely."
 desc_restore="The restore.sh script restores previously backed-up configuration files and keys. It checks for the existence of the backup files before attempting to restore them, ensuring that your system can be reverted to a previous state with all critical configurations intact."
-desc_average="The average.sh script calculates the average value from a set of numerical inputs. It is useful for quickly determining the mean of a list of numbers, which could be provided manually or read from a file."
+desc_average="This script is designed to automate the installation of recommended software on an Arch-based system. It provides detailed descriptions, advantages, and disadvantages for each software package and includes a progress bar to show installation status. The script uses yay to manage installations and checks if the software is already installed before attempting to install it."
 
 # Optimal order to run the scripts
 run_script "repo.sh" "$desc_repo"
