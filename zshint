@@ -1,0 +1,78 @@
+#!/bin/bash
+
+# Function to install Oh My Posh
+install_oh_my_posh() {
+    echo "Installing Oh My Posh..."
+    
+    # Download Oh My Posh
+    sudo wget https://github.com/JanDeDobbeleer/oh-my-posh/releases/latest/download/posh-linux-amd64 -O /usr/local/bin/oh-my-posh
+    
+    # Make it executable
+    sudo chmod +x /usr/local/bin/oh-my-posh
+    
+    # Create theme directory if not exists
+    mkdir -p ~/.oh-my-posh
+    
+    # Download the Devious Diamonds theme
+    wget https://raw.githubusercontent.com/JanDeDobbeleer/oh-my-posh/main/themes/devious-diamonds.omp.yaml -O ~/.oh-my-posh/devious-diamonds.omp.yaml
+    
+    # Add Oh My Posh to zsh configuration
+    echo 'eval "$(oh-my-posh init zsh --config ~/.oh-my-posh/devious-diamonds.omp.yaml)"' >> ~/.zshrc
+    
+    echo "Oh My Posh installation completed!"
+}
+
+# Function to install Antigen
+install_antigen() {
+    echo "Installing Antigen..."
+    curl -L git.io/antigen > ~/antigen.zsh
+    
+    # Add Antigen to zsh configuration
+    echo 'source ~/antigen.zsh' >> ~/.zshrc
+    echo 'antigen init ~/.antigenrc' >> ~/.zshrc
+    
+    echo "Antigen installation completed!"
+}
+
+# Function to install Zinit
+install_zinit() {
+    echo "Installing Zinit..."
+    
+    # Clone Zinit repository
+    sh -c "$(curl -fsSL https://raw.githubusercontent.com/zdharma/zinit/master/doc/install.sh)"
+    
+    # Add Zinit to zsh configuration
+    echo 'source "$HOME/.zinit/bin/zinit.zsh"' >> ~/.zshrc
+    echo 'autoload -Uz _zinit' >> ~/.zshrc
+    echo '(( ${+_comps} )) && _comps[zinit]=_zinit' >> ~/.zshrc
+    
+    echo "Zinit installation completed!"
+}
+
+# Function to install Zplug
+install_zplug() {
+    echo "Installing Zplug..."
+    
+    # Install Zplug
+    curl -sL https://raw.githubusercontent.com/zplug/installer/master/installer.zsh | zsh
+    
+    # Add Zplug to zsh configuration
+    echo 'source ~/.zplug/init.zsh' >> ~/.zshrc
+    echo 'zplug "zplug/zplug", hook-build:"zplug --self-manage"' >> ~/.zshrc
+    echo 'zplug load' >> ~/.zshrc
+    
+    echo "Zplug installation completed!"
+}
+
+# Main function to coordinate the installation
+main() {
+    install_oh_my_posh
+    install_antigen
+    install_zinit
+    install_zplug
+    
+    echo "All installations completed! Please restart your terminal or run 'source ~/.zshrc' to apply the changes."
+}
+
+# Execute the main function
+main

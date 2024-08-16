@@ -30,6 +30,13 @@ else
     echo "API keys file not found, skipping..."
 fi
 
+# Additional files to backup
+echo "Backing up additional zsh configuration files..."
+cp ~/.antigenrc "$BACKUP_DIR"
+cp ~/.extrazshrc "$BACKUP_DIR"
+cp ~/.zsh1 "$BACKUP_DIR"
+cp ~/.zshrc "$BACKUP_DIR"
+
 # Optional encryption
 read -p "Would you like to encrypt the backup? (y/n): " ENCRYPT
 

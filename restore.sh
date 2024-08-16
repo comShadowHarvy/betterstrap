@@ -15,6 +15,9 @@ if [ ! -d "$BACKUP_DIR/$SELECTED_BACKUP" ]; then
     exit 1
 fi
 
+# Ensure the .ssh directory exists
+mkdir -p ~/.ssh
+
 # SSH restore
 echo "Restoring SSH keys..."
 cp "$BACKUP_DIR/$SELECTED_BACKUP/id" ~/.ssh/
@@ -49,5 +52,12 @@ if [ "$ENCRYPTED" == "y" ]; then
     gpg -d "$BACKUP_DIR/$ENCRYPTED_FILE" | tar xz -C "$HOME"
     echo "Backup decrypted and restored."
 fi
+
+# Restore additional zsh configuration files
+echo "Restoring additional zsh configuration files..."
+cp "$BACKUP_DIR/$SELECTED_BACKUP/.antigenrc" ~/
+cp "$BACKUP_DIR/$SELECTED_BACKUP/.extrazshrc" ~/
+cp "$BACKUP_DIR/$SELECTED_BACKUP/.zsh1" ~/
+cp "$BACKUP_DIR/$SELECTED_BACKUP/.zshrc" ~/
 
 echo "Restore completed."
