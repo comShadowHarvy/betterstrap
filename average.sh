@@ -54,7 +54,7 @@ display_description() {
     echo
 }
 
-total_steps=32
+total_steps=34
 current_step=0
 
 display_header
@@ -78,17 +78,14 @@ software=(
     "keepassxc:Cross-platform password manager:- Strong encryption.\n- Free and open-source.:- Interface can seem complex."
     "timeshift:System restore tool for Linux:- Easy system backups and restores.:- Can use a lot of disk space."
     "code:Powerful and popular code editor:- Highly extensible.\n- Free and open-source.:- Can be resource-intensive with many extensions."
-#    "pycharm:IDE for Python development:- Powerful features for Python development.\n- Integrated tools and debugging.:- Professional version requires a subscription."
     "git:Free and open-source distributed version control system:- Essential for version control.:- Requires learning Git commands."
     "deja-dup:Simple backup tool for GNOME:- Easy to use.\n- Integrated with GNOME.:- Limited advanced features."
     "rclone:Command-line program to manage files on cloud storage:- Supports many cloud providers.\n- Powerful and flexible.:- Requires command-line knowledge."
     "rambox:Messaging and emailing app that combines common web applications into one:- Combines multiple services in one app.:- Can be resource-intensive."
-#    "franz:Messaging app for WhatsApp, Facebook Messenger, Slack, Telegram, and more:- Supports many messaging services.:- Free version has limitations."
     "virtualbox:Powerful x86 and AMD64/Intel64 virtualization product:- Free and versatile.:- Performance can be lower than native."
     "vmware-player:Free virtualization tool for running multiple operating systems:- Good performance.\n- Free for non-commercial use.:- Advanced features require the paid version."
     "dropbox:Cloud storage service for file syncing and sharing:- Easy to use.\n- Cross-platform support.:- Limited free storage."
     "nextcloud:Self-hosted productivity platform that keeps you in control:- Complete control over data.\n- Many plugins available.:- Requires self-hosting knowledge."
-#    "joplin:Open-source note-taking and to-do application:- End-to-end encryption.\n- Cross-platform support.:- Interface can be basic."
     "simplenote:Simple and fast note-taking app:- Fast and easy to use.\n- Cross-platform support.:- Limited advanced features."
     "htop:Interactive process viewer for Unix systems:- Easy-to-use interface.\n- Detailed system monitoring.:- No built-in logging."
     "glances:Cross-platform system monitoring tool:- Detailed and comprehensive monitoring.:- Requires command-line knowledge."
@@ -97,6 +94,8 @@ software=(
     "visual-studio-code:Popular code editor from Microsoft:- Highly extensible.\n- Large community and support.:- Some features require extensions."
     "anbox:Run Android applications on a Linux system:- Allows running Android apps on Linux.\n- Free and open-source.:- May have compatibility issues with some apps."
     "waydroid:Container-based approach to running full Android systems on Linux:- Full Android experience on Linux.\n- Good performance.:- Requires kernel modules and setup."
+    "fzf:Fuzzy finder command-line tool for searching:- Fast and efficient.\n- Works with any text input.:- May require configuration for advanced usage."
+    "zoxide:Fast directory jumper, an alternative to cd:- Simple and efficient.\n- Learns your directory habits.:- Requires shell configuration."
 )
 
 # Function to install a software
