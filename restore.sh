@@ -60,4 +60,12 @@ cp "$BACKUP_DIR/$SELECTED_BACKUP/.extrazshrc" ~/
 cp "$BACKUP_DIR/$SELECTED_BACKUP/.zsh1" ~/
 cp "$BACKUP_DIR/$SELECTED_BACKUP/.zshrc" ~/
 
+# Restore .zshrc.d directory
+if [ -d "$BACKUP_DIR/$SELECTED_BACKUP/.zshrc.d" ]; then
+    echo "Restoring .zshrc.d directory..."
+    cp -r "$BACKUP_DIR/$SELECTED_BACKUP/.zshrc.d" ~/
+else
+    echo ".zshrc.d directory not found in backup, skipping..."
+fi
+
 echo "Restore completed."

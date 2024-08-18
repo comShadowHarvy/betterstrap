@@ -37,6 +37,14 @@ cp ~/.extrazshrc "$BACKUP_DIR"
 cp ~/.zsh1 "$BACKUP_DIR"
 cp ~/.zshrc "$BACKUP_DIR"
 
+# Backup .zshrc.d directory
+if [ -d ~/.zshrc.d ]; then
+    echo "Backing up .zshrc.d directory..."
+    cp -r ~/.zshrc.d "$BACKUP_DIR"
+else
+    echo ".zshrc.d directory not found, skipping..."
+fi
+
 # Optional encryption
 read -p "Would you like to encrypt the backup? (y/n): " ENCRYPT
 
