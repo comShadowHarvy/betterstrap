@@ -30,6 +30,7 @@ desc_game="The game.sh script automates the installation and configuration of ga
 desc_backup="The backup.sh script backs up important configuration files and keys, including SSH keys, GPG keys, and the .api_keys file. It also provides an option to encrypt the backup using GPG, ensuring that your sensitive data is stored securely."
 desc_restore="The restore.sh script restores previously backed-up configuration files and keys. It checks for the existence of the backup files before attempting to restore them, ensuring that your system can be reverted to a previous state with all critical configurations intact."
 desc_average="This script is designed to automate the installation of recommended software on an Arch-based system. It provides detailed descriptions, advantages, and disadvantages for each software package and includes a progress bar to show installation status. The script uses yay to manage installations and checks if the software is already installed before attempting to install it."
+desc_dev="The dev.sh script installs compilers and development tools necessary for advanced software development. It sets up a complete development environment, including tools like GCC, Clang, Rust, Go, and more."
 
 # Optimal order to run the scripts
 run_script "repo.sh" "$desc_repo"
@@ -37,6 +38,7 @@ run_script "strap.sh" "$desc_strap"
 run_script "attackinstall.sh" "$desc_attackinstall"
 run_script "attack.sh" "$desc_attack"
 run_script "smb.sh" "$desc_smb"
+run_script "dev.sh" "$desc_dev"
 run_script "game.sh" "$desc_game"
 run_script "backup.sh" "$desc_backup"
 run_script "restore.sh" "$desc_restore"
