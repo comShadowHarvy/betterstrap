@@ -23,19 +23,24 @@ echo "Backing up GPG configuration..."
 cp -r ~/.gnupg "$BACKUP_DIR/gnupg-backup"
 
 # API keys file backup
+echo "Backing up API keys file..."
 if [ -f "$HOME/.api_keys" ]; then
-    echo "Backing up API keys file..."
     cp ~/.api_keys "$BACKUP_DIR/api_keys-backup"
 else
     echo "API keys file not found, skipping..."
 fi
 
-# Additional files to backup
-echo "Backing up additional zsh configuration files..."
+# Zsh configuration files backup
+echo "Backing up Zsh configuration files..."
 cp ~/.antigenrc "$BACKUP_DIR"
 cp ~/.extrazshrc "$BACKUP_DIR"
 cp ~/.zsh1 "$BACKUP_DIR"
 cp ~/.zshrc "$BACKUP_DIR"
+cp ~/.aliases "$BACKUP_DIR"
+cp ~/.zsh_files/variables.zsh "$BACKUP_DIR"
+cp ~/.zsh_files/aliases.zsh "$BACKUP_DIR"
+cp ~/.zsh_files/tct.zsh "$BACKUP_DIR"
+cp ~/.zsh_files/functions.zsh "$BACKUP_DIR"
 
 # Backup .zshrc.d directory
 if [ -d ~/.zshrc.d ]; then

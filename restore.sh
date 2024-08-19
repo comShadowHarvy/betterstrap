@@ -59,6 +59,11 @@ cp "$BACKUP_DIR/$SELECTED_BACKUP/.antigenrc" ~/
 cp "$BACKUP_DIR/$SELECTED_BACKUP/.extrazshrc" ~/
 cp "$BACKUP_DIR/$SELECTED_BACKUP/.zsh1" ~/
 cp "$BACKUP_DIR/$SELECTED_BACKUP/.zshrc" ~/
+cp "$BACKUP_DIR/$SELECTED_BACKUP/.aliases" ~/
+cp "$BACKUP_DIR/$SELECTED_BACKUP/variables.zsh" ~/.zsh_files/
+cp "$BACKUP_DIR/$SELECTED_BACKUP/aliases.zsh" ~/.zsh_files/
+cp "$BACKUP_DIR/$SELECTED_BACKUP/tct.zsh" ~/.zsh_files/
+cp "$BACKUP_DIR/$SELECTED_BACKUP/functions.zsh" ~/.zsh_files/
 
 # Restore .zshrc.d directory
 if [ -d "$BACKUP_DIR/$SELECTED_BACKUP/.zshrc.d" ]; then
