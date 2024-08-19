@@ -54,7 +54,7 @@ display_description() {
     echo
 }
 
-total_steps=25
+total_steps=61  # Updated total number of steps
 current_step=0
 
 display_header
@@ -86,6 +86,47 @@ tools=(
     "set:Framework for social engineering attacks:- Powerful social engineering tools.:- Requires knowledge of social engineering."
     "mobsf:Automated security analysis framework for mobile applications:- Comprehensive mobile app security analysis.:- Requires mobile app knowledge."
     "firmware-analysis-toolkit:Toolkit for analyzing and emulating firmware:- Effective firmware analysis tools.:- Requires knowledge of firmware analysis."
+    "dorks_hunter:Search engine dorking tool:- Automates the process of finding vulnerable sites via search engines.:- Limited to the dorks available."
+    "fav-up:Tool for exploiting favicon.ico:- Useful for identifying web technologies via favicon.ico.:- Limited by the database of favicons."
+    "Corsy:CORS misconfiguration scanner:- Identifies misconfigurations in CORS.:- May produce false positives."
+    "testssl:SSL/TLS scanner:- Comprehensive SSL/TLS analysis.:- Requires manual interpretation of results."
+    "CMSeeK:CMS detection and exploitation suite:- Detects various CMS platforms and vulnerabilities.:- Limited by the CMS platforms supported."
+    "OneListForAll:One list for all wordlists:- Consolidated wordlists for various purposes.:- May require filtering for specific use cases."
+    "lfi_wordlist:Wordlist for Local File Inclusion attacks:- Specialized wordlist for LFI attacks.:- Limited to LFI-specific scenarios."
+    "ssti_wordlist:Wordlist for Server-Side Template Injection:- Specialized wordlist for SSTI attacks.:- Limited to SSTI-specific scenarios."
+    "subs_wordlist:Wordlist for subdomain enumeration:- Effective for finding subdomains.:- May require filtering for specific domains."
+    "subs_wordlist_big:Larger wordlist for subdomain enumeration:- Comprehensive subdomain enumeration.:- Increased scan time."
+    "resolvers:List of DNS resolvers:- Useful for DNS resolution tasks.:- May include untrusted resolvers."
+    "resolvers_trusted:List of trusted DNS resolvers:- Trusted DNS resolution.:- Limited number of resolvers."
+    "xnLinkFinder:Tool for finding links in JavaScript files:- Automates link extraction from JS files.:- May produce false positives."
+    "waymore:Automated wayback machine URL extraction:- Extracts URLs from wayback machine.:- Limited to archived content."
+    "commix:Automated command injection and exploitation tool:- Automated command injection testing.:- Can be complex for beginners."
+    "getjswords:Tool for extracting JavaScript words:- Useful for finding hidden JavaScript functions.:- Limited to words in JS files."
+    "JSA:JavaScript analysis tool:- Analyzes JavaScript files for security issues.:- Requires manual analysis."
+    "cloud_enum:Cloud asset enumeration tool:- Enumerates cloud assets for potential security issues.:- Limited to cloud-specific scenarios."
+    "nmap-parse-output:Tool for parsing nmap XML output:- Simplifies nmap output parsing.:- Limited to nmap scans."
+    "pydictor:Python-based password generator and dictionary tool:- Customizable password generation.:- Requires Python knowledge."
+    "urless:URL extraction tool:- Extracts URLs from various sources.:- Limited to the sources provided."
+    "smuggler:Tool for HTTP request smuggling:- Effective for finding HTTP smuggling vulnerabilities.:- Requires knowledge of HTTP smuggling."
+    "regulator:Tool for identifying and exploiting HTTP parameter pollution:- Detects and exploits parameter pollution.:- Limited to HTTP requests."
+    "nomore403:Tool for bypassing 403 forbidden responses:- Attempts to bypass 403 restrictions.:- May not work on all sites."
+    "ffufPostprocessing:Post-processing for ffuf results:- Simplifies analysis of ffuf output.:- Limited to ffuf scans."
+    "misconfig-mapper:Tool for mapping misconfigurations:- Identifies misconfigurations in systems.:- Requires manual analysis."
+    "spoofy:Spoofing tool:- Effective for various spoofing tasks.:- Requires knowledge of spoofing techniques."
+    "swaggerspy:Swagger API enumeration tool:- Enumerates endpoints in Swagger APIs.:- Limited to Swagger API endpoints."
+    "LeakSearch:Tool for searching leaked credentials:- Automates the search for leaked credentials.:- Requires access to leaked databases."
+    "wafw00f:Web application firewall detection tool:- Detects WAFs in web applications.:- Limited to known WAF signatures."
+    "dnsvalidator:DNS validation tool:- Validates DNS configurations.:- Requires knowledge of DNS."
+    "Nuclei templates:Vulnerability scanning templates for Nuclei:- Provides templates for Nuclei scans.:- Limited to the templates available."
+    "Fuzzing templates:Fuzzing templates for various tools:- Consolidated fuzzing templates.:- Requires filtering for specific use cases."
+    "Massdns:High-performance DNS resolver:- Fast DNS resolution for large wordlists.:- Requires DNS knowledge."
+    "interlace:Parallel command execution tool:- Speeds up command execution for large lists.:- Requires understanding of parallel execution."
+    "emailfinder:Tool for finding email addresses:- Extracts emails from various sources.:- Limited to the sources provided."
+    "ripgen:Tool for generating wordlists based on target information:- Custom wordlist generation.:- Requires target-specific information."
+    "ghauri:Advanced SQL injection tool:- Effective for finding and exploiting SQL injection.:- Requires SQL knowledge."
+    "gitleaks:Tool for finding secrets in git repositories:- Detects secrets in git repositories.:- Limited to git repositories."
+    "trufflehog:Tool for finding secrets in git history:- Effective for finding sensitive data in git history.:- Requires access to git history."
+    "porch-pirate:Tool for automating package capture:- Automates the process of capturing packages.:- Limited to scenarios where packages are captured."
 )
 
 # Function to install a tool
