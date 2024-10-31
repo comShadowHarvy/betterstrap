@@ -1,0 +1,59 @@
+#!/bin/bash
+
+# Define the server IPs and share paths
+SERVER1="192.168.1.47"
+SERVER2="192.168.1.210"
+MOUNT_BASE="/mnt"
+OPTIONS1="guest,uid=1000,gid=1000,file_mode=0777,dir_mode=0777"
+OPTIONS2="username=me,password=Jbean343343,uid=1000,gid=1000,file_mode=0777,dir_mode=0777"
+
+# Define shares on SERVER1
+declare -A SHARES1=(
+    ["USB-Share"]="$MOUNT_BASE/usb"
+    ["USB-Share-2"]="$MOUNT_BASE/usb2"
+    ["ROM-Share"]="$MOUNT_BASE/rom"
+    ["SharedVMs"]="$MOUNT_BASE/shared_vms"
+)
+
+# Define shares on SERVER2
+declare -A SHARES2=(
+    ["SHARE"]="$MOUNT_BASE/share"
+    ["CONFIG"]="$MOUNT_BASE/config"
+    ["ADDONS"]="$MOUNT_BASE/addons"
+    ["SSL"]="$MOUNT_BASE/ssl"
+    ["ADDON_CONFIG"]="$MOUNT_BASE/addon_config"
+    ["MEDIA"]="$MOUNT_BASE/media"
+    ["BACKUP"]="$MOUNT_BASE/backup"
+)
+
+# Function to check and mount shares
+check_and_mount() {
+    local SERVER="$1"
+    local SHARE_NAME="$2"
+    local MOUNT_POINT="$3"
+    local OPTIONS="$4"
+
+    # Ensure the mount point exists
+    mkdir -p "$MOUNT_POINT"
+
+    # Check if already mounted
+    if mountpoint -q "$MOUNT_POINT"; then
+        echo "$SHARE_NAME is already mounted at $MOUNT_POINT, skipping..."
+    else
+        echo "Mounting $SHARE_NAME at $MOUNT_POINT..."
+        mount -t cifs "//$SERVER/$SHARE_NAME" "$MOUNT_POINT" -o "$OPTIONS" || echo "Failed to mount $SHARE_NAME"
+    fi
+}
+
+# Mount shares on SERVER1
+for SHARE in "${!SHARES1[@]}"; do
+    check_and_mount "$SERVER1" "$SHARE" "${SHARES1[$SHARE]}" "$OPTIONS1"
+done
+
+# Mount shares on SERVER2
+for SHARE in "${!SHARES2[@]}"; do
+    check_and_mount "$SERVER2" "$SHARE" "${SHARES2[$SHARE]}" "$OPTIONS2"
+done
+
+echo "All shares are checked and mounted as necessary."
+

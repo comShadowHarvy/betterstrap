@@ -1,0 +1,27 @@
+#!/bin/bash
+
+# Define the server IP and share paths
+SERVER="192.168.1.47"
+MOUNT_BASE="/mnt"
+
+# Ensure the mount points exist
+mkdir -p "$MOUNT_BASE/usb"
+mkdir -p "$MOUNT_BASE/usb2"
+mkdir -p "$MOUNT_BASE/rom"
+mkdir -p "$MOUNT_BASE/shared_vms"
+
+# Mount each share with options for write access
+echo "Mounting USB-Share..."
+mount -t cifs "//$SERVER/USB-Share" "$MOUNT_BASE/usb" -o guest,uid=1000,gid=1000,file_mode=0777,dir_mode=0777
+
+echo "Mounting USB-Share-2..."
+mount -t cifs "//$SERVER/USB-Share-2" "$MOUNT_BASE/usb2" -o guest,uid=1000,gid=1000,file_mode=0777,dir_mode=0777
+
+echo "Mounting ROM-Share..."
+mount -t cifs "//$SERVER/ROM-Share" "$MOUNT_BASE/rom" -o guest,uid=1000,gid=1000,file_mode=0777,dir_mode=0777
+
+echo "Mounting SharedVMs..."
+mount -t cifs "//$SERVER/SharedVMs" "$MOUNT_BASE/shared_vms" -o guest,uid=1000,gid=1000,file_mode=0777,dir_mode=0777
+
+echo "All shares mounted successfully."
+

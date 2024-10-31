@@ -1,0 +1,35 @@
+#!/bin/bash
+
+# Define the server IP and share paths
+SERVER="192.168.1.47"
+MOUNT_BASE="/mnt"
+OPTIONS="guest,uid=1000,gid=1000,file_mode=0777,dir_mode=0777"
+
+# Ensure the mount points exist
+mkdir -p "$MOUNT_BASE/usb"
+mkdir -p "$MOUNT_BASE/usb2"
+mkdir -p "$MOUNT_BASE/rom"
+mkdir -p "$MOUNT_BASE/shared_vms"
+
+# Function to check and remount if necessary
+check_and_remount() {
+    local SHARE="$1"
+    local MOUNT_POINT="$2"
+    
+    # Check if already mounted with correct options
+    if mount | grep "on $MOUNT_POINT type cifs" | grep -q "$OPTIONS"; then
+        echo "$SHARE is already mounted with correct options."
+    else
+        echo "Mounting or remounting $SHARE..."
+        umount "$MOUNT_POINT" 2>/dev/null # Unmount if already mounted
+        mount -t cifs "//$SERVER/$SHARE" "$MOUNT_POINT" -o "$OPTIONS" || echo "Failed to mount $SHARE"
+    fi
+}
+
+# Check and remount each share as needed
+check_and_remount "USB-Share" "$MOUNT_BASE/usb"
+check_and_remount "USB-Share-2" "$MOUNT_BASE/usb2"
+check_and_remount "ROM-Share" "$MOUNT_BASE/rom"
+check_and_remount "SharedVMs" "$MOUNT_BASE/shared_vms"
+
+echo "All shares are checked and mounted with correct options."
