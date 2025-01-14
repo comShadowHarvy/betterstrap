@@ -2,64 +2,71 @@
 
 # Define backup directory
 BACKUP_DIR="$HOME/back"
-DATE=$(date +%Y-%m-%d)
-BACKUP_DIR="$BACKUP_DIR/backup_$DATE"
 
-# Create backup directory
-mkdir -p "$BACKUP_DIR"
+# List available backups
+echo "Available backups in $BACKUP_DIR:"
+ls "$BACKUP_DIR" || { echo "No backups found in $BACKUP_DIR. Exiting."; exit 1; }
 
-# SSH backup
-echo "Backing up SSH keys..."
-cp ~/.ssh/id ~/.ssh/id.pub "$BACKUP_DIR"
+# Prompt user to select a backup
+read -p "Enter the backup folder you want to restore (e.g., backup_YYYY-MM-DD): " SELECTED_BACKUP
 
-# GPG keys backup
-echo "Backing up GPG keys..."
-GPG_KEY_ID="6E84E35B67DC0349"  # Replace with your actual GPG key ID
-gpg --armor --export $GPG_KEY_ID > "$BACKUP_DIR/public-gpg-key.asc"
-gpg --armor --export-secret-keys $GPG_KEY_ID > "$BACKUP_DIR/private-gpg-key.asc"
-
-# GPG configuration backup
-echo "Backing up GPG configuration..."
-cp -r ~/.gnupg "$BACKUP_DIR/gnupg-backup"
-
-# API keys file backup
-echo "Backing up API keys file..."
-if [ -f "$HOME/.api_keys" ]; then
-    cp ~/.api_keys "$BACKUP_DIR/api_keys-backup"
-else
-    echo "API keys file not found, skipping..."
+# Check if the selected backup exists
+if [ ! -d "$BACKUP_DIR/$SELECTED_BACKUP" ]; then
+    echo "Backup folder not found!"
+    exit 1
 fi
 
-# Zsh configuration files backup
-echo "Backing up Zsh configuration files..."
-cp ~/.antigenrc "$BACKUP_DIR"
-cp ~/.extrazshrc "$BACKUP_DIR"
-cp ~/.zsh1 "$BACKUP_DIR"
-cp ~/.zshrc "$BACKUP_DIR"
-cp ~/.aliases "$BACKUP_DIR"
-cp ~/.zsh_files/variables.zsh "$BACKUP_DIR"
-cp ~/.zsh_files/aliases.zsh "$BACKUP_DIR"
-cp ~/.zsh_files/tct.zsh "$BACKUP_DIR"
-cp ~/.zsh_files/functions.zsh "$BACKUP_DIR"
+# Function to restore a file
+restore_file() {
+    local file=$1
+    local dest=$2
+    if [ -f "$BACKUP_DIR/$SELECTED_BACKUP/$file" ]; then
+        cp "$BACKUP_DIR/$SELECTED_BACKUP/$file" "$dest" && echo "Restored: $file"
+    else
+        echo "File not found in backup: $file"
+    fi
+}
 
-# Backup .zshrc.d directory
-if [ -d ~/.zshrc.d ]; then
-    echo "Backing up .zshrc.d directory..."
-    cp -r ~/.zshrc.d "$BACKUP_DIR"
-else
-    echo ".zshrc.d directory not found, skipping..."
-fi
+# Function to restore a directory
+restore_dir() {
+    local dir=$1
+    local dest=$2
+    if [ -d "$BACKUP_DIR/$SELECTED_BACKUP/$dir" ]; then
+        cp -r "$BACKUP_DIR/$SELECTED_BACKUP/$dir" "$dest" && echo "Restored: $dir"
+    else
+        echo "Directory not found in backup: $dir"
+    fi
+}
 
-# Optional encryption
-read -p "Would you like to encrypt the backup? (y/n): " ENCRYPT
+echo "Starting restore process..."
 
-if [ "$ENCRYPT" == "y" ]; then
-    echo "Encrypting backup..."
-    tar -czf - "$BACKUP_DIR" | gpg --cipher-algo AES256 -c -o "$BACKUP_DIR.tar.gz.gpg"
-    rm -rf "$BACKUP_DIR"
-    echo "Backup encrypted and saved as $BACKUP_DIR.tar.gz.gpg"
-else
-    echo "Backup saved in $BACKUP_DIR"
-fi
+# List of dotfiles and directories to restore
+dotfiles=(
+    ".bashrc"
+    ".zshrc"
+    ".vimrc"
+    ".gitconfig"
+    ".profile"
+    ".config"
+    ".local/share"
+    ".ssh"
+    ".gnupg"
+    ".api_keys"
+    ".aliases"
+    ".antigenrc"
+    ".extrazshrc"
+    ".zsh1"
+    ".zsh_files"
+    ".zshrc.d"
+)
 
-echo "Backup completed."
+# Restore each file and directory
+for item in "${dotfiles[@]}"; do
+    if [ -d "$BACKUP_DIR/$SELECTED_BACKUP/$item" ]; then
+        restore_dir "$item" "$HOME"
+    else
+        restore_file "$item" "$HOME"
+    fi
+done
+
+echo "Restore process completed."

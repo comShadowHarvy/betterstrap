@@ -4,10 +4,10 @@
 loading_bar() {
     local current=$1
     local total=$2
-    local percent=$(( 100 * current / total ))
+    local percent=$((100 * current / total))
     local bar_length=20
-    local filled_length=$(( bar_length * current / total ))
-    local empty_length=$(( bar_length - filled_length ))
+    local filled_length=$((bar_length * current / total))
+    local empty_length=$((bar_length - filled_length))
 
     printf -v bar "%0.s#" $(seq 1 $filled_length)
     printf -v space "%0.s " $(seq 1 $empty_length)
@@ -17,7 +17,7 @@ loading_bar() {
 
 # Function to check if a package is installed
 is_package_installed() {
-    pacman -Qs $1 > /dev/null
+    pacman -Qs "$1" > /dev/null 2>&1
 }
 
 # Function to display the header
@@ -36,7 +36,6 @@ display_description() {
     local advantages=$3
     local disadvantages=$4
 
-    tput cup 4 0
     echo "============================="
     echo "   $title"
     echo "============================="
@@ -54,10 +53,11 @@ display_description() {
     echo
 }
 
-total_steps=12
-current_step=0
-
-display_header
+# Ensure yay is installed
+if ! command -v yay > /dev/null 2>&1; then
+    echo "Error: yay is not installed. Please install yay and rerun the script."
+    exit 1
+fi
 
 # List of gaming software to install
 gaming_software=(
@@ -75,22 +75,32 @@ gaming_software=(
     "discord:VoIP and instant messaging platform:- Essential for gaming communication.:- Can be resource-intensive."
 )
 
-# Function to install a software
+# Calculate the total steps dynamically
+total_steps=${#gaming_software[@]}
+current_step=0
+
+# Display header
+display_header
+
+# Function to install software
 install_software() {
     local software=$1
-    local name=$(echo $software | cut -d: -f1)
-    local description=$(echo $software | cut -d: -f2)
-    local advantages=$(echo $software | cut -d: -f3)
-    local disadvantages=$(echo $software | cut -d: -f4)
+    local name=$(echo "$software" | cut -d: -f1)
+    local description=$(echo "$software" | cut -d: -f2)
+    local advantages=$(echo "$software" | cut -d: -f3)
+    local disadvantages=$(echo "$software" | cut -d: -f4)
 
-    clear
-    display_description "Installing $name" "$description" "$advantages" "$disadvantages"
-    sleep 5
     if is_package_installed "$name"; then
-        echo "$name is already installed."
+        echo "$name is already installed. Skipping installation."
     else
-        yay -S --noconfirm $name
-        echo -ne "\n$name installed.\n"
+        clear
+        display_description "Installing $name" "$description" "$advantages" "$disadvantages"
+        echo "Installing $name..."
+        if yay -S --noconfirm "$name"; then
+            echo "$name installed successfully."
+        else
+            echo "Error installing $name. Skipping to the next software."
+        fi
     fi
     loading_bar $((++current_step)) $total_steps
 }
@@ -101,4 +111,4 @@ for software in "${gaming_software[@]}"; do
 done
 
 loading_bar $total_steps $total_steps
-echo -ne '\nAll gaming software installed.\n'
+echo -e '\nAll gaming software installed.\n'

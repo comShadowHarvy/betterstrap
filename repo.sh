@@ -22,209 +22,115 @@ is_repo_added() {
 
 # Function to check if a package is installed
 is_package_installed() {
-    pacman -Qs $1 > /dev/null
+    pacman -Qs "$1" > /dev/null
 }
 
-# Function to display the header
-display_header() {
-    clear
-    echo "============================="
-    echo "   Ultimate Repo Installer"
-    echo "============================="
-    echo
+# Function to add a repository
+add_repository() {
+    local name="$1"
+    local key="$2"
+    local keyserver="$3"
+    local mirror="$4"
+    local additional_commands="$5"
+
+    if is_repo_added "$name"; then
+        echo "$name repository already added."
+    else
+        echo "Adding $name repository..."
+        sudo pacman-key --recv-key "$key" --keyserver "$keyserver" || { echo "Error: Failed to add key for $name."; return 1; }
+        sudo pacman-key --lsign-key "$key" || { echo "Error: Failed to sign key for $name."; return 1; }
+        echo -e "$mirror" | sudo tee -a /etc/pacman.conf
+        eval "$additional_commands"
+        echo "$name repository added."
+    fi
 }
 
-# Function to display a description
-display_description() {
-    local title=$1
-    local description=$2
-    local advantages=$3
-    local disadvantages=$4
+# Function to install a package
+install_package() {
+    local package="$1"
+    local description="$2"
 
-    tput cup 4 0
-    echo "============================="
-    echo "   $title"
-    echo "============================="
-    echo
-    echo "Description:"
-    echo "$description"
-    echo
-    echo "Advantages:"
-    echo -e "$advantages"
-    echo
-    echo "Disadvantages:"
-    echo -e "$disadvantages"
-    echo
+    if is_package_installed "$package"; then
+        echo "$package is already installed."
+    else
+        echo "$description"
+        sudo pacman -S --noconfirm "$package" || { echo "Error: Failed to install $package."; return 1; }
+        echo "$package installed successfully."
+    fi
 }
 
-total_steps=12
+# Display header
+clear
+echo "============================="
+echo "   Ultimate Repo Installer"
+echo "============================="
+echo
+
+# Total steps for progress bar
+total_steps=8
 current_step=0
-
-display_header
 
 # Add Chaotic AUR repository
 loading_bar $current_step $total_steps
-if is_repo_added "chaotic-aur"; then
-    echo "Chaotic AUR repository already added."
-else
-    display_description "Adding Chaotic AUR Repository" \
-        "Chaotic AUR is a repository that provides pre-built versions of popular AUR packages." \
-        "- Faster installation since packages are pre-built.\n- Reduces the need to compile packages locally." \
-        "- May not always have the latest version of every package.\n- Trusting third-party binaries requires a level of trust in the maintainers."
-    sleep 7
-    sudo pacman-key --recv-key 3056513887B78AEB --keyserver keyserver.ubuntu.com
-    sudo pacman-key --lsign-key 3056513887B78AEB
-    sudo pacman -U 'https://cdn-mirror.chaotic.cx/chaotic-aur/chaotic-keyring.pkg.tar.zst'
-    sudo pacman -U 'https://cdn-mirror.chaotic.cx/chaotic-aur/chaotic-mirrorlist.pkg.tar.zst'
-
-    echo "[chaotic-aur]
-Include = /etc/pacman.d/chaotic-mirrorlist" | sudo tee -a /etc/pacman.conf
-
-    loading_bar $((++current_step)) $total_steps
-    echo -ne '\nChaotic AUR repository added.\n'
-fi
+add_repository "chaotic-aur" \
+    "3056513887B78AEB" \
+    "keyserver.ubuntu.com" \
+    "[chaotic-aur]\nInclude = /etc/pacman.d/chaotic-mirrorlist" \
+    "sudo pacman -U 'https://cdn-mirror.chaotic.cx/chaotic-aur/chaotic-keyring.pkg.tar.zst' &&
+     sudo pacman -U 'https://cdn-mirror.chaotic.cx/chaotic-aur/chaotic-mirrorlist.pkg.tar.zst'"
+loading_bar $((++current_step)) $total_steps
 
 # Add ArchStrike repository
 loading_bar $current_step $total_steps
-if is_repo_added "archstrike"; then
-    echo "ArchStrike repository already added."
-else
-    display_description "Adding ArchStrike Repository" \
-        "ArchStrike is a repository for security professionals and enthusiasts containing a large collection of security software." \
-        "- Extensive collection of security tools.\n- Regularly updated and maintained." \
-        "- May include tools that require advanced knowledge to use safely.\n- Can be overwhelming due to the sheer number of tools available."
-    sleep 7
-    sudo pacman-key --recv-key 5B5F5BBF9A2D15A019E20608A106C36A3170E57D --keyserver keyserver.ubuntu.com
-    sudo pacman-key --lsign-key 5B5F5BBF9A2D15A019E20608A106C36A3170E57D
-
-    echo "[archstrike]
-Server = https://mirror.archstrike.org/\$arch/\$repo" | sudo tee -a /etc/pacman.conf
-
-    loading_bar $((++current_step)) $total_steps
-    echo -ne '\nArchStrike repository added.\n'
-fi
+add_repository "archstrike" \
+    "5B5F5BBF9A2D15A019E20608A106C36A3170E57D" \
+    "keyserver.ubuntu.com" \
+    "[archstrike]\nServer = https://mirror.archstrike.org/\$arch/\$repo" \
+    ""
+loading_bar $((++current_step)) $total_steps
 
 # Add BlackArch repository
 loading_bar $current_step $total_steps
 if is_repo_added "blackarch"; then
     echo "BlackArch repository already added."
 else
-    display_description "Adding BlackArch Repository" \
-        "BlackArch is an Arch Linux-based distribution for penetration testers and security researchers, including a large collection of security tools." \
-        "- Comprehensive suite of tools for penetration testing and security research.\n- Regular updates and community support." \
-        "- Requires careful usage to avoid legal issues.\n- Can be resource-intensive due to the number of tools installed."
-    sleep 7
-    curl -O https://blackarch.org/strap.sh
+    echo "Adding BlackArch repository..."
+    curl -O https://blackarch.org/strap.sh || { echo "Error: Failed to download BlackArch strap.sh."; exit 1; }
     sudo chmod +x strap.sh
-    sudo ./strap.sh
-
-    loading_bar $((++current_step)) $total_steps
-    echo -ne '\nBlackArch repository added.\n'
+    sudo ./strap.sh || { echo "Error: Failed to execute strap.sh."; exit 1; }
+    rm -f strap.sh
+    echo "BlackArch repository added."
 fi
+loading_bar $((++current_step)) $total_steps
 
 # Update package database
 loading_bar $current_step $total_steps
-display_description "Updating Package Database" \
-    "This step updates the package database to ensure that all repositories are in sync and that the latest packages are available." \
-    "- Ensures you have the latest package lists.\n- Synchronizes your local package database with the remote repositories." \
-    "- May take some time depending on your internet connection.\n- Must be done regularly to keep your system up to date."
-sleep 7
-sudo pacman -Syyu
-
+echo "Updating package database..."
+sudo pacman -Syyu || { echo "Error: Failed to update package database."; exit 1; }
 loading_bar $((++current_step)) $total_steps
-echo -ne '\nPackage database updated.\n'
 
 # Install fakeroot
 loading_bar $current_step $total_steps
-if is_package_installed "fakeroot"; then
-    echo "fakeroot is already installed."
-else
-    display_description "Installing fakeroot" \
-        "fakeroot provides a simulated root environment for building packages without needing actual root permissions." \
-        "- Allows non-root users to create packages.\n- Enhances security by reducing the need for root access." \
-        "- Only simulates root privileges, not a substitute for actual root access."
-    sleep 7
-    sudo pacman -S --noconfirm fakeroot
-    loading_bar $((++current_step)) $total_steps
-    echo -ne '\nfakeroot installed.\n'
-fi
+install_package "fakeroot" "fakeroot provides a simulated root environment for building packages without actual root permissions."
+loading_bar $((++current_step)) $total_steps
 
-# Install apparmor
+# Install AppArmor
 loading_bar $current_step $total_steps
-if is_package_installed "apparmor"; then
-    echo "apparmor is already installed."
-else
-    display_description "Installing AppArmor" \
-        "AppArmor is a Linux security module that provides mandatory access control for programs, confining them to a limited set of resources." \
-        "- Enhances system security by restricting applications' capabilities.\n- Easy to use and configure with profile-based policies." \
-        "- Requires configuration and maintenance of profiles.\n- May cause issues with applications if profiles are not correctly set up."
-    sleep 7
-    sudo pacman -S --noconfirm apparmor
-    sudo systemctl enable apparmor
-    sudo systemctl start apparmor
-    loading_bar $((++current_step)) $total_steps
-    echo -ne '\napparmor installed and started.\n'
-fi
+install_package "apparmor" "AppArmor is a Linux security module for mandatory access control." &&
+sudo systemctl enable apparmor &&
+sudo systemctl start apparmor
+loading_bar $((++current_step)) $total_steps
 
 # Install yay
 loading_bar $current_step $total_steps
-if is_package_installed "yay"; then
-    echo "yay is already installed."
-else
-    display_description "Installing yay" \
-        "yay (Yet Another Yaourt) is a popular AUR helper that simplifies the process of installing and managing AUR packages." \
-        "- Combines the functionality of pacman and AUR helpers.\n- Provides an interactive search and update interface." \
-        "- May introduce additional dependencies.\n- Users need to trust the AUR package maintainers."
-    sleep 7
-    sudo pacman -S --noconfirm yay
-    loading_bar $((++current_step)) $total_steps
-    echo -ne '\nyay installed.\n'
-fi
+install_package "yay" "yay (Yet Another Yaourt) is a popular AUR helper."
+loading_bar $((++current_step)) $total_steps
 
 # Install paru
 loading_bar $current_step $total_steps
-if is_package_installed "paru"; then
-    echo "paru is already installed."
-else
-    display_description "Installing paru" \
-        "paru is a modern AUR helper written in Rust, focusing on speed, security, and a user-friendly interface." \
-        "- Fast and secure with a Rust backend.\n- Intuitive and user-friendly." \
-        "- May have a steeper learning curve for new users.\n- Still gaining community traction compared to older AUR helpers."
-    sleep 7
-    sudo pacman -S --noconfirm paru
-    loading_bar $((++current_step)) $total_steps
-    echo -ne '\nparu installed.\n'
-fi
+install_package "paru" "paru is a modern AUR helper written in Rust."
+loading_bar $((++current_step)) $total_steps
 
-# Install pamac
-loading_bar $current_step $total_steps
-if is_package_installed "pamac-aur"; then
-    echo "pamac is already installed."
-else
-    display_description "Installing pamac" \
-        "pamac is a graphical package manager from Manjaro that supports both official repositories and the AUR." \
-        "- User-friendly graphical interface.\n- Supports both official repositories and the AUR." \
-        "- May not offer as many advanced features as command-line AUR helpers.\n- Slightly higher resource usage due to the graphical interface."
-    sleep 7
-    sudo pacman -S --noconfirm pamac-aur
-    loading_bar $((++current_step)) $total_steps
-    echo -ne '\npamac installed.\n'
-fi
-
-# Install aurman
-loading_bar $current_step $total_steps
-if is_package_installed "aurman"; then
-    echo "aurman is already installed."
-else
-    display_description "Installing aurman" \
-        "aurman is an AUR helper that aims to provide a simple and efficient interface for managing AUR packages." \
-        "- Lightweight and fast.\n- Similar command structure to pacman." \
-        "- May not be as actively maintained as some other AUR helpers.\n- Fewer advanced features compared to newer AUR helpers."
-    sleep 7
-    yay -S --noconfirm aurman
-    loading_bar $((++current_step)) $total_steps
-    echo -ne '\naurman installed.\n'
-fi
-
+# Finalize
 loading_bar $total_steps $total_steps
 echo -ne '\nAll steps completed.\n'
