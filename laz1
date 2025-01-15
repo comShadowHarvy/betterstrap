@@ -1,0 +1,85 @@
+#!/bin/bash
+
+# Define the URL to download LaZagne
+DOWNLOAD_URL="https://github.com/AlessandroZ/LaZagne/archive/refs/heads/master.zip"
+
+# Define the location to save the output
+DESKTOP_PATH="$HOME/Desktop"
+OUTPUT_FILE="$DESKTOP_PATH/lazagne_output.txt"
+
+# Function to check if a command exists
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+# Function to install dependencies on Debian/Ubuntu
+install_deps_debian() {
+    if ! command_exists python3; then
+        sudo apt-get update
+        sudo apt-get install -y python3 python3-pip
+    fi
+    if ! command_exists unzip; then
+        sudo apt-get install -y unzip
+    fi
+}
+
+# Function to install dependencies on Fedora
+install_deps_fedora() {
+    if ! command_exists python3; then
+        sudo dnf install -y python3 python3-pip
+    fi
+    if ! command_exists unzip; then
+        sudo dnf install -y unzip
+    fi
+}
+
+# Function to install dependencies on Arch
+install_deps_arch() {
+    if ! command_exists python3; then
+        sudo pacman -Syu --noconfirm python python-pip
+    fi
+    if ! command_exists unzip; then
+        sudo pacman -Syu --noconfirm unzip
+    fi
+}
+
+# Detect the operating system and install dependencies if necessary
+if [ -f /etc/debian_version ]; then
+    echo "Detected Debian-based distribution."
+    install_deps_debian
+elif [ -f /etc/fedora-release ]; then
+    echo "Detected Fedora-based distribution."
+    install_deps_fedora
+elif [ -f /etc/arch-release ]; then
+    echo "Detected Arch-based distribution."
+    install_deps_arch
+else
+    echo "Unsupported operating system. Please install Python3 and unzip manually."
+    exit 1
+fi
+
+# Download LaZagne
+TEMP_DIR=$(mktemp -d)
+echo "Downloading LaZagne..."
+curl -L -o "$TEMP_DIR/lazagne.zip" $DOWNLOAD_URL
+
+# Unzip LaZagne
+echo "Unzipping LaZagne..."
+unzip "$TEMP_DIR/lazagne.zip" -d "$TEMP_DIR"
+
+# Navigate to the LaZagne directory
+cd "$TEMP_DIR/LaZagne-master"
+
+# Install Python dependencies
+echo "Installing Python dependencies..."
+pip3 install -r requirements.txt
+
+# Run LaZagne and save the output to the Desktop
+echo "Running LaZagne..."
+python3 laZagne.py all > "$OUTPUT_FILE"
+
+# Clean up temporary files
+rm -rf "$TEMP_DIR"
+
+echo "Operation completed successfully. Output saved to $OUTPUT_FILE."
+
