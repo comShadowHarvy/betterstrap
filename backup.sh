@@ -2,71 +2,68 @@
 
 # Define backup directory
 BACKUP_DIR="$HOME/back"
+DATE=$(date +%Y-%m-%d)
+BACKUP_NAME="backup_$DATE"
+FULL_BACKUP_PATH="$BACKUP_DIR/$BACKUP_NAME"
 
-# List available backups
-echo "Available backups in $BACKUP_DIR:"
-ls "$BACKUP_DIR" || { echo "No backups found in $BACKUP_DIR. Exiting."; exit 1; }
+# Create backup directory
+mkdir -p "$FULL_BACKUP_PATH"
 
-# Prompt user to select a backup
-read -p "Enter the backup folder you want to restore (e.g., backup_YYYY-MM-DD): " SELECTED_BACKUP
+# SSH backup
+echo "Backing up SSH keys..."
+cp ~/.ssh/id ~/.ssh/id.pub "$FULL_BACKUP_PATH" 2>/dev/null || echo "SSH keys not found, skipping..."
 
-# Check if the selected backup exists
-if [ ! -d "$BACKUP_DIR/$SELECTED_BACKUP" ]; then
-    echo "Backup folder not found!"
-    exit 1
+# GPG keys backup
+echo "Backing up GPG keys..."
+GPG_KEY_ID="6E84E35B67DC0349"  # Replace with your actual GPG key ID
+gpg --armor --export $GPG_KEY_ID > "$FULL_BACKUP_PATH/public-gpg-key.asc"
+gpg --armor --export-secret-keys $GPG_KEY_ID > "$FULL_BACKUP_PATH/private-gpg-key.asc"
+
+# GPG configuration backup
+echo "Backing up GPG configuration..."
+cp -r ~/.gnupg "$FULL_BACKUP_PATH/gnupg-backup" 2>/dev/null || echo "GPG configuration not found, skipping..."
+
+# API keys file backup
+echo "Backing up API keys file..."
+cp ~/.api_keys "$FULL_BACKUP_PATH/api_keys-backup" 2>/dev/null || echo "API keys file not found, skipping..."
+
+# Zsh configuration files backup
+echo "Backing up Zsh configuration files..."
+cp ~/.antigenrc ~/.extrazshrc ~/.zsh1 ~/.zshrc ~/.aliases "$FULL_BACKUP_PATH" 2>/dev/null || echo "Some Zsh config files not found, skipping..."
+
+# Zsh additional files
+echo "Backing up additional Zsh files..."
+mkdir -p "$FULL_BACKUP_PATH/zsh_files"
+cp ~/.zsh_files/* "$FULL_BACKUP_PATH/zsh_files" 2>/dev/null || echo "Zsh files not found, skipping..."
+
+# Backup .zshrc.d directory
+echo "Backing up .zshrc.d directory..."
+cp -r ~/.zshrc.d "$FULL_BACKUP_PATH" 2>/dev/null || echo ".zshrc.d directory not found, skipping..."
+
+# Backup keyrings
+echo "Backing up keyrings..."
+cp -r ~/.local/share/keyrings "$FULL_BACKUP_PATH/keyrings" 2>/dev/null || echo "Keyrings not found, skipping..."
+
+# Backup .config directory
+echo "Backing up .config directory..."
+cp -r ~/.config "$FULL_BACKUP_PATH/config-backup" 2>/dev/null || echo ".config directory not found, skipping..."
+
+# Backup Git credential manager
+echo "Backing up Git credential manager..."
+GIT_CRED=$(git config --get credential.helper)
+if [ -n "$GIT_CRED" ]; then
+    echo "$GIT_CRED" > "$FULL_BACKUP_PATH/git-credential-helper"
+else
+    echo "Git credential manager not configured, skipping..."
 fi
 
-# Function to restore a file
-restore_file() {
-    local file=$1
-    local dest=$2
-    if [ -f "$BACKUP_DIR/$SELECTED_BACKUP/$file" ]; then
-        cp "$BACKUP_DIR/$SELECTED_BACKUP/$file" "$dest" && echo "Restored: $file"
-    else
-        echo "File not found in backup: $file"
-    fi
-}
+# Prompt for compression
+read -p "Would you like to compress the backup? (y/n): " COMPRESS
+if [ "$COMPRESS" == "y" ]; then
+    tar -czf "$FULL_BACKUP_PATH.tar.gz" -C "$FULL_BACKUP_PATH" . && rm -rf "$FULL_BACKUP_PATH"
+    echo "Backup compressed to $FULL_BACKUP_PATH.tar.gz"
+else
+    echo "Backup saved as a folder: $FULL_BACKUP_PATH"
+fi
 
-# Function to restore a directory
-restore_dir() {
-    local dir=$1
-    local dest=$2
-    if [ -d "$BACKUP_DIR/$SELECTED_BACKUP/$dir" ]; then
-        cp -r "$BACKUP_DIR/$SELECTED_BACKUP/$dir" "$dest" && echo "Restored: $dir"
-    else
-        echo "Directory not found in backup: $dir"
-    fi
-}
-
-echo "Starting restore process..."
-
-# List of dotfiles and directories to restore
-dotfiles=(
-    ".bashrc"
-    ".zshrc"
-    ".vimrc"
-    ".gitconfig"
-    ".profile"
-    ".config"
-    ".local/share"
-    ".ssh"
-    ".gnupg"
-    ".api_keys"
-    ".aliases"
-    ".antigenrc"
-    ".extrazshrc"
-    ".zsh1"
-    ".zsh_files"
-    ".zshrc.d"
-)
-
-# Restore each file and directory
-for item in "${dotfiles[@]}"; do
-    if [ -d "$BACKUP_DIR/$SELECTED_BACKUP/$item" ]; then
-        restore_dir "$item" "$HOME"
-    else
-        restore_file "$item" "$HOME"
-    fi
-done
-
-echo "Restore process completed."
+echo "Backup process completed."
