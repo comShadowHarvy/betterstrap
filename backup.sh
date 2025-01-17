@@ -29,7 +29,7 @@ cp ~/.api_keys "$FULL_BACKUP_PATH/api_keys-backup" 2>/dev/null || echo "API keys
 
 # Zsh configuration files backup
 echo "Backing up Zsh configuration files..."
-cp ~/.antigenrc ~/.extrazshrc ~/.zsh1 ~/.zshrc ~/.aliases "$FULL_BACKUP_PATH" 2>/dev/null || echo "Some Zsh config files not found, skipping..."
+cp ~/.antigenrc ~/.extrazshrc ~/.zsh1 ~/.zshrc ~/.aliases ~/.zimrc "$FULL_BACKUP_PATH" 2>/dev/null || echo "Some Zsh config files not found, skipping..."
 
 # Zsh additional files
 echo "Backing up additional Zsh files..."

@@ -65,7 +65,7 @@ fi
 read -p "Restore Zsh configuration files? (y/n): " RESTORE_ZSH
 if [ "$RESTORE_ZSH" == "y" ]; then
     echo "Restoring Zsh configuration files..."
-    cp "$RESTORE_PATH/"{.antigenrc,.extrazshrc,.zsh1,.zshrc,.aliases} ~ 2>/dev/null || echo "Some Zsh config files not found, skipping..."
+    cp "$RESTORE_PATH/"{.antigenrc,.extrazshrc,.zsh1,.zshrc,.aliases,.zimrc} ~ 2>/dev/null || echo "Some Zsh config files not found, skipping..."
     cp -r "$RESTORE_PATH/zsh_files" ~/.zsh_files 2>/dev/null || echo "Zsh files not found, skipping..."
     cp -r "$RESTORE_PATH/.zshrc.d" ~/ 2>/dev/null || echo ".zshrc.d directory not found, skipping..."
 fi
