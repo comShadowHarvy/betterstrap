@@ -1,18 +1,33 @@
-
 #!/bin/bash
 
 # Define backup directory
 BACKUP_DIR="$HOME/back"
 
 # List available backups
+available_backups=$(ls "$BACKUP_DIR" 2>/dev/null)
+if [ -z "$available_backups" ]; then
+    echo "No backups found in $BACKUP_DIR. Exiting."
+    exit 1
+fi
+
 echo "Available backups in $BACKUP_DIR:"
-ls "$BACKUP_DIR" || { echo "No backups found in $BACKUP_DIR. Exiting."; exit 1; }
+select SELECTED_BACKUP in $available_backups; do
+    if [ -n "$SELECTED_BACKUP" ]; then
+        echo "You selected: $SELECTED_BACKUP"
+        break
+    else
+        echo "Invalid selection. Please try again."
+    fi
+done
 
-# Prompt user to select a backup
-read -p "Enter the backup to restore (folder name or .tar.gz file): " SELECTED_BACKUP
-
-# Check if the selected backup exists
-if [ -d "$BACKUP_DIR/$SELECTED_BACKUP" ]; then
+# Check if the selected backup is part of a split archive
+if [[ "$SELECTED_BACKUP" =~ .tar.gz.[a-z]{2}$ ]]; then
+    base_name="${SELECTED_BACKUP%.tar.gz.*}.tar.gz"
+    echo "Reassembling split backup: $base_name"
+    RESTORE_PATH=$(mktemp -d)
+    cat "$BACKUP_DIR/${base_name}".* > "$RESTORE_PATH/$base_name"
+    tar -xzf "$RESTORE_PATH/$base_name" -C "$RESTORE_PATH" || { echo "Extraction failed. Exiting."; exit 1; }
+elif [ -d "$BACKUP_DIR/$SELECTED_BACKUP" ]; then
     RESTORE_PATH="$BACKUP_DIR/$SELECTED_BACKUP"
     echo "Restoring from folder: $RESTORE_PATH"
 elif [ -f "$BACKUP_DIR/$SELECTED_BACKUP" ]; then
@@ -100,15 +115,9 @@ if [ "$RESTORE_GIT" == "y" ]; then
 fi
 
 # Cleanup temporary files if archive was extracted
-if [ -n "$TEMP_DIR" ]; then
+if [ -d "$RESTORE_PATH" ]; then
     echo "Cleaning up temporary extraction files..."
-    rm -rf "$TEMP_DIR"
+    rm -rf "$RESTORE_PATH"
 fi
 
 echo "Restore process completed successfully."
-
-# Reassemble the split files and extract the tar.gz backup
-compressed_file="backup.tar.gz"
-cat "$compressed_file".* > "$compressed_file"
-tar -xzf "$compressed_file" -C "$restore_target"
-echo "Backup reassembled and restored to $restore_target"
