@@ -1,3 +1,4 @@
+
 #!/bin/bash
 
 # Define backup directory
@@ -105,3 +106,9 @@ if [ -n "$TEMP_DIR" ]; then
 fi
 
 echo "Restore process completed successfully."
+
+# Reassemble the split files and extract the tar.gz backup
+compressed_file="backup.tar.gz"
+cat "$compressed_file".* > "$compressed_file"
+tar -xzf "$compressed_file" -C "$restore_target"
+echo "Backup reassembled and restored to $restore_target"

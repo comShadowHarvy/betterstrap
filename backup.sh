@@ -1,3 +1,4 @@
+
 #!/bin/bash
 
 # Define backup directory
@@ -67,3 +68,42 @@ else
 fi
 
 echo "Backup process completed."
+
+# Validate paths before backing up
+validate_path() {
+    local path="$1"
+    if [ -e "$path" ]; then
+        echo "Backing up $path..."
+        tar_args+=("$path")
+    else
+        echo "$path not found, skipping..."
+    fi
+}
+
+# Start of the backup process
+tar_args=()
+
+# Validate and add paths to the tar arguments
+validate_path "$HOME/.ssh"
+validate_path "$HOME/.gnupg"
+validate_path "$HOME/.api_keys"
+validate_path "$HOME/.zshrc"
+validate_path "$HOME/.zshrc.d"
+validate_path "$HOME/.config"
+validate_path "$HOME/.local/share/keyrings"
+validate_path "$HOME/.git-credentials"
+
+# Compress the validated paths into a tar.gz file and split into 60MB blocks
+if [ ! -z "$tar_args" ]; then
+    compressed_file="/home/me/back/backup_$(date +%Y-%m-%d).tar.gz"
+    split_size=60m
+
+    tar -czf - "${tar_args[@]}" 2>/home/me/back/error.log | split -b $split_size - "$compressed_file."
+    if [ $? -eq 0 ]; then
+        echo "Backup split into 60MB blocks as $compressed_file.*"
+    else
+        echo "Error occurred during tar or split. Check /home/me/back/error.log for details."
+    fi
+else
+    echo "No valid paths to backup. Exiting."
+fi
