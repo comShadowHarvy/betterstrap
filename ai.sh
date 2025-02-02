@@ -106,18 +106,30 @@ install_ollama() {
     else
         echo "❌ Failed to start Ollama service. Check logs."
         exit 1
+    }
+}
+
+# Function to check and handle existing containers
+check_container() {
+    local container_name=$1
+    if $CONTAINER_CMD container inspect "$container_name" &>/dev/null; then
+        echo "🔄 Container '$container_name' already exists"
+        echo "Stopping and removing existing container..."
+        $CONTAINER_CMD stop "$container_name" &>/dev/null || true
+        $CONTAINER_CMD rm "$container_name" &>/dev/null || true
     fi
 }
 
 # Install Open-WebUI
 install_open_webui() {
-    echo "Installing Open-WebUI..."
-    $CONTAINER_CMD run -d --name open-webui \
-        -p 3000:3000 \
-        -v open-webui-data:/app/backend/data \
-        --restart unless-stopped \
+    echo "🔄 Installing Open WebUI..."
+    check_container "open-webui"
+    $CONTAINER_CMD run -d \
+        --name "open-webui" \
+        --restart always \
+        -p 3000:8080 \
+        -v open-webui:/app/backend/data \
         ghcr.io/open-webui/open-webui:main
-    echo "✅ Open-WebUI should be accessible at http://localhost:3000"
 }
 
 # Install Pinokio (Only on Arch-based systems using yay)
@@ -137,35 +149,38 @@ install_pinokio() {
 
 # Install LobeHub
 install_lobehub() {
-    echo "Installing LobeHub..."
-    $CONTAINER_CMD run -d --name lobehub \
+    echo "🔄 Installing LobeHub..."
+    check_container "lobehub"
+    $CONTAINER_CMD run -d \
+        --name lobehub \
+        --restart always \
         -p 3210:3210 \
-        -v lobehub-data:/data \
-        --restart unless-stopped \
-        lobehub/lobe-chat:latest
-    echo "✅ LobeHub should be accessible at http://localhost:3210"
+        -e OLLAMA_API_BASE_URL=http://host.docker.internal:11434/api \
+        ghcr.io/lobehub/lobe-chat
 }
 
 # Install Ollama GUI
 install_ollama_gui() {
-    echo "Installing Ollama GUI..."
-    $CONTAINER_CMD run -d --name ollama-gui \
-        -p 4000:80 \
-        -v ollama-gui-data:/usr/share/nginx/html \
-        --restart unless-stopped \
-        ghcr.io/ollama-webui/ollama-webui:latest
-    echo "✅ Ollama GUI should be accessible at http://localhost:4000"
+    echo "🔄 Installing Ollama Web UI..."
+    check_container "ollama-gui"
+    $CONTAINER_CMD run -d \
+        --name ollama-gui \
+        --restart always \
+        -p 4000:8080 \
+        -v ollama-gui:/app/backend/data \
+        ollama/ollama-webui
 }
 
 # Install Enchanted
 install_enchanted() {
-    echo "Installing Enchanted..."
-    $CONTAINER_CMD run -d --name enchanted \
+    echo "🔄 Installing Enchanted..."
+    check_container "enchanted"
+    $CONTAINER_CMD run -d \
+        --name enchanted \
+        --restart always \
         -p 9090:9090 \
-        -v enchanted-data:/data \
-        --restart unless-stopped \
-        ghcr.io/ericlathrop/enchanted:latest
-    echo "✅ Enchanted should be accessible at http://localhost:9090"
+        -v enchanted:/app/data \
+        ghcr.io/enchanted-ai/enchanted
 }
 
 # Prompt user to choose DeepSeek model version
@@ -204,7 +219,6 @@ detect_container_runtime
 install_ollama
 install_open_webui
 install_pinokio
-install_lobehub
 install_ollama_gui
 install_enchanted
 choose_deepseek_model
@@ -215,7 +229,6 @@ echo "🎉 All installations completed! 🚀"
 echo "💡 Access your AI tools at:"
 echo "🔗 Open-WebUI → http://localhost:3000"
 echo "🔗 Pinokio (if installed) → Run `pinokio`"
-echo "🔗 LobeHub → http://localhost:3210"
 echo "🔗 Ollama GUI → http://localhost:4000"
 echo "🔗 Enchanted → http://localhost:9090"
 echo "🔗 Running DeepSeek model: $MODEL"
