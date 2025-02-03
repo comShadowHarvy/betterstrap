@@ -89,8 +89,6 @@ install_dependencies() {
     check_sudo
     echo "🔄 Installing system dependencies..."
     $PKG_UPDATE
-    
-    # Common dependencies across distributions
     DEPS="curl wget git"
     $PKG_INSTALL $DEPS
 }
@@ -106,7 +104,7 @@ install_ollama() {
     else
         echo "❌ Failed to start Ollama service. Check logs."
         exit 1
-    }
+    fi
 }
 
 # Function to check and handle existing containers
