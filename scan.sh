@@ -36,7 +36,7 @@ check_deps() {
     done
     
     if [ ${#missing[@]} -ne 0 ]; then
-        echo -e "${RED}[ERROR]${NC} Missing required tools: ${missing[*]}"
+        log_error "Missing required tools: ${missing[*]}"
         echo "Please install missing dependencies:"
         echo "sudo apt-get install ${missing[*]}"
         exit 1
