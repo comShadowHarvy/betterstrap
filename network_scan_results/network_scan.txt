@@ -1,0 +1,57 @@
+Interface: enp7s0, type: EN10MB, MAC: f0:1f:af:19:a8:8d, IPv4: 192.168.1.199
+Starting arp-scan 1.10.0 with 256 hosts (https://github.com/royhills/arp-scan)
+192.168.1.2	bc:24:11:48:4f:5d	(Unknown)
+192.168.1.3	bc:24:11:37:e5:9f	(Unknown)
+192.168.1.1	f4:8c:eb:b7:51:27	D-Link International
+192.168.1.6	bc:24:11:d3:ee:40	(Unknown)
+192.168.1.13	bc:24:11:04:ae:89	(Unknown)
+192.168.1.17	bc:24:11:8f:2b:40	(Unknown)
+192.168.1.18	bc:24:11:8a:a8:86	(Unknown)
+192.168.1.21	bc:24:11:ca:91:92	(Unknown)
+192.168.1.22	bc:24:11:82:57:87	(Unknown)
+192.168.1.24	bc:24:11:61:45:b9	(Unknown)
+192.168.1.12	d4:f5:47:0e:e3:6e	Google, Inc.
+192.168.1.43	00:17:88:7e:b9:0b	Philips Lighting BV
+192.168.1.47	84:7b:eb:d2:bb:7b	Dell Inc.
+192.168.1.51	f4:8c:eb:b7:51:2c	D-Link International
+192.168.1.10	62:bc:2e:f5:3d:80	(Unknown: locally administered)
+192.168.1.34	d8:8c:79:81:7d:4e	Google, Inc.
+192.168.1.4	a0:d0:dc:60:45:35	Amazon Technologies Inc.
+192.168.1.31	d8:8c:79:3d:31:5f	Google, Inc.
+192.168.1.9	f0:ef:86:fa:00:20	Google, Inc.
+192.168.1.94	34:af:b3:94:4f:7d	Amazon Technologies Inc.
+192.168.1.7	c4:29:96:00:7a:4e	Signify B.V.
+192.168.1.146	2c:9e:00:6d:ed:dd	Sony Interactive Entertainment Inc.
+192.168.1.29	48:d6:d5:5b:e1:34	Google, Inc.
+192.168.1.30	e4:f4:c6:14:ef:de	NETGEAR
+192.168.1.52	00:ad:24:ff:ac:66	D-Link International
+192.168.1.202	cc:7b:5c:26:d6:37	(Unknown)
+192.168.1.174	0a:d2:40:c8:13:47	(Unknown: locally administered)
+192.168.1.210	02:2c:fa:4d:76:be	(Unknown: locally administered)
+192.168.1.234	c6:3f:4d:1a:9c:8b	(Unknown: locally administered)
+192.168.1.42	b0:41:1d:d6:88:d8	ITTIM Technologies
+192.168.1.5	fe:5e:de:05:f4:21	(Unknown: locally administered)
+192.168.1.20	34:af:b3:e7:9b:62	Amazon Technologies Inc.
+192.168.1.53	00:ad:24:ff:ac:62	D-Link International
+192.168.1.1	f4:8c:eb:b7:51:27	D-Link International (DUP: 2)
+192.168.1.1	f4:8c:eb:b7:51:27	D-Link International (DUP: 3)
+192.168.1.218	d0:ef:76:69:04:74	(Unknown)
+192.168.1.255	7c:d9:5c:37:0b:da	Google, Inc.
+192.168.1.11	7c:2e:bd:4e:c1:f8	Google, Inc.
+192.168.1.19	d0:73:d5:41:f7:7a	LIFI LABS MANAGEMENT PTY LTD
+192.168.1.23	c4:4f:33:a3:f8:70	Espressif Inc.
+192.168.1.25	70:2c:09:6b:57:bd	Nintendo Co.,Ltd
+192.168.1.55	30:49:58:84:61:9e	(Unknown)
+192.168.1.27	34:2f:bd:5e:ea:b8	Nintendo Co.,Ltd
+192.168.1.218	d0:ef:76:69:04:74	(Unknown) (DUP: 2)
+192.168.1.255	7c:d9:5c:37:0b:da	Google, Inc. (DUP: 2)
+192.168.1.254	a2:ad:dc:fc:9f:87	(Unknown: locally administered)
+192.168.1.26	34:20:03:b0:92:17	Shenzhen Feitengyun Technology Co.,LTD
+192.168.1.252	54:32:04:11:de:5c	(Unknown)
+192.168.1.40	7c:d9:5c:37:0b:da	Google, Inc.
+192.168.1.148	ec:0b:ae:9e:26:64	Hangzhou BroadLink Technology Co.,Ltd
+192.168.1.185	c8:db:26:0f:76:48	Logitech
+192.168.1.254	a2:ad:dc:fc:9f:87	(Unknown: locally administered) (DUP: 2)
+
+52 packets received by filter, 0 packets dropped by kernel
+Ending arp-scan 1.10.0: 256 hosts scanned in 6.009 seconds (42.60 hosts/sec). 47 responded
