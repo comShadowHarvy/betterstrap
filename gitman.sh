@@ -23,8 +23,14 @@ if ! command -v git-credential-manager &> /dev/null; then
         rm "$GCM_PACKAGE"
     fi
 else
-    info "Git Credential Manager is already installed."
+    info "Git Credential Manager version $(git-credential-manager --version) is already installed."
 fi
+
+# Backup existing git credentials configuration
+BACKUP_DATE=$(date +%Y%m%d_%H%M%S)
+BACKUP_FILE="git_credentials_backup_${BACKUP_DATE}.conf"
+info "Creating backup of git credentials configuration to $BACKUP_FILE..."
+git config --global --get-regexp credential > "$BACKUP_FILE" 2>/dev/null || true
 
 # Find the location of git-credential-manager
 GCM_PATH=$(command -v git-credential-manager)
@@ -34,10 +40,30 @@ if [[ -z "$GCM_PATH" ]]; then
 fi
 info "Git Credential Manager found at: $GCM_PATH"
 
+# Verify secretservice availability
+if ! command -v secret-tool >/dev/null 2>&1; then
+    error "secretservice backend not available. Please install libsecret-tools."
+    exit 1
+fi
+
 # Configure Git to use GCM
 info "Configuring Git to use Git Credential Manager..."
-git config --global credential.helper "$GCM_PATH"
-git config --global credential.credentialStore secretservice
+if ! git config --global credential.helper "$GCM_PATH"; then
+    error "Failed to set credential.helper"
+    exit 1
+fi
+
+if ! git config --global credential.credentialStore secretservice; then
+    error "Failed to set credential.credentialStore"
+    exit 1
+fi
 
 info "Configuration completed successfully."
 echo "Git Credential Manager is configured to use the 'secretservice' credential store."
+
+# Add cleanup function
+cleanup() {
+    info "Cleaning up temporary files..."
+    rm -f "$BACKUP_FILE"
+}
+trap cleanup EXIT
