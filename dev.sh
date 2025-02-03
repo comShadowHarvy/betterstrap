@@ -1,23 +1,54 @@
 #!/bin/bash
 
-# Function to display a loading bar with percentage
+set -euo pipefail
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+# Function to detect package manager
+detect_package_manager() {
+    if command -v apt &>/dev/null; then
+        PKG_MANAGER="apt"
+        PKG_CHECK="dpkg -l"
+        PKG_INSTALL="sudo apt install -y"
+    elif command -v dnf &>/dev/null; then
+        PKG_MANAGER="dnf"
+        PKG_CHECK="rpm -q"
+        PKG_INSTALL="sudo dnf install -y"
+    elif command -v pacman &>/dev/null; then
+        PKG_MANAGER="pacman"
+        PKG_CHECK="pacman -Qs"
+        PKG_INSTALL="sudo pacman -S --needed --noconfirm"
+    else
+        echo -e "${RED}Error: No supported package manager found${NC}"
+        exit 1
+    fi
+}
+
+# Enhanced loading bar with colors and spinner
 loading_bar() {
     local current=$1
     local total=$2
     local percent=$(( 100 * current / total ))
-    local bar_length=20
+    local bar_length=30
     local filled_length=$(( bar_length * current / total ))
     local empty_length=$(( bar_length - filled_length ))
+    local spinner=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
+    local spin_index=$(( current % ${#spinner[@]} ))
 
     printf -v bar "%0.s#" $(seq 1 $filled_length)
     printf -v space "%0.s " $(seq 1 $empty_length)
 
-    echo -ne "Progress: [${bar}${space}] (${percent}%%)\r"
+    echo -ne "Progress: [${bar}${space}] (${percent}%%) ${spinner[$spin_index]}\r"
 }
 
 # Function to check if a package is installed
 is_package_installed() {
-    pacman -Qs $1 > /dev/null
+    $PKG_CHECK $1 > /dev/null
 }
 
 # Function to display the header
@@ -87,11 +118,14 @@ install_tool() {
     if is_package_installed "$name"; then
         echo "$name is already installed."
     else
-        yay -S --noconfirm $name
+        $PKG_INSTALL $name
         echo -ne "\n$name installed.\n"
     fi
     loading_bar $((++current_step)) $total_steps
 }
+
+# Detect package manager
+detect_package_manager
 
 # Install each tool
 for tool in "${tools[@]}"; do

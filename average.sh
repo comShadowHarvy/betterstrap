@@ -1,6 +1,26 @@
 #!/bin/bash
 
-# Function to display a loading bar with percentage
+set -euo pipefail
+
+# Colors and formatting
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+# Logging function
+log() {
+    local level=$1; shift
+    case "$level" in
+        "INFO") echo -e "${GREEN}[INFO]${NC} $*" ;;
+        "WARN") echo -e "${YELLOW}[WARN]${NC} $*" ;;
+        "ERROR") echo -e "${RED}[ERROR]${NC} $*" ;;
+    esac
+}
+
+# Enhanced loading bar with Unicode blocks
 loading_bar() {
     local current=$1
     local total=$2
@@ -8,26 +28,78 @@ loading_bar() {
     local bar_length=20
     local filled_length=$((bar_length * current / total))
     local empty_length=$((bar_length - filled_length))
-
-    printf -v bar "%0.s#" $(seq 1 $filled_length)
-    printf -v space "%0.s " $(seq 1 $empty_length)
-
-    echo -ne "Progress: [${bar}${space}] (${percent}%%)\r"
+    
+    local blocks=("▏" "▎" "▍" "▌" "▋" "▊" "▉" "█")
+    printf -v bar "%0.s█" $(seq 1 $filled_length)
+    printf -v space "%0.s░" $(seq 1 $empty_length)
+    
+    echo -ne "${BLUE}Progress: [${bar}${space}] ${percent}%${NC}\r"
 }
 
-# Function to check if a package is installed
+# Detect package manager and distribution
+detect_system() {
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        DISTRO=$ID
+        case $ID in
+            debian|ubuntu|linuxmint)
+                PKG_MANAGER="apt"
+                PKG_CHECK="dpkg -l"
+                PKG_INSTALL="sudo apt install -y"
+                PKG_UPDATE="sudo apt update"
+                ;;
+            fedora|centos|rhel)
+                PKG_MANAGER="dnf"
+                PKG_CHECK="rpm -q"
+                PKG_INSTALL="sudo dnf install -y"
+                PKG_UPDATE="sudo dnf check-update"
+                ;;
+            arch|manjaro)
+                PKG_MANAGER="pacman"
+                PKG_CHECK="pacman -Qs"
+                PKG_INSTALL="sudo pacman -S --needed --noconfirm"
+                PKG_UPDATE="sudo pacman -Sy"
+                ;;
+            *)
+                log "ERROR" "Unsupported distribution: $ID"
+                exit 1
+                ;;
+        esac
+    else
+        log "ERROR" "Could not detect distribution"
+        exit 1
+    fi
+}
+
+# Check if package is installed
 is_package_installed() {
-    pacman -Qs "$1" > /dev/null 2>&1
+    local package=$1
+    case $PKG_MANAGER in
+        apt)
+            dpkg -l "$package" >/dev/null 2>&1
+            ;;
+        dnf)
+            rpm -q "$package" >/dev/null 2>&1
+            ;;
+        pacman)
+            pacman -Qs "$package" >/dev/null 2>&1
+            ;;
+    esac
 }
 
-# Function to display the header
+# Display header with detected system info
 display_header() {
     clear
-    echo "============================="
-    echo "  Recommended Software Installer"
-    echo "============================="
+    echo -e "${BOLD}=============================${NC}"
+    echo -e "${BOLD}  Recommended Software Installer${NC}"
+    echo -e "${BOLD}=============================${NC}"
+    echo -e "${BLUE}Distribution:${NC} $DISTRO"
+    echo -e "${BLUE}Package Manager:${NC} $PKG_MANAGER"
     echo
 }
+
+# Initialize system detection
+detect_system
 
 # Function to display a description
 display_description() {
