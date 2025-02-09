@@ -8,6 +8,9 @@ import curses
 import curses.textpad
 import signal
 import threading
+from dataclasses import dataclass
+from typing import List, Tuple, Optional
+from collections import deque
 
 # Constants for maximum elements
 MAX_BUBBLES = 50
@@ -184,6 +187,107 @@ FISH_TYPES = [
 score = 0
 score_lock = threading.Lock()
 
+@dataclass
+class MarineConfig:
+    """Configuration for marine life objects"""
+    art: List[str]
+    speed: float
+    max_count: int
+    color: int
+
+class MarineLife:
+    """Base class for all marine life"""
+    def __init__(self, x: int, y: int, config: MarineConfig):
+        self.x = x
+        self.y = y
+        self.art = config.art
+        self.color = config.color
+        self.speed = config.speed
+        self.move_counter = 0
+        self.direction = random.choice([-1, 1])
+        self.alive = True
+        self._width = max(len(line) for line in self.art)
+        self._height = len(self.art)
+
+    def get_bounding_box(self) -> Tuple[int, int, int, int]:
+        return (self.x, self.y, self.x + self._width, self.y + self._height)
+
+    def move(self, width: int, height: int) -> None:
+        if not self.alive:
+            return
+        self.move_counter += self.speed
+        if self.move_counter >= 1:
+            self.move_counter = 0
+            self._update_position(width, height)
+
+    def _update_position(self, width: int, height: int) -> None:
+        # Default movement behavior - override in subclasses
+        self.x = (self.x + self.direction) % width
+
+    def draw(self, stdscr) -> None:
+        if not self.alive:
+            return
+        for i, line in enumerate(self.art):
+            try:
+                stdscr.addstr(int(self.y) + i, int(self.x), line, curses.color_pair(self.color))
+            except curses.error:
+                pass
+
+class ObjectPool:
+    """Object pool for recycling marine life objects"""
+    def __init__(self, factory, max_size: int):
+        self.available = deque(maxlen=max_size)
+        self.in_use = set()
+        self.factory = factory
+        self.max_size = max_size
+
+    def acquire(self, *args, **kwargs):
+        obj = self.available.pop() if self.available else self.factory(*args, **kwargs)
+        self.in_use.add(obj)
+        return obj
+
+    def release(self, obj):
+        if obj in self.in_use:
+            self.in_use.remove(obj)
+            if len(self.available) < self.max_size:
+                self.available.append(obj)
+
+class CollisionManager:
+    """Efficient collision detection using spatial hashing"""
+    def __init__(self, width: int, height: int, cell_size: int = 50):
+        self.cell_size = cell_size
+        self.grid_width = width // cell_size + 1
+        self.grid_height = height // cell_size + 1
+        self.grid = {}
+
+    def clear(self):
+        self.grid.clear()
+
+    def add_object(self, obj):
+        x1, y1, x2, y2 = obj.get_bounding_box()
+        cell_x1, cell_y1 = x1 // self.cell_size, y1 // self.cell_size
+        cell_x2, cell_y2 = x2 // self.cell_size, y2 // self.cell_size
+
+        for i in range(cell_x1, cell_x2 + 1):
+            for j in range(cell_y1, cell_y2 + 1):
+                key = (i, j)
+                if key not in self.grid:
+                    self.grid[key] = set()
+                self.grid[key].add(obj)
+
+    def get_nearby_objects(self, obj):
+        x1, y1, x2, y2 = obj.get_bounding_box()
+        cell_x1, cell_y1 = x1 // self.cell_size, y1 // self.cell_size
+        cell_x2, cell_y2 = x2 // self.cell_size, y2 // self.cell_size
+
+        nearby = set()
+        for i in range(cell_x1, cell_x2 + 1):
+            for j in range(cell_y1, cell_y2 + 1):
+                if (i, j) in self.grid:
+                    nearby.update(self.grid[(i, j)])
+        nearby.discard(obj)
+        return nearby
+
 # -------------- CLASSES --------------
 
 class Seaweed:
@@ -246,61 +350,29 @@ class Bubble:
         except curses.error:
             pass  # Ignore drawing errors when bubble is out of bounds
 
-class Fish:
-    """
-    Represents a fish that can be part of a school or move independently.
-    """
+class Fish(MarineLife):
     def __init__(self, fish_type, x, y, direction, color, speed, school=None):
-        self.art = fish_type["right"] if direction == 1 else fish_type["left"]
-        self.x = x
-        self.y = y
-        self.color = color
-        self.speed = speed
-        self.move_counter = 0
-        self.direction = direction  # 1 for right, -1 for left
-        self.school = school  # Reference to the school it belongs to
-        self.alive = True
+        config = MarineConfig(
+            art=[fish_type["right"] if direction == 1 else fish_type["left"]],
+            speed=speed,
+            max_count=MAX_FISH,
+            color=color
+        )
+        super().__init__(x, y, config)
+        self.school = school
+        self.direction = direction
 
-    def get_bounding_box(self):
-        """Returns the bounding box of the fish as (x1, y1, x2, y2)."""
-        return (self.x, self.y, self.x + len(self.art), self.y)
+    def _update_position(self, width: int, height: int) -> None:
+        if self.school:
+            self.direction = self.school.direction
+        self.x += self.direction
 
-    def move(self, width, height):
-        if not self.alive:
-            return
-
-        self.move_counter += self.speed
-        if self.move_counter >= 1:
-            self.move_counter = 0
-            if self.school:
-                # Schooling behavior
-                target_direction = self.school.direction
-                self.direction = target_direction
-                self.x += self.direction
-            else:
-                # Independent movement
-                self.x += self.direction
-
-            # Change direction at screen edges
-            if self.direction == 1 and self.x >= width - len(self.art) - 1:
-                self.direction = -1
-                self.art = self.art[::-1]  # Reverse art for direction
-            elif self.direction == -1 and self.x <= 1:
-                self.direction = 1
-                self.art = self.art[::-1]
-
-            # Random vertical movement
-            if random.random() < 0.3:
-                self.y += random.choice([-1, 1])
-                self.y = max(2, min(height - 2, self.y))
-
-    def draw(self, stdscr):
-        if not self.alive:
-            return
-        try:
-            stdscr.addstr(int(self.y), int(self.x), self.art, curses.color_pair(self.color))
-        except curses.error:
-            pass  # Ignore drawing errors when fish is out of bounds
+        if self.direction == 1 and self.x >= width - self._width - 1:
+            self.direction = -1
+            self.art = [line[::-1] for line in self.art]
+        elif self.direction == -1 and self.x <= 1:
+            self.direction = 1
+            self.art = [line[::-1] for line in self.art]
 
 class Shark:
     """
@@ -818,6 +890,14 @@ def main(stdscr):
     food_list = []
     rocks = []
     shipwrecks = []
+
+    # Initialize object pools
+    fish_pool = ObjectPool(Fish, MAX_FISH)
+    shark_pool = ObjectPool(Shark, MAX_SHARKS)
+    # ... other pools ...
+
+    # Initialize collision manager
+    collision_manager = CollisionManager(width, height)
 
     # Get initial terminal size
     height, width = stdscr.getmaxyx()
