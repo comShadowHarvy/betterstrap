@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Required dependencies
-DEPS=(nmap arp-scan)
+DEPS=(nmap arp-scan sipcalc)
 
 # Colors and formatting
 RED='\033[0;31m'
@@ -79,13 +79,13 @@ show_spinner() {
     printf "    \b\b\b\b"
 }
 
-# Create results and log directories in the current folder
+# Create results and log directories in the current folder (moved up)
 RESULTS_DIR="$PWD/network_scan_results"
 LOG_FILE="$RESULTS_DIR/scan.log"
 mkdir -p "$RESULTS_DIR"
 touch "$LOG_FILE"
 
-# Variables
+# Global Variables
 AUTO_MODE=false
 INTERACTIVE_MODE=false
 DEBUG_MODE=false
@@ -145,77 +145,53 @@ validate_network() {
     fi
 }
 
-# Network scanning function
-do_network_scan() {
-    local network=$1
-    log_info "Scanning network: $network"
-    
-    # ARP Scan
-    if sudo arp-scan --localnet --retry=3 --timeout=1000 > "$RESULTS_DIR/network_scan.txt" 2>/dev/null & then
-        local pid=$!
-        show_spinner $pid
-        wait $pid
-        if [ $? -eq 0 ]; then
-            log_success "ARP scan completed successfully"
-        else
-            log_error "ARP scan failed"
-            return 1
-        fi
-    fi
-    
-    # Count discovered devices
-    DEVICE_COUNT=$(grep -c "^[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}" "$RESULTS_DIR/network_scan.txt" || echo "0")
-    
-    if [ "$DEVICE_COUNT" -eq 0 ]; then
-        log_error "No devices found in network scan"
-        return 1
-    fi
-    
-    log_info "Found $DEVICE_COUNT devices"
-    return 0
-}
+# --- Begin Optimized ARP Scan Execution ---
+# Check dependencies early
+check_deps
 
-# Perform ARP scan with rate limiting and timeout
+validate_network
+
 log_echo "${CYAN}Step 1: Discovering devices on the network using ARP scan...${NC}"
 ARP_OPTS="--localnet --rate=100 --timeout=2000 --retry=2"
 ARP_OPTS+=" --oui-file=/usr/share/arp-scan/ieee-oui.txt"
 ARP_OPTS+=" --mac-file=/usr/share/arp-scan/mac-vendor.txt"
 
-if ! (sudo timeout 300 arp-scan $ARP_OPTS > "$RESULTS_DIR/network_scan.txt") 2>/dev/null; then
+# Run ARP scan in background to enable proper spinner usage
+sudo timeout 300 arp-scan $ARP_OPTS > "$RESULTS_DIR/network_scan.txt" 2>/dev/null &
+arp_pid=$!
+show_spinner "$arp_pid"
+wait $arp_pid
+if [ $? -ne 0 ]; then
     log_error "ARP scan failed or timed out"
     touch "$RESULTS_DIR/.scan_failed"
 fi
-show_spinner "ARP Scan"
 log_echo "${GREEN}ARP scan complete! Results saved to $RESULTS_DIR/network_scan.txt${NC}"
 
-# Process results with verification
+# Count discovered devices and process results
 DEVICE_COUNT=$(grep -E '^[0-9a-fA-F:]' "$RESULTS_DIR/network_scan.txt" | wc -l)
 log_echo "${CYAN}Devices found in ARP scan: ${DEVICE_COUNT}${NC}"
 
-# Parallel Nmap scan for low device count
 if (( DEVICE_COUNT < 10 )); then
     log_echo "${YELLOW}Fewer than 10 devices found. Performing parallel Nmap scans...${NC}"
     NMAP_OPTS="-sn -T4 --max-retries 2 --max-rate 100"
     parallel -j 4 "nmap $NMAP_OPTS {} -oN $RESULTS_DIR/nmap_scan_{#}.txt" \
         ::: $(echo "$NETWORK_RANGE" | tr '/' ' ' | xargs sipcalc | grep 'Network' | head -n1 | awk '{print $4}') \
         2>/dev/null
-
-    # Combine and deduplicate results
     find "$RESULTS_DIR" -name "nmap_scan_*.txt" -exec grep "Nmap scan report for" {} \; | \
         awk '{print $5}' | sort -u > "$RESULTS_DIR/device_ips.txt"
 else
-    # Enhanced ARP results parsing
     grep -E '^[0-9a-fA-F:]' "$RESULTS_DIR/network_scan.txt" | \
         awk '{print $1}' | sort -u > "$RESULTS_DIR/device_ips.txt"
 fi
 
 # Verify and clean IP addresses
+# Ensure verified_ips.txt exists before appending
+touch "$RESULTS_DIR/verified_ips.txt"
 while IFS= read -r ip; do
     if [[ $ip =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] && ping -c 1 -W 1 "$ip" >/dev/null 2>&1; then
         echo "$ip" >> "$RESULTS_DIR/verified_ips.txt"
     fi
 done < "$RESULTS_DIR/device_ips.txt"
-
 mv "$RESULTS_DIR/verified_ips.txt" "$RESULTS_DIR/cleaned_device_ips.txt"
 
 # Save scan metadata
@@ -228,7 +204,7 @@ cat > "$RESULTS_DIR/scan_metadata.json" << EOF
 }
 EOF
 
-# Categorize devices by type (e.g., IoT, servers, PCs)
+# Categorize devices by type
 log_echo "${CYAN}Categorizing devices based on MAC vendors and services...${NC}"
 touch "$RESULTS_DIR/device_categories.txt"
 while IFS= read -r ip; do
@@ -236,14 +212,16 @@ while IFS= read -r ip; do
     category=$(categorize_device "$mac_vendor")
     printf "%-15s %-20s %s\n" "$ip" "$category" "$mac_vendor" >> "$RESULTS_DIR/device_categories.txt"
 done < "$RESULTS_DIR/device_ips.txt"
-
 log_echo "${GREEN}Device categorization complete! Results saved to $RESULTS_DIR/device_categories.txt${NC}"
 
-# Advanced scanning (optional in interactive mode or based on logic in auto mode)
+# Advanced scanning based on mode or if specific ports are detected
 if $INTERACTIVE_MODE || { $AUTO_MODE && grep -q -E ":22|:80|:3389" "$RESULTS_DIR/network_scan.txt"; }; then
     log_info "Running advanced Nmap scan..."
-    if nmap -sV -O -oN "$RESULTS_DIR/advanced_scan.txt" -iL "$RESULTS_DIR/device_ips.txt" > /dev/null 2>&1 & then
-        show_spinner $!
+    nmap -sV -O -oN "$RESULTS_DIR/advanced_scan.txt" -iL "$RESULTS_DIR/device_ips.txt" >/dev/null 2>&1 &
+    adv_pid=$!
+    show_spinner "$adv_pid"
+    wait $adv_pid
+    if [ $? -eq 0 ]; then
         log_success "Advanced scan complete!"
     else
         log_error "Advanced scan failed"
@@ -251,40 +229,14 @@ if $INTERACTIVE_MODE || { $AUTO_MODE && grep -q -E ":22|:80|:3389" "$RESULTS_DIR
     fi
 fi
 
-# Final output
-log_echo "${GREEN}Scan complete! Results saved in ${RESULTS_DIR}.${NC}"
+# Generate final report
+{
+    echo "Scan Results $(date)"
+    echo "----------------"
+    echo "Devices found: $DEVICE_COUNT"
+    echo "----------------"
+    cat "$RESULTS_DIR/device_ips.txt"
+} > "$RESULTS_DIR/scan_report.txt"
+log_success "Scan complete. Check $RESULTS_DIR/scan_report.txt for results"
 log_echo "${CYAN}Log of all activities can be found in $LOG_FILE.${NC}"
-
-# Main execution
-check_deps
-
-# Create results directory
-RESULTS_DIR="$PWD/network_scan_results"
-mkdir -p "$RESULTS_DIR"
-
-# Perform scan
-if ! do_network_scan "${1:-192.168.1.0/24}"; then
-    log_error "Network scan failed"
-    exit 1
-fi
-
-# Process results if they exist
-if [ -f "$RESULTS_DIR/network_scan.txt" ]; then
-    grep "^[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}" "$RESULTS_DIR/network_scan.txt" | \
-        awk '{print $1}' > "$RESULTS_DIR/device_ips.txt"
-    
-    # Generate report
-    {
-        echo "Scan Results $(date)"
-        echo "----------------"
-        echo "Devices found: $DEVICE_COUNT"
-        echo "----------------"
-        cat "$RESULTS_DIR/device_ips.txt"
-    } > "$RESULTS_DIR/scan_report.txt"
-    
-    log_success "Scan complete. Check $RESULTS_DIR/scan_report.txt for results"
-else
-    log_error "No scan results found"
-    exit 1
-fi
 
