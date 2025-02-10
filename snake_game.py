@@ -323,6 +323,12 @@ def main(stdscr):
     curses.init_pair(4, curses.COLOR_YELLOW, curses.COLOR_BLACK)   # Snake3
     curses.init_pair(5, curses.COLOR_MAGENTA, curses.COLOR_BLACK)  # Snake4
     curses.init_pair(6, curses.COLOR_WHITE, curses.COLOR_BLACK)    # Temporary fruits
+    curses.init_pair(7, curses.COLOR_CYAN, curses.COLOR_BLACK)     # Snake5
+    curses.init_pair(8, curses.COLOR_RED, curses.COLOR_BLACK)      # Snake6
+    curses.init_pair(9, curses.COLOR_GREEN, curses.COLOR_BLACK)    # Snake7
+    curses.init_pair(10, curses.COLOR_BLUE, curses.COLOR_BLACK)    # Snake8
+    curses.init_pair(11, curses.COLOR_YELLOW, curses.COLOR_BLACK)  # Snake9
+    curses.init_pair(12, curses.COLOR_MAGENTA, curses.COLOR_BLACK) # Snake10
     
     while True:  # Outer game loop to support restart
         death_ctr = 1
