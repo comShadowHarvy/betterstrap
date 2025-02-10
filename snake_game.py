@@ -36,6 +36,7 @@ class Snake:
         self.prev_direction = direction  # Add tracking of previous direction
         self.target_food = None  # Add food target tracking
         self.current_target = None  # Track current food target (regular or dropped)
+        self.death_order = None # Initialize death_order
 
     def next_head(self, new_dir=None):
         if new_dir is None:
@@ -186,34 +187,32 @@ def safe_addch(stdscr, y, x, ch, attr=0):
     except curses.error:
         pass
 
-def draw_board(stdscr, snake1, snake2, snake3, snake4, food):  # updated signature
+def draw_board(stdscr, snakes, food):
     stdscr.clear()
-    # Header displays candidate style for each snake in the game
-    def style_name(s):
-        return {1:"FreeSpace-MH", 2:"Manhattan", 4:"Weighted", 5:"Aggressive", 6:"Cautious", 7:"Distance2x", 8:"Balanced"}[s]
-    header = ("S1(Green): {} | S2(Blue): {} | S3(Yellow): {} | S4(Magenta): {}"
-              .format(style_name(snake1.strategy), style_name(snake2.strategy),
-                      style_name(snake3.strategy), style_name(snake4.strategy)))
-    stdscr.addstr(0, max(0, WIDTH//2 - len(header)//2), header, curses.A_BOLD)
-    # Draw border starting at row offset=1
-    offset = 1
-    top_border = offset
-    bottom_border = HEIGHT
+    
+    # Draw border
     for x in range(WIDTH):
-        safe_addch(stdscr, top_border, x, '#')
-        safe_addch(stdscr, bottom_border, x, '#')
-    for y in range(top_border, bottom_border+1):
+        safe_addch(stdscr, 1, x, '#')
+        safe_addch(stdscr, HEIGHT, x, '#')
+    for y in range(1, HEIGHT + 1):
         safe_addch(stdscr, y, 0, '#')
         safe_addch(stdscr, y, WIDTH-1, '#')
-    # Draw food and snake1, snake2 (snake3, snake4 are drawn in main loop)
-    safe_addch(stdscr, food[1] + offset, food[0], '*', curses.color_pair(3))
-    for s, c in [(snake1, 1), (snake2, 2)]:
-        for i, cell in enumerate(s.body):
-            char = 'H' if i == 0 else 'o'
-            safe_addch(stdscr, cell[1] + offset, cell[0], char, curses.color_pair(c))
-    # New: draw temporary fruits dropped by dead snakes using char ':'
+    
+    # Draw food
+    safe_addch(stdscr, food[1] + 1, food[0], '*', curses.color_pair(3))
+    
+    # Draw snakes
+    for s in snakes:
+        if s.alive:
+            color = min(s.id + 2, 12)
+            for i, cell in enumerate(s.body):
+                char = 'H' if i == 0 else 'o'
+                safe_addch(stdscr, cell[1] + 1, cell[0], char, curses.color_pair(color))
+
+    # Draw temporary fruits
     for pos in temp_fruits:
         safe_addch(stdscr, pos[1] + 1, pos[0], ':', curses.color_pair(6))
+    
     stdscr.refresh()
 
 # New ranking_screen that shows ranking and then offers Restart/Exit:
@@ -334,20 +333,28 @@ def main(stdscr):
         death_ctr = 1
         global temp_fruits
         temp_fruits = []  # clear dropped fruits at start
-        # New: assign distinct strategies for four snakes
-        unique_strats = random.sample([1,2,4,5,6,7,8], 4)
-        # Initialize four snakes with distinct starting positions, directions, and death_order attribute
-        snake1 = Snake(body=[(5,5), (4,5), (3,5)], direction=DIRECTIONS['RIGHT'], id=1)
-        snake1.strategy = unique_strats[0]
-        snake2 = Snake(body=[(WIDTH-6,5), (WIDTH-5,5), (WIDTH-4,5)], direction=DIRECTIONS['LEFT'], id=2)
-        snake2.strategy = unique_strats[1]
-        snake3 = Snake(body=[(WIDTH-6,HEIGHT-6), (WIDTH-5,HEIGHT-6), (WIDTH-4,HEIGHT-6)], direction=DIRECTIONS['LEFT'], id=3)
-        snake3.strategy = unique_strats[2]
-        snake4 = Snake(body=[(5,HEIGHT-6), (4,HEIGHT-6), (3,HEIGHT-6)], direction=DIRECTIONS['RIGHT'], id=4)
-        snake4.strategy = unique_strats[3]
-        for s in [snake1, snake2, snake3, snake4]:
-            s.death_order = None
-        snakes = [snake1, snake2, snake3, snake4]
+        
+        # Create 10 snakes in two columns (5 each)
+        snakes = []
+        unique_strats = random.sample([1,2,4,5,6,7,8]*2, 10)
+        num_per_column = 5
+        left_x = 5
+        right_x = WIDTH - 6
+        spacing = (HEIGHT - 10) // (num_per_column - 1) if num_per_column > 1 else 0
+        
+        for i in range(num_per_column):
+            y = 5 + i * spacing
+            # Left column snake, moving right
+            s_left = Snake(body=[(left_x, y), (left_x-1, y), (left_x-2, y)],
+                           direction=DIRECTIONS['RIGHT'], id=i+1)
+            s_left.strategy = unique_strats[i]
+            snakes.append(s_left)
+            # Right column snake, moving left
+            s_right = Snake(body=[(right_x, y), (right_x+1, y), (right_x+2, y)],
+                            direction=DIRECTIONS['LEFT'], id=i+num_per_column+1)
+            s_right.strategy = unique_strats[i+num_per_column]
+            snakes.append(s_right)
+        
         food = place_food(snakes)  # use updated place_food
         
         stdscr.nodelay(1)
@@ -383,15 +390,8 @@ def main(stdscr):
                         temp_fruits.remove(new_head)
                     else:
                         s.remove_tail()
-            draw_board(stdscr, snake1, snake2, snake3, snake4, food)  # updated call
-            # Also draw snake3 and snake4
-            for s in snakes[2:]:
-                if not s.alive:
-                    continue
-                color = 4 if s.id == 3 else 5
-                for i, cell in enumerate(s.body):
-                    char = 'H' if i==0 else 'X'
-                    safe_addch(stdscr, cell[1] + 1, cell[0], char, curses.color_pair(color))
+            # Call draw_board using the first four snakes from the list
+            draw_board(stdscr, snakes, food)  # updated call
             stdscr.refresh()
             time.sleep(0.1)
         
