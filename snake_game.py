@@ -1,7 +1,7 @@
 import curses, time, random
 
-# Board dimensions
-WIDTH, HEIGHT = 80, 25  # increased board size
+# Board dimensions will be set in main() based on terminal size
+WIDTH, HEIGHT = None, None  # Changed to None initially
 
 # Direction vectors
 DIRECTIONS = {
@@ -32,6 +32,10 @@ class Snake:
         self.alive = True
         self.strategy = random.choice([1,2,4,5,6,7,8])  # randomly choose among 7 candidate styles
         self.score = 0   # new: count of fruits eaten
+        self.body_set = set(body)  # New: maintain a set for faster lookups
+        self.prev_direction = direction  # Add tracking of previous direction
+        self.target_food = None  # Add food target tracking
+        self.current_target = None  # Track current food target (regular or dropped)
 
     def next_head(self, new_dir=None):
         if new_dir is None:
@@ -40,67 +44,117 @@ class Snake:
         return (head[0] + new_dir[0], head[1] + new_dir[1])
 
     def free_space(self, pos, other_snake_body, food):  # modified signature
-        obstacles = set(self.body[1:]) | set(other_snake_body)
+        obstacles = self.body_set | other_snake_body
         visited = set()
-        to_visit = [pos]
+        to_visit = {pos}  # Using set for faster membership tests
         count = 0
         found_food = False
+        
         while to_visit:
             p = to_visit.pop()
-            if p in visited:
+            if p in visited or p in obstacles:
                 continue
             visited.add(p)
             x, y = p
             if x < 1 or x > WIDTH-2 or y < 1 or y > HEIGHT-2:
                 continue
-            if p in obstacles:
-                continue
-            # If normal food or a dropped fruit is reached, flag it as valuable
+            
             if p == food or p in temp_fruits:
                 found_food = True
+                if count > 15:  # Early exit if we found food and decent space
+                    return count + 75
             count += 1
-            for dx, dy in ALL_DIRS:
-                np = (p[0]+dx, p[1]+dy)
-                if np not in visited:
-                    to_visit.append(np)
-        return count + (50 if found_food else 0)  # bonus if a valuable fruit is reachable
+            
+            # Add all valid neighbors at once
+            x, y = p
+            neighbors = {(x+1,y), (x-1,y), (x,y+1), (x,y-1)} - visited - obstacles
+            to_visit.update(neighbors)
+            
+        return count + (50 if found_food else 0)
+
+    def quick_check_deadend(self, pos, other_snake_body):
+        """Check if a position has at least 2 escape routes to avoid obvious traps"""
+        escape_routes = 0
+        for dx, dy in ALL_DIRS:
+            next_pos = (pos[0] + dx, pos[1] + dy)
+            if self._is_safe(next_pos, other_snake_body):
+                escape_routes += 1
+                if escape_routes >= 2:  # Only need 2 escape routes to not be in immediate danger
+                    return False
+        return True  # Less than 2 escape routes = potential deadend
 
     def choose_direction(self, food, other_snake_body):
+        other_snake_set = set(other_snake_body)
         candidates = []
+        head = self.body[0]
+        
+        # Find closest food source (including dropped fruits)
+        head_pos = self.body[0]
+        closest_food = food
+        min_dist = abs(head_pos[0] - food[0]) + abs(head_pos[1] - food[1])
+        
+        # Check dropped fruits
+        for f in temp_fruits:
+            dist = abs(head_pos[0] - f[0]) + abs(head_pos[1] - f[1])
+            if dist < min_dist:
+                min_dist = dist
+                closest_food = f
+        
+        # Update target if needed
+        if self.current_target != closest_food:
+            self.current_target = closest_food
+        
+        # Calculate direction to current target
+        food_dx = self.current_target[0] - head[0]
+        food_dy = self.current_target[1] - head[1]
+        
         for dx, dy in ALL_DIRS:
             if len(self.body) > 1 and (dx, dy) == (-self.direction[0], -self.direction[1]):
                 continue
-            new_head = (self.body[0][0] + dx, self.body[0][1] + dy)
-            if self._is_safe(new_head, other_snake_body):
-                # Modified: compute effective Manhattan distance using dropped fruit if closer than the normal food.
-                manhattan_food = abs(new_head[0] - food[0]) + abs(new_head[1] - food[1])
-                if temp_fruits:
-                    manhattan_dropped = min(abs(new_head[0] - f[0]) + abs(new_head[1] - f[1]) for f in temp_fruits)
-                else:
-                    manhattan_dropped = float('inf')
-                effective_manhattan = manhattan_dropped if manhattan_dropped < manhattan_food else manhattan_food
-                space = self.free_space(new_head, other_snake_body, food)
-                # Use effective_manhattan in scoring based on strategy
-                if self.strategy == 1:
-                    score = space - effective_manhattan              # FreeSpace-MH
-                elif self.strategy == 2:
-                    score = -effective_manhattan                     # Manhattan only
-                elif self.strategy == 4:
-                    score = 0.75 * space - 0.25 * effective_manhattan  # Weighted
-                elif self.strategy == 5:
-                    score = 1.5 * space - 0.5 * effective_manhattan    # Aggressive
-                elif self.strategy == 6:
-                    score = 0.5 * space - 0.5 * effective_manhattan    # Cautious
-                elif self.strategy == 7:
-                    score = -2 * effective_manhattan                   # Distance 2x
-                elif self.strategy == 8:
-                    score = space - 0.5 * effective_manhattan          # Balanced
-                candidates.append(((dx, dy), score))
+                
+            new_head = (head[0] + dx, head[1] + dy)
+            if not self._is_safe(new_head, other_snake_set):
+                continue
+                
+            # Calculate distance to current target
+            manhattan_food = abs(new_head[0] - self.current_target[0]) + abs(new_head[1] - self.current_target[1])
+            space = self.free_space(new_head, other_snake_set, self.current_target)
+            
+            # Base score with food focus
+            score = -15.0 * manhattan_food + 0.2 * space + 100
+            
+            # Direction consistency bonus
+            if (dx, dy) == self.direction:
+                score += 50
+            elif (dx, dy) == self.prev_direction:
+                score += 25
+            
+            # Directional alignment bonus
+            if (food_dx * dx > 0) or (food_dy * dy > 0):
+                score += 75
+            
+            # Close range behavior (same for both regular and dropped food)
+            if manhattan_food <= 2:
+                if (abs(food_dx) == 1 and dy == 0) or (abs(food_dy) == 1 and dx == 0):
+                    score += 500
+            elif manhattan_food < 5:
+                score += 150
+            elif manhattan_food < 10:
+                score += 75
+            
+            # Survival checks
+            if space < 3:
+                score -= 1000
+            elif space < 6:
+                score -= 200
+            
+            candidates.append(((dx, dy), score))
+        
         if candidates:
-            best = max(candidates, key=lambda x: x[1])
-            self.direction = best[0]
+            self.prev_direction = self.direction
+            self.direction = max(candidates, key=lambda x: x[1])[0]
 
-    def _is_safe(self, pos, other_snake_body):
+    def _is_safe(self, pos, other_snake_set):
         x, y = pos
         # Check wall
         if x < 1 or x > WIDTH-2 or y < 1 or y > HEIGHT-2:
@@ -109,7 +163,7 @@ class Snake:
         if pos in self.body[:-1]:
             return False
         # Check collision with part of other snake
-        if pos in other_snake_body:
+        if pos in other_snake_set:
             return False
         return True
 
@@ -117,11 +171,13 @@ class Snake:
         self.choose_direction(food, other_snake_body)
         new_head = self.next_head()
         self.body.insert(0, new_head)
+        self.body_set.add(new_head)  # Update set
         # Check if food is eaten. Caller will handle food collision.
         return new_head
 
     def remove_tail(self):
-        self.body.pop()
+        tail = self.body.pop()
+        self.body_set.remove(tail)  # Update set
 
 
 def safe_addch(stdscr, y, x, ch, attr=0):
@@ -241,10 +297,26 @@ def drop_body(snake):
     return snake.body
 
 def main(stdscr):
+    global WIDTH, HEIGHT
     curses.curs_set(0)
     stdscr.nodelay(1)
+    
+    # Get terminal size and set board dimensions once at startup
+    term_height, term_width = stdscr.getmaxyx()
+    HEIGHT = term_height - 2  # Leave room for header
+    WIDTH = term_width - 1    # Leave room for right border
+    
+    # Ensure minimum size
+    if HEIGHT < 15 or WIDTH < 40:
+        stdscr.addstr(0, 0, "Terminal too small! Need at least 40x15")
+        stdscr.refresh()
+        stdscr.getch()
+        return
+
     curses.start_color()
-    # define color pairs:
+    curses.use_default_colors()
+    
+    # Initialize colors
     curses.init_pair(1, curses.COLOR_GREEN, curses.COLOR_BLACK)    # Snake1
     curses.init_pair(2, curses.COLOR_BLUE, curses.COLOR_BLACK)     # Snake2
     curses.init_pair(3, curses.COLOR_RED, curses.COLOR_BLACK)      # food remains
