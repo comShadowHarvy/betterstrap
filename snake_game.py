@@ -216,21 +216,37 @@ def draw_board(stdscr, snakes, food):
     stdscr.refresh()
 
 # New ranking_screen that shows ranking and then offers Restart/Exit:
-def ranking_screen(stdscr, ranking):
+def ranking_screen(stdscr, ranking, start_time):
     stdscr.clear()
     stdscr.addstr(2, WIDTH//2 - 4, "Ranking", curses.A_BOLD)
+    
+    # Calculate game duration
+    end_time = time.time()
+    game_duration = end_time - start_time
+    minutes = int(game_duration // 60)
+    seconds = int(game_duration % 60)
+    
+    # Display game duration
+    time_str = f"Game Duration: {minutes:02d}:{seconds:02d}"
+    stdscr.addstr(3, WIDTH//2 - len(time_str)//2, time_str)
+    
+    # Display snake information
     for idx, s in enumerate(ranking):
         rank = idx + 1
-        line = "Rank {}: Snake {} (Style: {})".format(rank, s.id,
-                    {1:"FreeSpace-MH", 2:"Manhattan", 4:"Weighted", 5:"Aggressive", 6:"Cautious", 7:"Distance2x", 8:"Balanced"}[s.strategy])
+        line = f"Rank {rank}: Snake {s.id} (Eaten: {s.score})"
         stdscr.addstr(4 + idx, WIDTH//2 - len(line)//2, line)
+    
+    # Restart/Exit options
     options = ["Restart", "Exit"]
     selected = 0
     stdscr.keypad(True)
+    
     while True:
+        # Display options below snake info
         for idx, option in enumerate(options):
             attr = curses.A_REVERSE if idx == selected else 0
-            stdscr.addstr(10 + idx, WIDTH//2 - len(option)//2, option, attr)
+            stdscr.addstr(10 + len(ranking) + idx, WIDTH//2 - len(option)//2, option, attr)
+        
         stdscr.refresh()
         key = stdscr.getch()
         if key == curses.KEY_UP:
@@ -295,6 +311,35 @@ def drop_body(snake):
     # Return every segment of the snake's body as fruit positions.
     return snake.body
 
+def title_screen(stdscr):
+    stdscr.clear()
+    title = "Ultimate Snake Showdown"
+    author = "By GitHub Copilot"
+    options = ["2 Snakes", "4 Snakes", "6 Snakes", "8 Snakes", "10 Snakes", "Exit"]
+    selected = 0
+    
+    while True:
+        stdscr.clear()
+        stdscr.addstr(HEIGHT//4, WIDTH//2 - len(title)//2, title, curses.A_BOLD)
+        stdscr.addstr(HEIGHT//4 + 1, WIDTH//2 - len(author)//2, author)
+        
+        for idx, option in enumerate(options):
+            attr = curses.A_REVERSE if idx == selected else 0
+            stdscr.addstr(HEIGHT//2 + idx, WIDTH//2 - len(option)//2, option, attr)
+        
+        stdscr.refresh()
+        key = stdscr.getch()
+        
+        if key == curses.KEY_UP:
+            selected = (selected - 1) % len(options)
+        elif key == curses.KEY_DOWN:
+            selected = (selected + 1) % len(options)
+        elif key in [curses.KEY_ENTER, ord("\n"), ord("\r")]:
+            if options[selected] == "Exit":
+                return 0  # Exit code
+            else:
+                return int(options[selected].split()[0])  # Number of snakes
+
 def main(stdscr):
     global WIDTH, HEIGHT
     curses.curs_set(0)
@@ -329,15 +374,23 @@ def main(stdscr):
     curses.init_pair(11, curses.COLOR_YELLOW, curses.COLOR_BLACK)  # Snake9
     curses.init_pair(12, curses.COLOR_MAGENTA, curses.COLOR_BLACK) # Snake10
     
+    # Show title screen and get number of snakes
+    num_snakes = title_screen(stdscr)
+    if num_snakes == 0:
+        return  # Exit if user chooses "Exit"
+    
     while True:  # Outer game loop to support restart
+        start_time = time.time() # Record start time
         death_ctr = 1
         global temp_fruits
         temp_fruits = []  # clear dropped fruits at start
         
-        # Create 10 snakes in two columns (5 each)
+        # Create snakes based on user choice
         snakes = []
         unique_strats = random.sample([1,2,4,5,6,7,8]*2, 10)
-        num_per_column = 5
+        
+        # Create snakes in two columns (5 each)
+        num_per_column = num_snakes // 2
         left_x = 5
         right_x = WIDTH - 6
         spacing = (HEIGHT - 10) // (num_per_column - 1) if num_per_column > 1 else 0
@@ -354,6 +407,10 @@ def main(stdscr):
                             direction=DIRECTIONS['LEFT'], id=i+num_per_column+1)
             s_right.strategy = unique_strats[i+num_per_column]
             snakes.append(s_right)
+        
+        # Remove extra snakes if num_snakes is odd
+        while len(snakes) > num_snakes:
+            snakes.pop()
         
         food = place_food(snakes)  # use updated place_food
         
@@ -398,7 +455,7 @@ def main(stdscr):
         stdscr.nodelay(0)
         # Once all snakes are dead, compute ranking; the snake that dies last is best.
         ranking = sorted(snakes, key=lambda s: s.death_order, reverse=True)
-        choice = ranking_screen(stdscr, ranking)
+        choice = ranking_screen(stdscr, ranking, start_time)
         if choice == "Restart":
             continue  # Restart the outer loop
         else:
