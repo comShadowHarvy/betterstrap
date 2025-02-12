@@ -314,8 +314,8 @@ def drop_body(snake):
 def title_screen(stdscr):
     stdscr.clear()
     title = "Ultimate Snake Showdown"
-    author = "By GitHub Copilot"
-    options = ["2 Snakes", "4 Snakes", "6 Snakes", "8 Snakes", "10 Snakes", "Exit"]
+    author = "By ShadowHarvy"
+    options = ["2 Snakes", "4 Snakes", "6 Snakes", "8 Snakes", "10 Snakes", "Human + AI", "Exit"]
     selected = 0
     
     while True:
@@ -336,9 +336,36 @@ def title_screen(stdscr):
             selected = (selected + 1) % len(options)
         elif key in [curses.KEY_ENTER, ord("\n"), ord("\r")]:
             if options[selected] == "Exit":
-                return 0  # Exit code
+                return (0, False)  # Exit code
+            elif options[selected] == "Human + AI":
+                # Prompt for number of AI snakes
+                ai_snakes = get_ai_snake_count(stdscr)
+                if ai_snakes == 0:
+                    return (0, False) # Exit if user cancels
+                return (ai_snakes + 1, True)  # Number of snakes, human player flag
             else:
-                return int(options[selected].split()[0])  # Number of snakes
+                return (int(options[selected].split()[0]), False)  # Number of snakes, no human player
+
+def get_ai_snake_count(stdscr):
+    options = [str(i) for i in range(1, 10)] + ["Cancel"]
+    selected = 0
+    while True:
+        stdscr.clear()
+        stdscr.addstr(HEIGHT//4, WIDTH//2 - 15, "Choose number of AI snakes (1-9):")
+        for idx, option in enumerate(options):
+            attr = curses.A_REVERSE if idx == selected else 0
+            stdscr.addstr(HEIGHT//2 + idx, WIDTH//2 - len(option)//2, option, attr)
+        stdscr.refresh()
+        key = stdscr.getch()
+        if key == curses.KEY_UP:
+            selected = (selected - 1) % len(options)
+        elif key == curses.KEY_DOWN:
+            selected = (selected + 1) % len(options)
+        elif key in [curses.KEY_ENTER, ord("\n"), ord("\r")]:
+            if options[selected] == "Cancel":
+                return 0
+            else:
+                return int(options[selected])
 
 def main(stdscr):
     global WIDTH, HEIGHT
@@ -375,7 +402,7 @@ def main(stdscr):
     curses.init_pair(12, curses.COLOR_MAGENTA, curses.COLOR_BLACK) # Snake10
     
     # Show title screen and get number of snakes
-    num_snakes = title_screen(stdscr)
+    num_snakes, human_player = title_screen(stdscr)
     if num_snakes == 0:
         return  # Exit if user chooses "Exit"
     
@@ -389,8 +416,20 @@ def main(stdscr):
         snakes = []
         unique_strats = random.sample([1,2,4,5,6,7,8]*2, 10)
         
-        # Create snakes in two columns (5 each)
-        num_per_column = num_snakes // 2
+        # Create human player if selected
+        if human_player:
+            human_snake = Snake(body=[(WIDTH//2, HEIGHT//2), (WIDTH//2-1, HEIGHT//2), (WIDTH//2-2, HEIGHT//2)],
+                                direction=DIRECTIONS['RIGHT'], id=1)
+            human_snake.strategy = 0  # No strategy for human player
+            snakes.append(human_snake)
+            ai_snakes = num_snakes - 1
+            strat_offset = 1 # Offset for AI strategies
+        else:
+            ai_snakes = num_snakes
+            strat_offset = 0
+        
+        # Create AI snakes in two columns (5 each)
+        num_per_column = ai_snakes // 2
         left_x = 5
         right_x = WIDTH - 6
         spacing = (HEIGHT - 10) // (num_per_column - 1) if num_per_column > 1 else 0
@@ -399,13 +438,13 @@ def main(stdscr):
             y = 5 + i * spacing
             # Left column snake, moving right
             s_left = Snake(body=[(left_x, y), (left_x-1, y), (left_x-2, y)],
-                           direction=DIRECTIONS['RIGHT'], id=i+1)
-            s_left.strategy = unique_strats[i]
+                           direction=DIRECTIONS['RIGHT'], id=i+1 + strat_offset)
+            s_left.strategy = unique_strats[i + strat_offset]
             snakes.append(s_left)
             # Right column snake, moving left
             s_right = Snake(body=[(right_x, y), (right_x+1, y), (right_x+2, y)],
-                            direction=DIRECTIONS['LEFT'], id=i+num_per_column+1)
-            s_right.strategy = unique_strats[i+num_per_column]
+                            direction=DIRECTIONS['LEFT'], id=i+num_per_column+1 + strat_offset)
+            s_right.strategy = unique_strats[i+num_per_column + strat_offset]
             snakes.append(s_right)
         
         # Remove extra snakes if num_snakes is odd
@@ -417,6 +456,19 @@ def main(stdscr):
         stdscr.nodelay(1)
         # Continue until all snakes are dead
         while any(s.alive for s in snakes):
+            # Handle human input
+            if human_player and snakes[0].alive:
+                key = stdscr.getch()
+                if key in [curses.KEY_UP, curses.KEY_DOWN, curses.KEY_LEFT, curses.KEY_RIGHT]:
+                    new_direction = {
+                        curses.KEY_UP: DIRECTIONS['UP'],
+                        curses.KEY_DOWN: DIRECTIONS['DOWN'],
+                        curses.KEY_LEFT: DIRECTIONS['LEFT'],
+                        curses.KEY_RIGHT: DIRECTIONS['RIGHT']
+                    }.get(key)
+                    if new_direction and (new_direction[0] != -snakes[0].direction[0] or new_direction[1] != -snakes[0].direction[1]):
+                        snakes[0].direction = new_direction
+            
             for s in snakes:
                 if not s.alive:
                     continue
