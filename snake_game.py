@@ -14,6 +14,8 @@ ALL_DIRS = list(DIRECTIONS.values())
 
 # Add a global list for temporary fruits and adjust place_food():
 temp_fruits = []  # global list storing tuples (x, y)
+extra_food = None  # new global for bonus fruit
+food_time = time.time()  # new global to track food placement time
 
 def place_food(snakes):
     positions = set()
@@ -86,55 +88,38 @@ class Snake:
 
     def choose_direction(self, food, other_snake_body):
         other_snake_set = set(other_snake_body)
-        candidates = []
+        total_area = (WIDTH-2) * (HEIGHT-2)
+        current_space = self.free_space(self.body[0], other_snake_set, food)
+        tail = self.body[-1]  # always compute tail position
+        # ...existing code to compute closest food...
         head = self.body[0]
-        
-        # Find closest food source (including dropped fruits)
-        head_pos = self.body[0]
         closest_food = food
-        min_dist = abs(head_pos[0] - food[0]) + abs(head_pos[1] - food[1])
-        
-        # Check dropped fruits
+        min_dist = abs(head[0] - food[0]) + abs(head[1] - food[1])
         for f in temp_fruits:
-            dist = abs(head_pos[0] - f[0]) + abs(head_pos[1] - f[1])
-            if dist < min_dist:
-                min_dist = dist
+            d = abs(head[0] - f[0]) + abs(head[1] - f[1])
+            if d < min_dist:
+                min_dist = d
                 closest_food = f
-        
-        # Update target if needed
         if self.current_target != closest_food:
             self.current_target = closest_food
-        
-        # Calculate direction to current target
         food_dx = self.current_target[0] - head[0]
         food_dy = self.current_target[1] - head[1]
-        
+        candidates = []
         for dx, dy in ALL_DIRS:
             if len(self.body) > 1 and (dx, dy) == (-self.direction[0], -self.direction[1]):
                 continue
-                
             new_head = (head[0] + dx, head[1] + dy)
             if not self._is_safe(new_head, other_snake_set):
                 continue
-                
-            # Calculate distance to current target
             manhattan_food = abs(new_head[0] - self.current_target[0]) + abs(new_head[1] - self.current_target[1])
             space = self.free_space(new_head, other_snake_set, self.current_target)
-            
-            # Base score with food focus
             score = -15.0 * manhattan_food + 0.2 * space + 100
-            
-            # Direction consistency bonus
             if (dx, dy) == self.direction:
                 score += 50
             elif (dx, dy) == self.prev_direction:
                 score += 25
-            
-            # Directional alignment bonus
             if (food_dx * dx > 0) or (food_dy * dy > 0):
                 score += 75
-            
-            # Close range behavior (same for both regular and dropped food)
             if manhattan_food <= 2:
                 if (abs(food_dx) == 1 and dy == 0) or (abs(food_dy) == 1 and dx == 0):
                     score += 500
@@ -142,18 +127,19 @@ class Snake:
                 score += 150
             elif manhattan_food < 10:
                 score += 75
-            
-            # Survival checks
             if space < 3:
                 score -= 1000
             elif space < 6:
                 score -= 200
-            
+            # When free space is very low, add bonus based on closeness to tail
+            if current_space < 0.2 * total_area:
+                bonus = 50 - (abs(new_head[0]-tail[0]) + abs(new_head[1]-tail[1]))
+                score += bonus
             candidates.append(((dx, dy), score))
-        
         if candidates:
             self.prev_direction = self.direction
             self.direction = max(candidates, key=lambda x: x[1])[0]
+        # ...existing code...
 
     def _is_safe(self, pos, other_snake_set):
         x, y = pos
@@ -187,7 +173,7 @@ def safe_addch(stdscr, y, x, ch, attr=0):
     except curses.error:
         pass
 
-def draw_board(stdscr, snakes, food):
+def draw_board(stdscr, snakes, food, extra_food=None):
     stdscr.clear()
     
     # Draw border
@@ -200,6 +186,8 @@ def draw_board(stdscr, snakes, food):
     
     # Draw food
     safe_addch(stdscr, food[1] + 1, food[0], '*', curses.color_pair(3))
+    if extra_food is not None:
+        safe_addch(stdscr, extra_food[1] + 1, extra_food[0], 'F', curses.color_pair(3)|curses.A_BLINK)
     
     # Draw snakes
     for s in snakes:
@@ -368,7 +356,7 @@ def get_ai_snake_count(stdscr):
                 return int(options[selected])
 
 def main(stdscr):
-    global WIDTH, HEIGHT
+    global WIDTH, HEIGHT, extra_food, food_time
     curses.curs_set(0)
     stdscr.nodelay(1)
     
@@ -411,6 +399,7 @@ def main(stdscr):
         death_ctr = 1
         global temp_fruits
         temp_fruits = []  # clear dropped fruits at start
+        extra_food = None
         
         # Create snakes based on user choice
         snakes = []
@@ -452,10 +441,20 @@ def main(stdscr):
             snakes.pop()
         
         food = place_food(snakes)  # use updated place_food
+        food_time = time.time()  # record when food was placed
         
         stdscr.nodelay(1)
         # Continue until all snakes are dead
         while any(s.alive for s in snakes):
+            # Check and reposition food if on border
+            if food[0] in (0, WIDTH-1) or food[1] in (0, HEIGHT-1):
+                food = place_food(snakes)
+                food_time = time.time()
+            if extra_food is not None and (extra_food[0] in (0, WIDTH-1) or extra_food[1] in (0, HEIGHT-1)):
+                extra_food = place_food(snakes)
+            # Drop extra food if more than a minute has passed without it being eaten
+            if extra_food is None and time.time() - food_time > 60:
+                extra_food = place_food(snakes)
             # Handle human input
             if human_player and snakes[0].alive:
                 key = stdscr.getch()
@@ -494,13 +493,17 @@ def main(stdscr):
                     if new_head == food:
                         s.score += 1  # increment fruits eaten
                         food = place_food(snakes)
+                        food_time = time.time()
+                    elif extra_food is not None and new_head == extra_food:
+                        s.score += 1
+                        extra_food = None
                     elif new_head in temp_fruits:
                         s.score += 1  # eaten dropped fruit; snake grows
                         temp_fruits.remove(new_head)
                     else:
                         s.remove_tail()
             # Call draw_board using the first four snakes from the list
-            draw_board(stdscr, snakes, food)  # updated call
+            draw_board(stdscr, snakes, food, extra_food)  # updated call
             stdscr.refresh()
             time.sleep(0.1)
         
