@@ -135,6 +135,11 @@ class Snake:
             if current_space < 0.2 * total_area:
                 bonus = 50 - (abs(new_head[0]-tail[0]) + abs(new_head[1]-tail[1]))
                 score += bonus
+            # NEW: Attract toward bonus fruit if it exists
+            if extra_food is not None:
+                dist_to_extra = abs(new_head[0] - extra_food[0]) + abs(new_head[1] - extra_food[1])
+                bonus_extra = max(0, 100 - dist_to_extra * 5)
+                score += bonus_extra
             candidates.append(((dx, dy), score))
         if candidates:
             self.prev_direction = self.direction
