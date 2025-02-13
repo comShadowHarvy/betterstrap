@@ -131,7 +131,6 @@ class Snake:
                 score -= 1000
             elif space < 6:
                 score -= 200
-            # When free space is very low, add bonus based on closeness to tail
             if current_space < 0.2 * total_area:
                 bonus = 50 - (abs(new_head[0]-tail[0]) + abs(new_head[1]-tail[1]))
                 score += bonus
@@ -140,6 +139,9 @@ class Snake:
                 dist_to_extra = abs(new_head[0] - extra_food[0]) + abs(new_head[1] - extra_food[1])
                 bonus_extra = max(0, 100 - dist_to_extra * 5)
                 score += bonus_extra
+            # NEW: Penalize moves that lead to a deadend to avoid death spiral
+            if self.quick_check_deadend(new_head, other_snake_set):
+                score -= 800
             candidates.append(((dx, dy), score))
         if candidates:
             self.prev_direction = self.direction
