@@ -1,6 +1,5 @@
 #!/bin/bash
-
-set -eo pipefail
+set -euo pipefail
 
 # Logging functions with levels
 log() { local level="$1"; shift; echo -e "\033[1;${level}m[${2:-INFO}]\033[0m $*"; }
@@ -8,7 +7,7 @@ info() { log "34" "$@"; }
 error() { log "31" "ERROR" "$@" >&2; }
 warn() { log "33" "WARN" "$@"; }
 
-# Detect Linux distribution
+# Detect Linux distribution (cached to avoid duplicate calls)
 detect_distro() {
     if command -v pacman >/dev/null 2>&1; then
         echo "arch"
@@ -21,56 +20,41 @@ detect_distro() {
         exit 1
     fi
 }
+distro=$(detect_distro)
 
-# Check dependencies based on distribution
+# Optimized dependency checking using a unified mapping
 check_deps() {
-    local distro=$(detect_distro)
     local missing=()
-    local pkg_cmd
-
-    case $distro in
+    case "$distro" in
         arch)
-            pkg_cmd="pacman -Qi"
-            # Map commands to package names for Arch
-            local pkg_map=(
-                ["curl"]="curl"
-                ["git"]="git"
-                ["secret-tool"]="libsecret"
-            )
+            declare -A pkg_map=( ["curl"]="curl" ["git"]="git" ["secret-tool"]="libsecret" )
             for cmd in "${!pkg_map[@]}"; do
-                if ! command -v "$cmd" >/dev/null 2>&1; then
-                    missing+=("${pkg_map[$cmd]}")
-                fi
+                command -v "$cmd" >/dev/null 2>&1 || missing+=("${pkg_map[$cmd]}")
             done
             ;;
         debian)
-            pkg_cmd="dpkg -l"
-            for cmd in curl git libsecret-tools; do
-                $pkg_cmd "$cmd" >/dev/null 2>&1 || missing+=("$cmd")
+            for pkg in curl git libsecret-tools; do
+                dpkg -l "$pkg" >/dev/null 2>&1 || missing+=("$pkg")
             done
             ;;
         fedora)
-            pkg_cmd="rpm -q"
-            for cmd in curl git libsecret; do
-                $pkg_cmd "$cmd" >/dev/null 2>&1 || missing+=("$cmd")
+            for pkg in curl git libsecret; do
+                rpm -q "$pkg" >/dev/null 2>&1 || missing+=("$pkg")
             done
             ;;
     esac
 
-    if [[ ${#missing[@]} -gt 0 ]]; then
+    if [ ${#missing[@]} -gt 0 ]; then
         warn "Missing dependencies: ${missing[*]}"
-        install_deps "${missing[@]}" "$distro"
+        install_deps "${missing[@]}"
     fi
 }
 
-# Install missing dependencies
+# Optimized install_deps uses distro flag from outer scope.
 install_deps() {
     local deps=("$@")
-    local distro="${deps[-1]}"
-    unset 'deps[-1]'
-
     info "Installing missing dependencies: ${deps[*]}"
-    case $distro in
+    case "$distro" in
         arch)
             sudo pacman -Sy --noconfirm "${deps[@]}"
             ;;
@@ -84,24 +68,23 @@ install_deps() {
     esac
 }
 
-# Install GCM more efficiently
+# Simplified GCM installation
 install_gcm() {
-    [[ -x "$(command -v git-credential-manager)" ]] && {
+    if command -v git-credential-manager >/dev/null 2>&1; then
         info "GCM already installed: $(git-credential-manager --version)"
         return 0
-    }
+    fi
 
-    local distro=$(detect_distro)
-    
     if command -v dotnet >/dev/null 2>&1; then
         info "Installing GCM via dotnet..."
         dotnet tool install --global git-credential-manager
     else
         info "Installing GCM from GitHub release..."
-        local version=$(curl -sL https://api.github.com/repos/GitCredentialManager/git-credential-manager/releases/latest | 
-                       awk -F'"' '/"tag_name":/ {print substr($4,2)}')
-        
-        case $distro in
+        # Retrieve version using grep/sed to minimize dependencies
+        local version
+        version=$(curl -sL https://api.github.com/repos/GitCredentialManager/git-credential-manager/releases/latest |
+                  grep -Po '"tag_name": "\K(.*)(?=")')
+        case "$distro" in
             arch)
                 local package="gcm-linux_amd64.${version}.tar.gz"
                 curl -sL -o "$package" "https://github.com/GitCredentialManager/git-credential-manager/releases/download/v${version}/$package"
@@ -126,9 +109,11 @@ install_gcm() {
 
 # Configure GCM
 configure_gcm() {
-    local gcm_path=$(command -v git-credential-manager)
-    [[ -z "$gcm_path" ]] && { error "GCM not found after installation"; exit 1; }
-
+    local gcm_path
+    gcm_path=$(command -v git-credential-manager) || {
+        error "GCM not found after installation"
+        exit 1
+    }
     info "Configuring GCM at: $gcm_path"
     git config --global credential.helper "$gcm_path"
     git config --global credential.credentialStore secretservice
