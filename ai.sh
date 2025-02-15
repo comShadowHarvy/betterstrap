@@ -48,7 +48,12 @@ detect_container_runtime() {
     fi
     
     if command -v docker &>/dev/null; then
-        CONTAINER_CMD="docker"
+        # Use sudo if not running as root
+        if [ "$EUID" -ne 0 ]; then
+            CONTAINER_CMD="sudo docker"
+        else
+            CONTAINER_CMD="docker"
+        fi
         if ! systemctl is-active --quiet docker; then
             echo "🔄 Starting Docker service..."
             sudo systemctl start docker
