@@ -24,10 +24,18 @@ detect_package_manager() {
         PKG_MANAGER="dnf"
         PKG_UPDATE="sudo dnf check-update"
         PKG_INSTALL="sudo dnf install -y"
+    elif command -v yum &>/dev/null; then
+        PKG_MANAGER="yum"
+        PKG_UPDATE="sudo yum check-update"
+        PKG_INSTALL="sudo yum install -y"
     elif command -v pacman &>/dev/null; then
         PKG_MANAGER="pacman"
         PKG_UPDATE="sudo pacman -Sy"
         PKG_INSTALL="sudo pacman -S --needed --noconfirm"
+    elif command -v apk &>/dev/null; then
+        PKG_MANAGER="apk"
+        PKG_UPDATE="sudo apk update"
+        PKG_INSTALL="sudo apk add"
     else
         echo "❌ Unsupported package manager"
         exit 1
@@ -79,7 +87,15 @@ install_docker() {
         dnf)
             $PKG_INSTALL docker docker-compose
             ;;
+        yum)
+            $PKG_UPDATE
+            $PKG_INSTALL docker docker-compose
+            ;;
         pacman)
+            $PKG_INSTALL docker docker-compose
+            ;;
+        apk)
+            $PKG_UPDATE
             $PKG_INSTALL docker docker-compose
             ;;
     esac
