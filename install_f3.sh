@@ -55,5 +55,36 @@ install_libraries() {
     echo "✅ Libraries installed successfully."
 }
 
+REPO_URL="https://github.com/AltraMayor/f3"
+CLONE_DIR="/home/me/11/f3"
+
+# Clone or update the repository
+if [ -d "$CLONE_DIR" ]; then
+    echo "🔄 Repository exists. Pulling latest changes..."
+    cd "$CLONE_DIR"
+    git pull
+else
+    echo "📥 Cloning repository..."
+    git clone "$REPO_URL" "$CLONE_DIR"
+    cd "$CLONE_DIR"
+fi
+
+# Build extras if available
+echo "🔄 Building extras (if available)..."
+if make extras; then
+    echo "✅ Extras built successfully."
+else
+    echo "ℹ️ No extras target found or build failed. Continuing..."
+fi
+
+# Build and install
+echo "🔄 Building the project..."
+make
+
+echo "🔄 Installing the project..."
+sudo make install
+
+echo "✅ f3 installed successfully."
+
 # Main script execution
 install_libraries
