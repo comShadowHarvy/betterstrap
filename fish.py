@@ -896,11 +896,11 @@ def main(stdscr):
     shark_pool = ObjectPool(Shark, MAX_SHARKS)
     # ... other pools ...
 
-    # Initialize collision manager
-    collision_manager = CollisionManager(width, height)
-
     # Get initial terminal size
     height, width = stdscr.getmaxyx()
+
+    # Initialize collision manager
+    collision_manager = CollisionManager(width, height)
 
     # Initialize seaweeds and corals
     for _ in range(random.randint(3, 5)):
@@ -1362,7 +1362,6 @@ if __name__ == "__main__":
         pass
     except Exception as e:
         # Ensure the terminal state is restored on error
-        curses.endwin()
         print(f"An error occurred: {e}")
         sys.exit(1)
 

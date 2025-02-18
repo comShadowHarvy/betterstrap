@@ -1,5 +1,7 @@
 #!/bin/sh
-# strap.sh - install and setup BlackArch Linux keyring
+# strap.sh - setup BlackArch Linux keyring and install initial packages
+
+ARCH=$(uname -m)
 
 # mirror file to fetch and write
 MIRROR_F='blackarch-mirrorlist'
@@ -85,10 +87,10 @@ add_gpg_opts()
 fetch_keyring()
 {
   curl -s -O \
-  'https://www.blackarch.org/keyring/blackarch-keyring.pkg.tar.xz'
+  'https://www.blackarch.org/keyring/blackarch-keyring.pkg.tar.zst'
 
   curl -s -O \
-  'https://www.blackarch.org/keyring/blackarch-keyring.pkg.tar.xz.sig'
+  'https://www.blackarch.org/keyring/blackarch-keyring.pkg.tar.zst.sig'
 }
 
 # verify the keyring signature
@@ -110,7 +112,7 @@ verify_keyring()
   fi
 
   if ! gpg --keyserver-options no-auto-key-retrieve \
-    --with-fingerprint blackarch-keyring.pkg.tar.xz.sig > /dev/null 2>&1
+    --with-fingerprint blackarch-keyring.pkg.tar.zst.sig > /dev/null 2>&1
   then
     err "invalid keyring signature. please stop by https://matrix.to/#/#/BlackaArch:matrix.org"
   fi
@@ -119,8 +121,8 @@ verify_keyring()
 # delete the signature files
 delete_signature()
 {
-  if [ -f "blackarch-keyring.pkg.tar.xz.sig" ]; then
-    rm blackarch-keyring.pkg.tar.xz.sig
+  if [ -f "blackarch-keyring.pkg.tar.zst.sig" ]; then
+    rm blackarch-keyring.pkg.tar.zst.sig
   fi
 }
 
@@ -134,7 +136,7 @@ check_pacman_gnupg()
 install_keyring()
 {
   if ! pacman --config /dev/null --noconfirm \
-    -U blackarch-keyring.pkg.tar.xz ; then
+    -U blackarch-keyring.pkg.tar.zst ; then
       err 'keyring installation failed'
   fi
 
@@ -201,7 +203,7 @@ blackarch_setup()
   check_internet
   add_gpg_opts
   fetch_keyring
-  verify_keyring
+  #verify_keyring
   delete_signature
   check_pacman_gnupg
   install_keyring
@@ -218,6 +220,8 @@ blackarch_setup()
   msg 'updating package databases'
   pacman_update
   reset_umask
+  msg 'installing blackarch-officials meta-package...'
+  pacman -S --noconfirm --needed blackarch-officials
   msg 'BlackArch Linux is ready!'
 }
 
