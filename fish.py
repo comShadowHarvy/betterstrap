@@ -856,6 +856,14 @@ def handle_collisions(predators, prey_list):
                 with score_lock:
                     score += 1  # Increment score when a fish is eaten
 
+def initialize_marine_life(marine_list, count, max_count, art, color_list, width, height, speed_range=(0.05, 0.2)):
+    for _ in range(random.randint(0, max_count)):
+        x = random.randint(1, max(1, width - len(art[0]) - 1))
+        y = random.randint(2, max(2, height - len(art) - 1))
+        color = random.randint(1, len(color_list))
+        speed = random.uniform(*speed_range)
+        marine_list.append(MarineLife(x, y, MarineConfig(art, speed, max_count, color)))
+
 def main(stdscr):
     global score
     # Initialize curses
@@ -874,22 +882,9 @@ def main(stdscr):
     curses.init_pair(len(COLOR_LIST) + 3, curses.COLOR_BLUE, curses.COLOR_BLACK)  # Shipwrecks
 
     # Initialize lists
-    fishes = []
-    bubbles = []
-    octopuses = []
-    seaweeds = []
-    corals = []
-    jellyfishes = []
-    sea_turtles = []
-    crabs = []
-    seahorses = []
-    sea_urchins = []
-    dolphins = []
-    sharks = []
-    schools = []
-    food_list = []
-    rocks = []
-    shipwrecks = []
+    fishes, bubbles, octopuses, seaweeds, corals = [], [], [], [], []
+    jellyfishes, sea_turtles, crabs, seahorses, sea_urchins = [], [], [], [], []
+    dolphins, sharks, schools, food_list, rocks, shipwrecks = [], [], [], [], [], []
 
     # Initialize object pools
     fish_pool = ObjectPool(Fish, MAX_FISH)
@@ -903,31 +898,12 @@ def main(stdscr):
     collision_manager = CollisionManager(width, height)
 
     # Initialize seaweeds and corals
-    for _ in range(random.randint(3, 5)):
-        x = random.randint(1, max(1, width - 5))
-        y = height - len(SEAWEED_ART) - 2
-        color = random.randint(1, len(COLOR_LIST))
-        seaweeds.append(Seaweed(x, y, color))
+    initialize_marine_life(seaweeds, 3, 5, SEAWEED_ART, COLOR_LIST, width, height)
+    initialize_marine_life(corals, 2, 4, CORAL_ART, COLOR_LIST, width, height)
 
-    for _ in range(random.randint(2, 4)):
-        x = random.randint(1, max(1, width - 5))
-        y = height - len(CORAL_ART) - 2
-        color = random.randint(1, len(COLOR_LIST))
-        corals.append(Coral(x, y, color))
-
-    # Initialize rocks
-    for _ in range(random.randint(3, MAX_ROCKS)):
-        x = random.randint(1, max(1, width - len(ROCK_ART[0]) - 1))
-        y = random.randint(2, max(2, height - len(ROCK_ART) - 1))
-        color = len(COLOR_LIST) + 2  # Assign specific color for rocks
-        rocks.append(Rock(x, y, color))
-
-    # Initialize shipwrecks
-    for _ in range(random.randint(0, MAX_SHIPWRECKS)):
-        x = random.randint(1, max(1, width - len(SHIPWRECK_ART[0]) - 1))
-        y = random.randint(2, max(2, height - len(SHIPWRECK_ART) - 1))
-        color = len(COLOR_LIST) + 3  # Assign specific color for shipwrecks
-        shipwrecks.append(Shipwreck(x, y, color))
+    # Initialize rocks and shipwrecks
+    initialize_marine_life(rocks, 3, MAX_ROCKS, ROCK_ART, COLOR_LIST, width, height)
+    initialize_marine_life(shipwrecks, 0, MAX_SHIPWRECKS, SHIPWRECK_ART, COLOR_LIST, width, height)
 
     # Initialize schools of fish
     for _ in range(random.randint(1, 3)):
@@ -953,62 +929,15 @@ def main(stdscr):
         speed = fish_type["speed"]
         fishes.append(Fish(fish_type, x, y, direction, color, speed))
 
-    # Initialize octopuses
-    for _ in range(random.randint(0, MAX_OCTOPUSES)):
-        x = random.randint(1, max(1, width - 10))
-        y = random.randint(2, max(2, height - 6))
-        color = random.randint(1, len(COLOR_LIST))
-        speed = 0.1
-        octopuses.append(Octopus(x, y, color, speed))
+    # Initialize other marine life
+    initialize_marine_life(octopuses, 0, MAX_OCTOPUSES, ["  _-_-_", " (' o o ')", " /   O   ", " \\_/|_|\\_/"], COLOR_LIST, width, height)
+    initialize_marine_life(jellyfishes, 1, MAX_JELLYFISH, JELLYFISH_ART, COLOR_LIST, width, height)
+    initialize_marine_life(sea_turtles, 0, MAX_SEA_TURTLES, SEA_TURTLE_ART, COLOR_LIST, width, height)
+    initialize_marine_life(crabs, 0, MAX_CRABS, CRAB_ART, COLOR_LIST, width, height)
+    initialize_marine_life(seahorses, 0, MAX_SEAHORSES, SEAHORSE_ART, COLOR_LIST, width, height)
+    initialize_marine_life(sea_urchins, 5, MAX_SEA_URCHINS, SEA_URCHIN_ART, COLOR_LIST, width, height)
+    initialize_marine_life(dolphins, 0, MAX_DOLPHINS, DOLPHIN_ART_FRAMES[0], COLOR_LIST, width, height)
 
-    # Initialize jellyfishes
-    for _ in range(random.randint(1, MAX_JELLYFISH)):
-        x = random.randint(1, max(1, width - len(JELLYFISH_ART[0]) - 1))
-        y = random.randint(2, max(2, height - len(JELLYFISH_ART) - 1))
-        color = random.randint(1, len(COLOR_LIST))
-        speed = random.uniform(0.05, 0.1)
-        jellyfishes.append(Jellyfish(x, y, color, speed))
-
-    # Initialize sea turtles
-    for _ in range(random.randint(0, MAX_SEA_TURTLES)):
-        x = random.randint(1, max(1, width - len(SEA_TURTLE_ART[0]) - 1))
-        y = random.randint(2, max(2, height - len(SEA_TURTLE_ART) - 1))
-        color = random.randint(1, len(COLOR_LIST))
-        speed = 0.05
-        sea_turtles.append(SeaTurtle(x, y, color, speed))
-
-    # Initialize crabs
-    for _ in range(random.randint(0, MAX_CRABS)):
-        x = random.randint(1, max(1, width - len(CRAB_ART[0]) - 1))
-        y = random.randint(2, max(2, height - len(CRAB_ART) - 1))
-        color = random.randint(1, len(COLOR_LIST))
-        speed = 0.1
-        crabs.append(Crab(x, y, color, speed))
-
-    # Initialize seahorses
-    for _ in range(random.randint(0, MAX_SEAHORSES)):
-        x = random.randint(1, max(1, width - len(SEAHORSE_ART[0]) - 1))
-        y = random.randint(2, max(2, height - len(SEAHORSE_ART) - 1))
-        color = random.randint(1, len(COLOR_LIST))
-        speed = 0.05
-        seahorses.append(Seahorse(x, y, color, speed))
-
-    # Initialize sea urchins
-    for _ in range(random.randint(5, MAX_SEA_URCHINS)):
-        x = random.randint(1, max(1, width - len(SEA_URCHIN_ART[0]) - 1))
-        y = random.randint(2, max(2, height - len(SEA_URCHIN_ART) - 1))
-        color = random.randint(1, len(COLOR_LIST))
-        sea_urchins.append(SeaUrchin(x, y, color))
-
-    # Initialize dolphins
-    for _ in range(random.randint(0, MAX_DOLPHINS)):
-        x = random.randint(1, max(1, width - len(DOLPHIN_ART_FRAMES[0][0]) - 1))
-        y = random.randint(2, max(2, height - len(DOLPHIN_ART_FRAMES[0]) - 1))
-        color = random.randint(1, len(COLOR_LIST))
-        speed = 0.1
-        dolphins.append(Dolphin(x, y, color, speed))
-
-    # Initialize sharks
     for _ in range(random.randint(0, MAX_SHARKS)):
         x = random.randint(1, max(1, width - len(SHARK_ART[0]) - 1))
         y = random.randint(2, max(2, height - len(SHARK_ART) - 1))
@@ -1019,9 +948,6 @@ def main(stdscr):
     animation_speed = 0.02  # Initial delay between frames in seconds
     last_time = time.time()
     frame_duration = animation_speed  # Desired time per frame
-
-    # Food target location (unused, but you can expand on it)
-    food_target = None  # Tuple (x, y) if you want targeted feeding
 
     while True:
         current_time = time.time()
