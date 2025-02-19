@@ -11,4 +11,4 @@ cat <<EOF > $CRONFILE
 # Run remount.sh every 2 hours
 0 */2 * * * root /bin/remount.sh
 EOF
-echo "Cron job set in $CRONFILE"
+echo "Cron j*
