@@ -473,7 +473,7 @@ class Food:
         self.y -= 1
         self.lifespan -= 1
 
-    def draw(self, stdscr):
+    def draw(self, stdscr, height):  # Modified to accept height
         if self.lifespan > 0 and 1 <= self.y < height:
             try:
                 stdscr.addstr(int(self.y), int(self.x), self.char, curses.color_pair(self.color))
@@ -1219,9 +1219,9 @@ def main(stdscr):
         for sea_urchin in sea_urchins:
             sea_urchin.draw(stdscr)
 
-        # Draw food
+        # Draw food (pass height)
         for food in food_list:
-            food.draw(stdscr)
+            food.draw(stdscr, height)
 
         # Draw jellyfishes
         for jellyfish in jellyfishes:
