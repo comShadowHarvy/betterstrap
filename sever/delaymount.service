@@ -1,11 +1,11 @@
-
 [Unit]
 Description=Delayed Mount of USB Drives
 After=network.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/bin/delayed-mount.sh
+ExecStartPre=/bin/sleep 15
+ExecStart=/bin/remount.sh
 RemainAfterExit=yes
 
 [Install]
