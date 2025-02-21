@@ -1,4 +1,12 @@
 #!/bin/bash
+
+# Splash Screen
+echo "=============================="
+echo "      SSH Setup Script       "
+echo "      Created by ShadowHarvy  "
+echo "=============================="
+sleep 5
+
 # Detect package manager and install OpenSSH server
 
 if command -v apt-get &>/dev/null; then
