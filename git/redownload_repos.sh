@@ -1,4 +1,21 @@
 #!/bin/bash
+# ----------------------------------------------------------------------
+# Script: Redownload Repos Script
+# Author: ShadowHarvy
+# Description: Reads the backup file from ~/git and clones any missing
+#              repositories back into the folder.
+# ----------------------------------------------------------------------
+clear
+echo "******************************************"
+echo "*       Redownload Repos Script          *"
+echo "*   Reads backup file and clones missing   *"
+echo "*          git repositories from         *"
+echo "*                ~/git                   *"
+echo "*                                      *"
+echo "*            ShadowHarvy               *"
+echo "******************************************"
+sleep 5
+
 REPO_DIR=~/git
 BACKUP_FILE="$REPO_DIR/repos_backup.txt"
 
