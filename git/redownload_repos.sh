@@ -6,14 +6,15 @@
 #              repositories back into the folder.
 # ----------------------------------------------------------------------
 clear
-echo "******************************************"
-echo "*       Redownload Repos Script          *"
-echo "*   Reads backup file and clones missing   *"
-echo "*          git repositories from         *"
-echo "*                ~/git                   *"
-echo "*                                      *"
-echo "*            ShadowHarvy               *"
-echo "******************************************"
+cat << "EOF"
+******************************************
+*      Welcome to Redownload Repos       *
+*   This script reads the backup file and  *
+*    clones any missing git repositories   *
+*             from ~/git                   *
+*            Author: ShadowHarvy           *
+******************************************
+EOF
 sleep 5
 
 REPO_DIR=~/git
@@ -26,7 +27,9 @@ fi
 
 while read repo url; do
     if [ ! -d "$REPO_DIR/$repo" ]; then
+         echo "Cloning $repo from $url..."
          git clone "$url" "$REPO_DIR/$repo"
+         echo "Downloaded $repo."
     else
          echo "Repository '$repo' already exists. Skipping."
     fi

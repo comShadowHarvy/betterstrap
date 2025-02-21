@@ -6,13 +6,15 @@
 #              each repository's folder name and remote URL into a backup file.
 # ----------------------------------------------------------------------
 clear
-echo "****************************************"
-echo "*         Backup Repos Script          *"
-echo "*   Scans ~/git for git repos and saves  *"
-echo "*   their names and remote URLs to a file*"
-echo "*                                      *"
-echo "*            ShadowHarvy               *"
-echo "****************************************"
+cat << "EOF"
+****************************************
+*       Welcome to Backup Repos        *
+*  This script scans ~/git for repositories
+*   and saves their names and remote URLs
+*                to a backup file       *
+*            Author: ShadowHarvy         *
+****************************************
+EOF
 sleep 5
 
 REPO_DIR=~/git
@@ -28,3 +30,8 @@ for d in "$REPO_DIR"/*; do
 done
 
 echo "Backup created at $BACKUP_FILE"
+echo ""
+echo "List of backed-up repositories:"
+while read repo url; do
+    echo " - $repo ($url)"
+done < "$BACKUP_FILE"
