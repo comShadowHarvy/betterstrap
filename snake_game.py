@@ -16,16 +16,16 @@ class Config:
     """Game configuration settings"""
     
     # Game speed settings
-    BASE_SPEED = 0.1
+    BASE_SPEED = 0.12  # Slightly slower initial speed for better playability
     SPEED_INCREASE_INTERVAL = 30  # Seconds
     MAX_SPEED_MULTIPLIER = 2.0
     
     # Food settings
-    FOOD_BONUS_DURATION = 60  # Seconds until bonus food appears
+    FOOD_BONUS_DURATION = 45  # Seconds until bonus food appears
     FOOD_POINTS = 1
     BONUS_FOOD_POINTS = 3
     TEMP_FOOD_POINTS = 1
-    MIN_FOOD_COUNT = 5  # Minimum number of food items on screen
+    MIN_FOOD_COUNT = 6  # Increased minimum food count for more action
     
     # Snake settings
     INITIAL_SIZE = 3
@@ -35,7 +35,7 @@ class Config:
     MIN_HEIGHT = 15
     
     # Power-up settings
-    POWER_UP_CHANCE = 0.005  # Chance of power-up appearing each cycle
+    POWER_UP_CHANCE = 0.008  # Slightly increased chance of power-ups
     POWER_UP_DURATION = 20  # Seconds
     
     # Other settings
@@ -44,6 +44,7 @@ class Config:
     # AI settings
     AI_UPDATE_INTERVAL = 0.05  # How often AI updates its direction
     EMERGENCY_WALL_CHECK = True  # Always check for walls even between update intervals
+    LOOK_AHEAD_STEPS = 6  # How many steps ahead the AI should look 
 
 
 # =============================================================================
@@ -152,11 +153,11 @@ class PowerUp:
 
 class AIStrategy(Enum):
     """Different strategies for AI snakes"""
-    AGGRESSIVE = 1
-    CAUTIOUS = 2
-    OPPORTUNISTIC = 3
-    DEFENSIVE = 4
-    HUNTER = 5
+    AGGRESSIVE = 1  # Focuses on getting food quickly
+    CAUTIOUS = 2    # Prefers safe spaces over food
+    OPPORTUNISTIC = 3  # Balanced approach
+    DEFENSIVE = 4   # Avoids other snakes
+    HUNTER = 5      # Targets other snake heads
 
 
 # =============================================================================
@@ -201,7 +202,8 @@ class Snake:
             x, y = next_head
             
             # Emergency wall avoidance - always check this regardless of AI update interval
-            if (x <= 0 or x >= game_state.width - 1 or y <= 0 or y >= game_state.height - 1 or
+            if Config.EMERGENCY_WALL_CHECK and (
+                x <= 0 or x >= game_state.width - 1 or y <= 0 or y >= game_state.height - 1 or
                 next_head in other_snakes_positions or next_head in self.body[1:]):
                 # About to hit something, find a safe direction immediately
                 safe_directions = []
@@ -282,7 +284,7 @@ class Snake:
         if x <= 0 or x >= game_state.width - 1 or y <= 0 or y >= game_state.height - 1:
             return 0  # No free space if it's on a boundary
         
-        # Use a faster, less comprehensive calculation for 10 snakes mode
+        # Use a faster, less comprehensive calculation for large games
         if len(game_state.snakes) >= 8:
             # Check immediate neighbors only for large games
             free_neighbors = 0
@@ -360,70 +362,295 @@ class Snake:
         
         return True
     
+    def look_ahead(self, start_pos, direction, obstacles, game_state, steps):
+        """Improved simulation of future moves to detect potential collisions and traps"""
+        if steps <= 0:
+            return 10  # Base score for reaching the look-ahead depth safely
+            
+        # Clone the obstacles set to avoid modifying the original
+        future_obstacles = set(obstacles)
+        
+        # Start simulating moves
+        current_pos = start_pos
+        current_direction = direction
+        positions = [current_pos]  # Track positions we would occupy
+        
+        # Track available directions at each step to detect traps
+        available_directions_count = []
+        
+        for i in range(steps):
+            # Calculate next position
+            dx, dy = current_direction.value
+            next_pos = (current_pos[0] + dx, current_pos[1] + dy)
+            
+            # Check if next position would hit a wall
+            x, y = next_pos
+            if x <= 0 or x >= game_state.width - 1 or y <= 0 or y >= game_state.height - 1:
+                return -200  # Increased penalty for hitting a wall
+                
+            # Check if next position would hit an obstacle
+            if next_pos in future_obstacles:
+                return -150  # Increased penalty for hitting an obstacle
+                
+            # Check if next position would hit our own future body
+            if next_pos in positions:
+                return -175  # Increased penalty for self-collision
+                
+            # Move to next position
+            current_pos = next_pos
+            positions.append(current_pos)
+            
+            # Add our current position to obstacles for next simulation step
+            future_obstacles.add(current_pos)
+            
+            # Count available directions for this position
+            available = 0
+            for test_dir in Direction.all_directions():
+                if Direction.is_opposite(test_dir, current_direction):
+                    continue
+                test_pos = (current_pos[0] + test_dir.value[0], current_pos[1] + test_dir.value[1])
+                test_x, test_y = test_pos
+                if (test_x <= 0 or test_x >= game_state.width - 1 or 
+                    test_y <= 0 or test_y >= game_state.height - 1 or 
+                    test_pos in future_obstacles or
+                    test_pos in positions):
+                    continue
+                available += 1
+            
+            available_directions_count.append(available)
+            
+            # If no directions available, this is a trap!
+            if available == 0 and i < steps - 1:
+                return -250  # Severely penalize getting trapped
+                
+            # For subsequent steps, choose the direction with most options 
+            # (more sophisticated than just continuing in the same direction)
+            if i < steps - 1:
+                best_dir = None
+                most_options = -1
+                
+                for test_dir in Direction.all_directions():
+                    if Direction.is_opposite(test_dir, current_direction):
+                        continue
+                    test_pos = (current_pos[0] + test_dir.value[0], current_pos[1] + test_dir.value[1])
+                    test_x, test_y = test_pos
+                    if (test_x <= 0 or test_x >= game_state.width - 1 or 
+                        test_y <= 0 or test_y >= game_state.height - 1 or 
+                        test_pos in future_obstacles or
+                        test_pos in positions):
+                        continue
+                    
+                    # Count options from this new position
+                    options = 0
+                    for next_dir in Direction.all_directions():
+                        if Direction.is_opposite(next_dir, test_dir):
+                            continue
+                        next_test_pos = (test_pos[0] + next_dir.value[0], test_pos[1] + next_dir.value[1])
+                        next_x, next_y = next_test_pos
+                        if (next_x <= 0 or next_x >= game_state.width - 1 or 
+                            next_y <= 0 or next_y >= game_state.height - 1 or 
+                            next_test_pos in future_obstacles or
+                            next_test_pos in positions):
+                            continue
+                        options += 1
+                    
+                    if options > most_options:
+                        most_options = options
+                        best_dir = test_dir
+                
+                # If found a better direction, use it
+                if best_dir:
+                    current_direction = best_dir
+        
+        # Analyze the trend of available directions
+        # If consistently decreasing, it's heading into a confined space
+        if len(available_directions_count) >= 3:
+            if all(available_directions_count[i] > available_directions_count[i+1] 
+                   for i in range(len(available_directions_count)-1)):
+                return -50  # Penalty for consistently decreasing options
+        
+        # Calculate free space at final position with more weight
+        free_neighbors = 0
+        x, y = positions[-1]
+        for dx, dy in [(0,1), (1,0), (0,-1), (-1,0)]:
+            nx, ny = x + dx, y + dy
+            if (nx <= 0 or nx >= game_state.width - 1 or 
+                ny <= 0 or ny >= game_state.height - 1 or
+                (nx, ny) in future_obstacles):
+                continue
+            free_neighbors += 1
+        
+        # Apply distance-based penalties (with diminishing effect)
+        # The further we can go without issues, the better
+        step_completion_bonus = min(30, steps * 3)
+            
+        # Return score based on simulated moves with increased weight for space
+        return 20 + free_neighbors * 10 + step_completion_bonus
+    
     def choose_direction(self, foods, other_snakes_positions, power_ups, game_state):
-        """AI logic to choose the next direction with look-ahead capability"""
+        """Advanced AI logic to choose the next direction with improved decision making"""
         head = self.body[0]
         obstacles = set(other_snakes_positions) | set(self.body[1:])
         
-        # Find closest food and power-up
-        closest_food = None
-        min_food_dist = float('inf')
-        closest_power_up = None
-        min_power_up_dist = float('inf')
+        # Calculate danger zones (spaces next to other snake heads)
+        # This helps avoiding potential head-to-head collisions
+        danger_zones = set()
+        for other_snake in game_state.snakes:
+            if other_snake is not self and other_snake.alive and len(other_snake.body) >= len(self.body):
+                other_head = other_snake.body[0]
+                for direction in Direction.all_directions():
+                    danger_pos = (other_head[0] + direction.value[0], other_head[1] + direction.value[1])
+                    # Don't mark as danger if it's a wall (already avoided)
+                    x, y = danger_pos
+                    if not (x <= 0 or x >= game_state.width - 1 or y <= 0 or y >= game_state.height - 1):
+                        danger_zones.add(danger_pos)
         
-        # Find closest food
+        # Find food and power-ups with improved evaluation
+        food_targets = []
+        power_up_targets = []
+        
+        # Evaluate each food item
         for food in foods:
             food_pos = food.position
             dist = abs(head[0] - food_pos[0]) + abs(head[1] - food_pos[1])
-            if dist < min_food_dist:
-                min_food_dist = dist
-                closest_food = food_pos
+            
+            # Check if path to food is reasonably clear
+            path_score = 0
+            
+            # Simplified path check for performance
+            # Check if there's a relatively clear path to the food
+            x_step = 1 if food_pos[0] > head[0] else -1 if food_pos[0] < head[0] else 0
+            y_step = 1 if food_pos[1] > head[1] else -1 if food_pos[1] < head[1] else 0
+            
+            # Sample points along potential path
+            path_clear = True
+            check_points = []
+            
+            # X-path
+            if x_step != 0:
+                for x in range(head[0] + x_step, food_pos[0] + x_step, x_step):
+                    check_points.append((x, head[1]))
+            
+            # Y-path
+            if y_step != 0:
+                for y in range(head[1] + y_step, food_pos[1] + y_step, y_step):
+                    check_points.append((food_pos[0], y))
+            
+            # Check sample points
+            obstacles_in_path = 0
+            for point in check_points:
+                if point in obstacles:
+                    obstacles_in_path += 1
+                    
+            # Path score reduced based on obstacles
+            if len(check_points) > 0:
+                path_score = 100 * (1 - obstacles_in_path / len(check_points))
+            
+            # Bonus for food type
+            type_bonus = 0
+            if hasattr(food, 'type'):
+                if food.type == FoodType.BONUS:
+                    type_bonus = 200
+                elif food.type == FoodType.DROPPED:
+                    type_bonus = 50
+            
+            # Check if food is in a danger zone
+            danger_penalty = 200 if food_pos in danger_zones else 0
+            
+            # Calculate final score for this food
+            # Closer food is better, clear path is better, 
+            # special food is better, but avoid dangerous areas
+            food_score = (1000 / (dist + 1)) + path_score + type_bonus - danger_penalty
+            
+            food_targets.append((food_pos, food_score, dist))
         
-        # Find closest power-up
+        # Evaluate power-ups similarly to food
         for power_up in power_ups:
             power_up_pos = power_up.position
             dist = abs(head[0] - power_up_pos[0]) + abs(head[1] - power_up_pos[1])
-            if dist < min_power_up_dist:
-                min_power_up_dist = dist
-                closest_power_up = power_up_pos
-        
-        # Prioritize food over power-ups, but consider power-ups if they're much closer
-        target = closest_food
-        if closest_power_up and min_power_up_dist < min_food_dist // 2:
-            target = closest_power_up
             
-        # Default to food if no target found
-        if not target and closest_food:
-            target = closest_food
+            # Prioritize power-ups based on situation
+            type_value = 0
+            if power_up.type == PowerUpType.INVINCIBILITY:
+                # More valuable when longer
+                type_value = 300 if len(self.body) > 10 else 150
+            elif power_up.type == PowerUpType.GHOST:
+                # More valuable when many snakes
+                type_value = 50 * len([s for s in game_state.snakes if s.alive])
+            elif power_up.type == PowerUpType.SPEED_BOOST:
+                # Generally useful
+                type_value = 150
+            elif power_up.type == PowerUpType.GROWTH:
+                # More valuable early game
+                type_value = 250 if game_state.death_counter <= 2 else 100
+            elif power_up.type == PowerUpType.SCORE_MULTIPLIER:
+                # More valuable when food is nearby
+                nearby_food = sum(1 for f in foods if abs(f.position[0] - power_up_pos[0]) + abs(f.position[1] - power_up_pos[1]) < 10)
+                type_value = 100 + 50 * nearby_food
+            
+            # Check if power-up is in a danger zone
+            danger_penalty = 150 if power_up_pos in danger_zones else 0
+            
+            # Calculate score
+            power_up_score = (800 / (dist + 1)) + type_value - danger_penalty
+            
+            # If already have this power-up, less valuable
+            if power_up.type in self.power_ups:
+                power_up_score *= 0.3
+                
+            power_up_targets.append((power_up_pos, power_up_score, dist))
         
+        # Sort targets by score (descending)
+        food_targets.sort(key=lambda x: x[1], reverse=True)
+        power_up_targets.sort(key=lambda x: x[1], reverse=True)
+        
+        # Select primary target - best food or power-up
+        target = None
+        target_score = 0
+        
+        if food_targets and (not power_up_targets or food_targets[0][1] >= power_up_targets[0][1]):
+            target = food_targets[0][0]
+            target_score = food_targets[0][1]
+        elif power_up_targets:
+            target = power_up_targets[0][0]
+            target_score = power_up_targets[0][1]
+        
+        # If no target found, try to continue safely
         if not target:
             # Try to continue in same direction if safe
             next_pos = self.next_head()
-            if self.is_safe(next_pos, obstacles, game_state):
+            if self.is_safe(next_pos, obstacles, game_state) and next_pos not in danger_zones:
                 return
             
-            # Find any safe direction
+            # Find any safe direction, preferring ones with most free space
+            safe_directions = []
             for direction in Direction.all_directions():
                 if Direction.is_opposite(direction, self.direction):
                     continue
                 next_pos = (head[0] + direction.value[0], head[1] + direction.value[1])
                 if self.is_safe(next_pos, obstacles, game_state):
-                    self.direction = direction
-                    return
+                    # Calculate free space in this direction
+                    space = self.free_space(next_pos, obstacles, foods, power_ups, game_state)
+                    danger = 100 if next_pos in danger_zones else 0
+                    safe_directions.append((direction, space - danger))
+            
+            if safe_directions:
+                # Choose direction with most free space
+                self.direction = max(safe_directions, key=lambda x: x[1])[0]
             return
         
         # Simple algorithm for many snakes to improve performance
-        if len(game_state.snakes) >= 8:
+        if len(game_state.snakes) >= 6:
             # First priority: avoid immediate collisions
             next_pos = self.next_head()
-            if not self.is_safe(next_pos, obstacles, game_state):
+            if not self.is_safe(next_pos, obstacles, game_state) or next_pos in danger_zones:
                 # Current direction is unsafe, find a safe one
                 safe_directions = []
                 for direction in Direction.all_directions():
                     if Direction.is_opposite(direction, self.direction):
                         continue
                     new_head = (head[0] + direction.value[0], head[1] + direction.value[1])
-                    if self.is_safe(new_head, obstacles, game_state):
+                    if self.is_safe(new_head, obstacles, game_state) and new_head not in danger_zones:
                         # Calculate distance to target for this direction
                         dist = abs(new_head[0] - target[0]) + abs(new_head[1] - target[1])
                         safe_directions.append((direction, dist))
@@ -433,20 +660,29 @@ class Snake:
                     safe_directions.sort(key=lambda x: x[1])
                     # Choose the direction that gets us closest to target
                     self.direction = safe_directions[0][0]
+                elif any(self.is_safe((head[0] + d.value[0], head[1] + d.value[1]), obstacles, game_state) 
+                        for d in Direction.all_directions() if not Direction.is_opposite(d, self.direction)):
+                    # If no safe direction without danger, just pick any safe direction
+                    for direction in Direction.all_directions():
+                        if Direction.is_opposite(direction, self.direction):
+                            continue
+                        new_head = (head[0] + direction.value[0], head[1] + direction.value[1])
+                        if self.is_safe(new_head, obstacles, game_state):
+                            self.direction = direction
+                            break
                 return
                 
             # Move towards target if possible
             target_dx = target[0] - head[0]
             target_dy = target[1] - head[1]
             
-            # Always try to move directly toward target
             # Determine if we should move horizontally or vertically based on which gets us closer
             if abs(target_dx) > abs(target_dy):
                 # Try horizontal movement first
                 new_dir = Direction.RIGHT if target_dx > 0 else Direction.LEFT
                 if not Direction.is_opposite(new_dir, self.direction):
                     new_head = (head[0] + new_dir.value[0], head[1] + new_dir.value[1])
-                    if self.is_safe(new_head, obstacles, game_state):
+                    if self.is_safe(new_head, obstacles, game_state) and new_head not in danger_zones:
                         self.direction = new_dir
                         return
                 
@@ -454,7 +690,10 @@ class Snake:
                 new_dir = Direction.DOWN if target_dy > 0 else Direction.UP
                 if not Direction.is_opposite(new_dir, self.direction):
                     new_head = (head[0] + new_dir.value[0], head[1] + new_dir.value[1])
-                    if self.is_safe(new_head, obstacles, game_state):
+                    if self.is_safe(new_head, obstacles, game_state) and new_head not in danger_zones:
+                        self.direction = new_dir
+                        return
+                    elif self.is_safe(new_head, obstacles, game_state):  # Accept danger if necessary
                         self.direction = new_dir
                         return
             else:
@@ -462,7 +701,7 @@ class Snake:
                 new_dir = Direction.DOWN if target_dy > 0 else Direction.UP
                 if not Direction.is_opposite(new_dir, self.direction):
                     new_head = (head[0] + new_dir.value[0], head[1] + new_dir.value[1])
-                    if self.is_safe(new_head, obstacles, game_state):
+                    if self.is_safe(new_head, obstacles, game_state) and new_head not in danger_zones:
                         self.direction = new_dir
                         return
                 
@@ -470,20 +709,33 @@ class Snake:
                 new_dir = Direction.RIGHT if target_dx > 0 else Direction.LEFT
                 if not Direction.is_opposite(new_dir, self.direction):
                     new_head = (head[0] + new_dir.value[0], head[1] + new_dir.value[1])
-                    if self.is_safe(new_head, obstacles, game_state):
+                    if self.is_safe(new_head, obstacles, game_state) and new_head not in danger_zones:
+                        self.direction = new_dir
+                        return
+                    elif self.is_safe(new_head, obstacles, game_state):  # Accept danger if necessary
                         self.direction = new_dir
                         return
             
             # Continue in same direction if it's safe (already checked above)
             return
         
-        # -----------------------------------------------------------------
-        # Full AI logic for smaller games with 4-step look-ahead
-        # -----------------------------------------------------------------
-        
         # Calculate direction to target
         target_dx = target[0] - head[0]
         target_dy = target[1] - head[1]
+        
+        # Dynamically adjust strategy based on game situation
+        # This makes AI adaptable to changing conditions
+        if self.strategy == AIStrategy.AGGRESSIVE and len(self.body) < 5:
+            # Be less aggressive when small
+            temp_strategy = AIStrategy.OPPORTUNISTIC
+        elif self.strategy == AIStrategy.HUNTER and len(game_state.snakes) <= 2:
+            # No point being a hunter with few snakes
+            temp_strategy = AIStrategy.AGGRESSIVE
+        elif self.strategy == AIStrategy.CAUTIOUS and game_state.death_counter > len(game_state.snakes) / 2:
+            # Be more aggressive in late game
+            temp_strategy = AIStrategy.OPPORTUNISTIC
+        else:
+            temp_strategy = self.strategy
         
         # Evaluate each possible direction with look-ahead
         candidates = []
@@ -500,91 +752,134 @@ class Snake:
             if not self.is_safe(new_head, obstacles, game_state):
                 continue
             
-            # Look ahead 4 steps to check if this direction leads to self-collision
-            future_score = self.look_ahead(new_head, direction, obstacles, game_state, 4)
-            if future_score < 0:
+            # Look ahead further (6 steps instead of 4)
+            future_score = self.look_ahead(new_head, direction, obstacles, game_state, Config.LOOK_AHEAD_STEPS)
+            if future_score < -100:  # Increased threshold
                 # This direction leads to certain death, skip it
                 continue
             
-            # Calculate score based on various factors
-            
-            # 1. Distance to food - higher score for closer food
+            # Distance to target
             manhattan_to_target = abs(new_head[0] - target[0]) + abs(new_head[1] - target[1])
-            target_score = 400 - 20 * manhattan_to_target
+            
+            # Calculate more factors for decision making
+            
+            # 1. Target approach score - higher for moves toward target
+            target_score = 500 - 20 * manhattan_to_target
             
             # Direct path to target gets bonus
             if (target_dx > 0 and dx > 0) or (target_dx < 0 and dx < 0):  # Moving in correct x direction
-                target_score += 100
+                target_score += 150
             if (target_dy > 0 and dy > 0) or (target_dy < 0 and dy < 0):  # Moving in correct y direction
-                target_score += 100
+                target_score += 150
             
             # Immediate adjacent to target gets huge bonus
             if manhattan_to_target == 1:
-                target_score += 1000
+                target_score += 1500
                 
-            # 2. If target is power-up, add bonus but not as much as food
-            if target == closest_power_up:
-                target_score = target_score * 0.8  # Power-ups are 80% as valuable as food
-            
-            # 3. Free space in that direction
+            # 2. Free space evaluation
             space = self.free_space(new_head, obstacles, foods, power_ups, game_state)
-            space_score = 0.3 * space  # Increased weight for space
+            space_score = 0.5 * space  # Increased weight for space
             
-            # 4. Look-ahead bonus (from simulating future moves)
-            look_ahead_score = future_score * 0.5  # Value future safety
+            # Extra penalty for very confined spaces
+            if space < 8:
+                space_score -= 300
             
-            # 5. Preference for continuing in same direction
-            direction_score = 50 if direction == self.direction else 0
+            # 3. Danger zone avoidance
+            danger_score = -250 if new_head in danger_zones else 0
             
-            # 6. Score based on strategy
+            # Adjust danger score based on snake size - bigger snakes can be more aggressive
+            if len(self.body) > 15:
+                danger_score = danger_score * 0.5  # Half penalty for big snakes
+            
+            # 4. Look-ahead bonus
+            look_ahead_score = future_score * 0.8  # Increased weight
+            
+            # 5. Preference for continuing in same direction (smoother movement)
+            direction_score = 75 if direction == self.direction else 0
+            
+            # 6. Wall proximity penalty - avoid moving along walls when not necessary
+            wall_score = 0
+            if new_head[0] == 1 or new_head[0] == game_state.width - 2:  # Near vertical walls
+                wall_score -= 30
+            if new_head[1] == 1 or new_head[1] == game_state.height - 2:  # Near horizontal walls
+                wall_score -= 30
+            
+            # 7. Strategy-specific scoring
             strategy_score = 0
-            if self.strategy == AIStrategy.AGGRESSIVE:
-                # Aggressive: Go straight for target, ignore space
-                strategy_score = target_score * 2.0
+            
+            if temp_strategy == AIStrategy.AGGRESSIVE:
+                # Aggressive: Go straight for target, ignore some danger
+                strategy_score = target_score * 2.0 - danger_score * 0.7
                 # If very close to target, be even more aggressive
                 if manhattan_to_target < 3:
-                    strategy_score += 300
-            elif self.strategy == AIStrategy.CAUTIOUS:
-                # Cautious: Value space more than target
-                strategy_score = space_score * 2.0 + look_ahead_score * 1.5
+                    strategy_score += 400
+            
+            elif temp_strategy == AIStrategy.CAUTIOUS:
+                # Cautious: Value space and safety more than target
+                strategy_score = space_score * 2.5 + look_ahead_score * 2.0 - danger_score * 1.5
                 # But still go for target if it's very close
                 if manhattan_to_target < 2:
-                    strategy_score += target_score
-            elif self.strategy == AIStrategy.OPPORTUNISTIC:
-                # Opportunistic: Balance target and space, opportunistically change direction
-                strategy_score = target_score + space_score + random.randint(0, 50)
-                # Be more aggressive when target is close
+                    strategy_score += target_score * 1.5
+            
+            elif temp_strategy == AIStrategy.OPPORTUNISTIC:
+                # Opportunistic: Balance target and space, change direction based on situation
+                strategy_score = target_score + space_score * 1.5 - danger_score + random.randint(0, 50)
+                # More aggressive when target is close
                 if manhattan_to_target < 5:
-                    strategy_score += 200
-            elif self.strategy == AIStrategy.DEFENSIVE:
+                    strategy_score += 250
+                # More cautious when space is limited
+                if space < 15:
+                    strategy_score += space_score * 1.5
+            
+            elif temp_strategy == AIStrategy.DEFENSIVE:
                 # Defensive: Stay away from other snakes
                 snake_proximity = 0
                 for pos in other_snakes_positions:
                     dist = abs(new_head[0] - pos[0]) + abs(new_head[1] - pos[1])
                     if dist < 5:
-                        snake_proximity += (5 - dist) * 20
-                strategy_score = target_score + space_score - snake_proximity + look_ahead_score
+                        snake_proximity += (5 - dist) * 30
+                
+                strategy_score = target_score * 0.8 + space_score * 1.8 - snake_proximity * 1.5 + look_ahead_score * 1.5
+                # Stronger space preference
+                if space < 20:
+                    strategy_score += space_score * 2
                 # Still go for target if it's very close
                 if manhattan_to_target < 3:
-                    strategy_score += 200
-            elif self.strategy == AIStrategy.HUNTER:
-                # Hunter: Aim for the head of other snakes to try to kill them
+                    strategy_score += 300
+            
+            elif temp_strategy == AIStrategy.HUNTER:
+                # Hunter: Target other snake heads to try to kill them
+                hunter_score = 0
                 for other_snake in game_state.snakes:
-                    if other_snake is not self and other_snake.alive:
+                    if other_snake is not self and other_snake.alive and len(self.body) > len(other_snake.body):
                         other_head = other_snake.body[0]
                         dist = abs(new_head[0] - other_head[0]) + abs(new_head[1] - other_head[1])
-                        if dist < 5:
-                            strategy_score += (5 - dist) * 30
-                # Don't forget about target
+                        # Only consider hunting when we're bigger and close
+                        if dist < 6:
+                            # More points for being exactly 1 space away - perfect for cutting off
+                            if dist == 2:  # One move away
+                                hunter_score += 400
+                            elif dist < 4:  # Within hunting range
+                                hunter_score += (6 - dist) * 80
+                
+                strategy_score = hunter_score + target_score * 0.6 + space_score
+                # Don't forget food when it's very close
                 if manhattan_to_target < 3:
                     strategy_score += target_score
             
             # Calculate total score
-            total_score = target_score + space_score + direction_score + strategy_score + look_ahead_score
+            total_score = (
+                target_score + 
+                space_score + 
+                danger_score + 
+                direction_score + 
+                wall_score + 
+                strategy_score + 
+                look_ahead_score
+            )
             
-            # Penalize moves that lead to dead ends
-            if space < 5:
-                total_score -= 500
+            # Add a bit of randomness to break ties and make behavior less predictable
+            total_score += random.uniform(-10, 10)
             
             candidates.append((direction, total_score))
         
@@ -599,67 +894,12 @@ class Snake:
             else:
                 self.consecutive_moves = 0
             
-            # Avoid loops by occasionally changing direction
-            if self.consecutive_moves > 15 and random.random() < 0.3:
+            # Avoid loops by occasionally changing direction if many consecutive moves
+            if self.consecutive_moves > 12 and random.random() < 0.4:
                 alternative_dirs = [d for d, _ in candidates if d != self.direction]
                 if alternative_dirs:
                     self.direction = random.choice(alternative_dirs)
                     self.consecutive_moves = 0
-                    
-    def look_ahead(self, start_pos, direction, obstacles, game_state, steps):
-        """Simulate future moves to detect potential collisions"""
-        if steps <= 0:
-            return 10  # Base score for reaching the look-ahead depth safely
-            
-        # Clone the obstacles set to avoid modifying the original
-        future_obstacles = set(obstacles)
-        
-        # Start simulating moves
-        current_pos = start_pos
-        current_direction = direction
-        positions = [current_pos]  # Track positions we would occupy
-        
-        for i in range(steps):
-            # Calculate next position
-            dx, dy = current_direction.value
-            next_pos = (current_pos[0] + dx, current_pos[1] + dy)
-            
-            # Check if next position would hit a wall
-            x, y = next_pos
-            if x <= 0 or x >= game_state.width - 1 or y <= 0 or y >= game_state.height - 1:
-                return -100  # Severe penalty for hitting a wall
-                
-            # Check if next position would hit an obstacle
-            if next_pos in future_obstacles:
-                return -50  # Penalty for hitting an obstacle
-                
-            # Check if next position would hit our own future body
-            if next_pos in positions:
-                return -75  # Penalty for self-collision
-                
-            # Move to next position
-            current_pos = next_pos
-            positions.append(current_pos)
-            
-            # Add our current position to obstacles for next simulation step
-            future_obstacles.add(current_pos)
-            
-            # For subsequent steps, just continue in same direction (simple simulation)
-            # This could be enhanced to simulate more complex behavior
-            
-        # Calculate free space at final position
-        free_neighbors = 0
-        x, y = positions[-1]
-        for dx, dy in [(0,1), (1,0), (0,-1), (-1,0)]:
-            nx, ny = x + dx, y + dy
-            if (nx <= 0 or nx >= game_state.width - 1 or 
-                ny <= 0 or ny >= game_state.height - 1 or
-                (nx, ny) in future_obstacles):
-                continue
-            free_neighbors += 1
-            
-        # Return score based on simulated moves
-        return 10 + free_neighbors * 5
 
 
 # =============================================================================
@@ -691,7 +931,7 @@ class GameState:
     def initialize_game(self):
         """Initialize game elements"""
         self.create_snakes()
-        self.create_food()
+        self.create_initial_food()
     
     def create_snakes(self):
         """Create snakes based on configuration"""
@@ -714,39 +954,63 @@ class GameState:
             ai_snakes = self.num_snakes
             strat_offset = 0
         
-        # Create AI snakes in two columns
-        num_per_column = ai_snakes // 2
+        # Create AI snakes with different strategies
+        ai_strategies = list(AIStrategy)
+        
+        # Ensure a good distribution of strategies for AI snakes
+        if ai_snakes <= len(ai_strategies):
+            # Use each strategy once if possible
+            strategies = random.sample(ai_strategies, ai_snakes)
+        else:
+            # Use all strategies at least once, then repeat randomly
+            strategies = ai_strategies.copy()
+            while len(strategies) < ai_snakes:
+                strategies.append(random.choice(ai_strategies))
+            random.shuffle(strategies)
+        
+        # Create AI snakes in two columns with better distribution
+        num_per_column = (ai_snakes + 1) // 2
         left_x = 5
         right_x = self.width - 6
+        
+        # Calculate spacing to distribute snakes more evenly
         spacing = (self.height - 10) // max(1, num_per_column - 1) if num_per_column > 1 else 0
         
-        for i in range(num_per_column):
-            y = 5 + i * spacing
-            # Left column snake, moving right
-            s_left = Snake(
-                body=[(left_x, y), (left_x-1, y), (left_x-2, y)],
-                direction=Direction.RIGHT,
-                id=i+1+strat_offset,
-                strategy=random.choice(list(AIStrategy))
-            )
-            self.snakes.append(s_left)
+        for i in range(ai_snakes):
+            column_idx = i % 2
+            row_idx = i // 2
             
-            # Right column snake, moving left
-            s_right = Snake(
-                body=[(right_x, y), (right_x+1, y), (right_x+2, y)],
-                direction=Direction.LEFT,
-                id=i+num_per_column+1+strat_offset,
-                strategy=random.choice(list(AIStrategy))
+            y = 5 + row_idx * spacing
+            
+            if column_idx == 0:  # Left column, moving right
+                snake_body = [(left_x, y), (left_x-1, y), (left_x-2, y)]
+                direction = Direction.RIGHT
+            else:  # Right column, moving left
+                snake_body = [(right_x, y), (right_x+1, y), (right_x+2, y)]
+                direction = Direction.LEFT
+            
+            # Create snake with the assigned strategy
+            snake = Snake(
+                body=snake_body,
+                direction=direction,
+                id=i+1+strat_offset,
+                strategy=strategies[i]
             )
-            self.snakes.append(s_right)
+            self.snakes.append(snake)
+    
+    def create_initial_food(self):
+        """Create initial food items for game start"""
+        for _ in range(Config.MIN_FOOD_COUNT):
+            self.create_food()
         
-        # Remove extra snakes if num_snakes is odd
-        while len(self.snakes) > self.num_snakes:
-            self.snakes.pop()
+        # Create one bonus food at start for excitement
+        self.create_food(FoodType.BONUS)
     
     def create_food(self, food_type=FoodType.NORMAL):
-        """Create a new food item"""
+        """Create a new food item in a valid location"""
         all_positions = set()
+        
+        # Collect positions of all objects
         for snake in self.snakes:
             all_positions.update(snake.body_set)
         all_positions.update(f.position for f in self.foods)
@@ -785,6 +1049,7 @@ class GameState:
                 # No free positions found, don't create food
                 return None
         
+        # Set appearance and points based on food type
         points = Config.FOOD_POINTS
         char = "*"
         color = 3
@@ -810,11 +1075,18 @@ class GameState:
             all_positions.update(snake.body_set)
         all_positions.update(f.position for f in self.foods)
         all_positions.update(p.position for p in self.power_ups)
+        all_positions.update(f.position for f in self.temp_foods)
         
-        while True:
+        # Try multiple times to find a good position
+        attempts = 0
+        while attempts < 50:
             pos = (random.randint(1, self.width-2), random.randint(1, self.height-2))
             if pos not in all_positions:
                 break
+            attempts += 1
+            
+        if attempts >= 50:
+            return None  # Could not find a suitable position
         
         power_up = PowerUp(position=pos)
         self.power_ups.append(power_up)
@@ -873,18 +1145,23 @@ class GameState:
             # Move the snake
             new_head = snake.move(self.foods + self.temp_foods, other_positions, self.power_ups, self)
             
-            # Check wall collision
+            # Check for invincibility power-up
+            has_invincibility = snake.has_power_up(PowerUpType.INVINCIBILITY)
+            has_ghost = snake.has_power_up(PowerUpType.GHOST)
+            
+            # Check wall collision (unless invincible)
             hit_wall = (new_head[0] <= 0 or new_head[0] >= self.width - 1 or 
                       new_head[1] <= 0 or new_head[1] >= self.height - 1)
             
-            if hit_wall:
+            if hit_wall and not has_invincibility:
                 self.kill_snake(snake)
                 continue
             
-            # Check snake collision
-            hit_snake = (new_head in snake.body[1:] or new_head in other_positions)
+            # Check snake collision (unless ghost or invincible)
+            hit_self = new_head in snake.body[1:]
+            hit_other = new_head in other_positions
             
-            if hit_snake:
+            if (hit_self and not has_invincibility) or (hit_other and not (has_ghost or has_invincibility)):
                 self.kill_snake(snake)
                 continue
             
@@ -1065,7 +1342,7 @@ class Renderer:
             if not snake.alive:
                 continue
             
-            snake_color = min(snake.id + 2, 12)
+            snake_color = (snake.id % 8) + 1
             color_pair = curses.color_pair(snake_color)
             
             # Add special attributes for power-ups
@@ -1123,7 +1400,7 @@ class Renderer:
             if not snake.alive:
                 continue
             
-            snake_color = min(snake.id + 2, 12)
+            snake_color = (snake.id % 8) + 1
             color_pair = curses.color_pair(snake_color)
             
             # Show snake ID and score
@@ -1140,7 +1417,7 @@ class Renderer:
                 power_ups = " " + "".join(power_up_chars.get(p, "") for p in snake.power_ups)
             
             score_text = f"Snake {snake.id} ({snake_type}): {snake.score}{power_ups}"
-            self.safe_addstr(y_pos, game_state.width - len(score_text) - 1, score_text, color_pair)
+            self.safe_addstr(y_pos, 1, score_text, color_pair)
             y_pos += 1
     
     def draw_title_screen(self, width, height):
@@ -1149,15 +1426,18 @@ class Renderer:
         
         title = "ULTIMATE SNAKE SHOWDOWN"
         subtitle = "A Battle of Serpentine Supremacy"
-        author = "By ShadowHarvy, Enhanced by Claude"
+        author = "By ShadowHarvy, Enhanced with Smarter AI"
         options = [
             "2 Snakes", "4 Snakes", "6 Snakes", "8 Snakes", "10 Snakes", 
             "Human + AI", "Exit"
         ]
         
         # Draw title and subtitle
-        self.safe_addstr(height//4, (width - len(title))//2, title, curses.A_BOLD)
-        self.safe_addstr(height//4 + 1, (width - len(subtitle))//2, subtitle)
+        title_color = curses.color_pair(4) | curses.A_BOLD
+        subtitle_color = curses.color_pair(6)
+        
+        self.safe_addstr(height//4, (width - len(title))//2, title, title_color)
+        self.safe_addstr(height//4 + 1, (width - len(subtitle))//2, subtitle, subtitle_color)
         self.safe_addstr(height//4 + 2, (width - len(author))//2, author)
         
         # Draw snake decoration
@@ -1175,7 +1455,8 @@ class Renderer:
         ]
         
         for i, line in enumerate(snake_art):
-            self.safe_addstr(height//4 + 4 + i, (width - len(line))//2, line, curses.color_pair(1))
+            color = curses.color_pair(i % 5 + 1)
+            self.safe_addstr(height//4 + 4 + i, (width - len(line))//2, line, color)
         
         return options
     
@@ -1190,7 +1471,8 @@ class Renderer:
         self.stdscr.clear()
         
         # Draw header
-        self.safe_addstr(2, width//2 - 4, "RANKING", curses.A_BOLD)
+        self.safe_addstr(2, width//2 - 4, "GAME OVER", curses.A_BOLD | curses.color_pair(3))
+        self.safe_addstr(3, width//2 - 3, "RANKING", curses.A_BOLD)
         
         # Calculate game duration
         end_time = time.time()
@@ -1200,16 +1482,21 @@ class Renderer:
         
         # Display game duration
         time_str = f"Game Duration: {minutes:02d}:{seconds:02d}"
-        self.safe_addstr(3, (width - len(time_str))//2, time_str)
+        self.safe_addstr(4, (width - len(time_str))//2, time_str)
         
         # Display snake information
         for idx, snake in enumerate(ranking):
             rank = idx + 1
             snake_type = "Human" if snake.is_human else f"AI ({snake.strategy.name})"
-            line = f"Rank {rank}: Snake {snake.id} ({snake_type}) - Score: {snake.score}"
+            status = "ALIVE" if snake.alive else f"Died #{snake.death_order}"
+            line = f"Rank {rank}: Snake {snake.id} ({snake_type}) - Score: {snake.score} - {status}"
             
-            snake_color = min(snake.id + 2, 12)
-            self.safe_addstr(5 + idx, (width - len(line))//2, line, curses.color_pair(snake_color))
+            snake_color = (snake.id % 8) + 1
+            color = curses.color_pair(snake_color)
+            if snake.alive:
+                color |= curses.A_BOLD
+                
+            self.safe_addstr(6 + idx, (width - len(line))//2, line, color)
         
         # Draw restart/exit options
         options = ["Restart", "Exit"]
@@ -1224,24 +1511,29 @@ class Renderer:
         if len(alive_snakes) == 1:
             winner = alive_snakes[0]
             result = f"Snake {winner.id} wins!"
-            color = curses.color_pair(min(winner.id + 2, 12))
+            color = curses.color_pair((winner.id % 8) + 1)
         elif len(alive_snakes) > 1:
             # Multiple survivors, highest score wins
             winner = max(alive_snakes, key=lambda s: s.score)
             result = f"Snake {winner.id} wins with highest score!"
-            color = curses.color_pair(min(winner.id + 2, 12))
+            color = curses.color_pair((winner.id % 8) + 1)
         else:
             # No survivors, highest score from all snakes
             winner = max(snakes, key=lambda s: s.score)
             result = f"All snakes died! Snake {winner.id} had the highest score."
-            color = curses.color_pair(min(winner.id + 2, 12))
+            color = curses.color_pair((winner.id % 8) + 1)
         
         # Draw result
-        self.safe_addstr(height//3, (width - len("GAME OVER"))//2, "GAME OVER", curses.A_BOLD)
+        self.safe_addstr(height//3, (width - len("GAME OVER"))//2, "GAME OVER", curses.A_BOLD | curses.color_pair(3))
         self.safe_addstr(height//3 + 2, (width - len(result))//2, result, color | curses.A_BOLD)
         
+        # Show winner's strategy if AI
+        if not winner.is_human:
+            strategy_text = f"Winning strategy: {winner.strategy.name}"
+            self.safe_addstr(height//3 + 3, (width - len(strategy_text))//2, strategy_text, color)
+        
         # Draw options
-        options = ["Restart", "Exit"]
+        options = ["See Rankings", "Restart", "Exit"]
         return options
 
 
@@ -1334,17 +1626,20 @@ class GameController:
     
     def show_ranking_screen(self):
         """Show ranking screen and handle restart/exit choice"""
-        # Sort snakes by death order (alive snakes first, then by death order)
+        # Sort snakes by score
         ranking = sorted(self.game_state.snakes, 
-                        key=lambda s: (0 if s.alive else 1, s.death_order if s.death_order else float('inf')))
+                        key=lambda s: (s.score, 0 if s.alive else 1, s.death_order if s.death_order else float('inf')),
+                        reverse=True)
         
         options = self.renderer.draw_ranking_screen(ranking, self.game_state.start_time, 
                                                  self.screen_width, self.screen_height)
         selected = 0
         
         while True:
-            self.renderer.draw_menu_options(options, selected, 
-                                          self.screen_height//2 + 6, self.screen_width)
+            # Calculate position based on number of snakes
+            menu_y = 8 + len(self.game_state.snakes)
+            
+            self.renderer.draw_menu_options(options, selected, menu_y, self.screen_width)
             self.stdscr.refresh()
             
             # Handle input
@@ -1369,7 +1664,7 @@ class GameController:
         
         while True:
             self.renderer.draw_menu_options(options, selected, 
-                                          self.screen_height//2 + 4, self.screen_width)
+                                          self.screen_height//2 + 5, self.screen_width)
             self.stdscr.refresh()
             
             # Handle input
@@ -1379,10 +1674,12 @@ class GameController:
             elif key == curses.KEY_DOWN:
                 selected = (selected + 1) % len(options)
             elif key in [curses.KEY_ENTER, ord('\n'), ord('\r')]:
-                if options[selected] == "Restart":
-                    return True  # Restart
-                else:
+                if options[selected] == "Exit":
                     return False  # Exit
+                elif options[selected] == "Restart":
+                    return True  # Restart
+                elif options[selected] == "See Rankings":
+                    return self.show_ranking_screen()  # Show rankings, then get restart choice
             
             time.sleep(0.1)
     
