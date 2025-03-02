@@ -16,16 +16,16 @@ class Config:
     """Game configuration settings"""
     
     # Game speed settings
-    BASE_SPEED = 0.12  # Slightly slower initial speed for better playability
-    SPEED_INCREASE_INTERVAL = 30  # Seconds
-    MAX_SPEED_MULTIPLIER = 2.0
+    BASE_SPEED = 0.14  # Even slower for better AI decision making
+    SPEED_INCREASE_INTERVAL = 40  # Slower speed increases
+    MAX_SPEED_MULTIPLIER = 1.8  # Lower maximum speed
     
     # Food settings
     FOOD_BONUS_DURATION = 45  # Seconds until bonus food appears
     FOOD_POINTS = 1
     BONUS_FOOD_POINTS = 3
     TEMP_FOOD_POINTS = 1
-    MIN_FOOD_COUNT = 6  # Increased minimum food count for more action
+    MIN_FOOD_COUNT = 8  # Even more food to reduce competition
     
     # Snake settings
     INITIAL_SIZE = 3
@@ -35,16 +35,19 @@ class Config:
     MIN_HEIGHT = 15
     
     # Power-up settings
-    POWER_UP_CHANCE = 0.008  # Slightly increased chance of power-ups
+    POWER_UP_CHANCE = 0.01  # More power-ups
     POWER_UP_DURATION = 20  # Seconds
     
     # Other settings
-    MAX_IDLE_TIME = 30  # Seconds before game speeds up if no food eaten
+    MAX_IDLE_TIME = 40  # More time before game speeds up
     
     # AI settings
     AI_UPDATE_INTERVAL = 0.05  # How often AI updates its direction
     EMERGENCY_WALL_CHECK = True  # Always check for walls even between update intervals
-    LOOK_AHEAD_STEPS = 6  # How many steps ahead the AI should look 
+    LOOK_AHEAD_STEPS = 8  # Further look ahead
+    OPEN_SPACE_WEIGHT = 3.0  # How much to value open space
+    SURVIVAL_THRESHOLD = 10  # Space threshold below which snake focuses on survival
+    TUNNEL_CHECK_ENABLED = True  # Check tunnels for safety
 
 
 # =============================================================================
@@ -207,15 +210,39 @@ class Snake:
                 next_head in other_snakes_positions or next_head in self.body[1:]):
                 # About to hit something, find a safe direction immediately
                 safe_directions = []
+                
+                # First, evaluate each direction thoroughly
+                direction_scores = []
                 for direction in Direction.all_directions():
                     if Direction.is_opposite(direction, self.direction):
                         continue
+                    
                     test_pos = (self.body[0][0] + direction.value[0], self.body[0][1] + direction.value[1])
-                    if self.is_safe(test_pos, other_snakes_positions | set(self.body[1:]), game_state):
-                        safe_directions.append(direction)
+                    if not self.is_safe(test_pos, other_snakes_positions | set(self.body[1:]), game_state):
+                        continue
+                    
+                    # Calculate free space score to find the best escape route
+                    space_score = self.free_space(test_pos, other_snakes_positions | set(self.body[1:]),
+                                                foods, power_ups, game_state)
+                    
+                    # Check if this direction might lead to a tunnel/trap
+                    if Config.TUNNEL_CHECK_ENABLED:
+                        is_tunnel_safe = self.check_tunnel_safety(
+                            self.body[0], direction, other_snakes_positions | set(self.body[1:]), 
+                            set(), game_state)
+                        
+                        if not is_tunnel_safe:
+                            space_score -= 300  # Penalize tunnels, but don't remove them completely
+                    
+                    direction_scores.append((direction, space_score))
+                    safe_directions.append(direction)
                 
-                # If we found a safe direction, change immediately
-                if safe_directions:
+                # If we found safe directions, choose the one with the most space
+                if direction_scores:
+                    best_direction = max(direction_scores, key=lambda x: x[1])[0]
+                    self.direction = best_direction
+                elif safe_directions:
+                    # Fallback to any safe direction if scoring failed
                     self.direction = random.choice(safe_directions)
                     
             # Regular AI update on the normal interval
@@ -286,18 +313,30 @@ class Snake:
         
         # Use a faster, less comprehensive calculation for large games
         if len(game_state.snakes) >= 8:
-            # Check immediate neighbors only for large games
+            # Check immediate and diagonal neighbors for large games
             free_neighbors = 0
-            for dx, dy in [(0,1), (1,0), (0,-1), (-1,0)]:
+            exit_paths = 0
+            for dx, dy in [(0,1), (1,0), (0,-1), (-1,0), (1,1), (1,-1), (-1,1), (-1,-1)]:
                 nx, ny = x + dx, y + dy
                 if (nx <= 0 or nx >= game_state.width - 1 or 
                     ny <= 0 or ny >= game_state.height - 1):
                     continue
                 if (nx, ny) not in obstacles:
                     free_neighbors += 1
+                    # Check for exit paths - spaces that lead to even more space
+                    has_further_space = False
+                    for nx2, ny2 in [(nx+1, ny), (nx-1, ny), (nx, ny+1), (nx, ny-1)]:
+                        if (nx2 <= 0 or nx2 >= game_state.width - 1 or 
+                            ny2 <= 0 or ny2 >= game_state.height - 1):
+                            continue
+                        if (nx2, ny2) not in obstacles and (nx2, ny2) != pos:
+                            has_further_space = True
+                            break
+                    if has_further_space:
+                        exit_paths += 1
             
-            # Quick estimate based on free neighbors
-            return free_neighbors * 20
+            # Quick estimate based on free neighbors and exit paths
+            return free_neighbors * 15 + exit_paths * 10
         
         # Full floodfill algorithm for smaller games
         visited = set()
@@ -305,8 +344,12 @@ class Snake:
         count = 0
         found_food = False
         found_power_up = False
+        exit_routes = 0
         
-        while to_visit and count < 100:  # Limit size of search for performance
+        # Increase the search limit for better path finding
+        search_limit = 150  # Higher search limit
+        
+        while to_visit and count < search_limit:
             p = to_visit.pop()
             if p in visited or p in obstacles:
                 continue
@@ -318,17 +361,34 @@ class Snake:
             if x <= 0 or x >= game_state.width - 1 or y <= 0 or y >= game_state.height - 1:
                 continue
             
+            # Check if we found a potential exit route (near edge of search space)
+            if count > 30:
+                # Check if this point has neighbors outside our visited area
+                # which would suggest it leads to more open space
+                neighbors_outside = 0
+                for direction in Direction.all_directions():
+                    dx, dy = direction.value
+                    neighbor = (x + dx, y + dy)
+                    if neighbor not in visited and neighbor not in obstacles:
+                        nx, ny = neighbor
+                        if not (nx <= 0 or nx >= game_state.width - 1 or 
+                                ny <= 0 or ny >= game_state.height - 1):
+                            neighbors_outside += 1
+                
+                if neighbors_outside >= 2:
+                    exit_routes += 1
+            
             # Check if food is found
             if any(p == food.position for food in foods):
                 found_food = True
-                if count > 15:  # Early exit if we found food and decent space
-                    return count + 100
+                if count > 20 and exit_routes > 0:  # Exit if we found food and have exit routes
+                    return count + 100 + exit_routes * 30
             
             # Check if power-up is found
             if any(p == powerup.position for powerup in power_ups):
                 found_power_up = True
-                if count > 10:  # Early exit if we found power-up and decent space
-                    return count + 150
+                if count > 15 and exit_routes > 0:  # Exit if we found power-up and have exit routes
+                    return count + 150 + exit_routes * 30
             
             count += 1
             
@@ -346,6 +406,9 @@ class Snake:
         if found_power_up:
             space_score += 150
         
+        # Big bonus for having multiple exit routes
+        space_score += exit_routes * 40
+        
         return space_score
     
     def is_safe(self, pos, obstacles, game_state):
@@ -361,6 +424,67 @@ class Snake:
             return False
         
         return True
+    
+    def check_tunnel_safety(self, pos, direction, obstacles, occupied, game_state):
+        """Check if a tunnel (single path) eventually leads to an open space"""
+        # Maximum tunnel length to check
+        max_tunnel_length = 15
+        current_pos = pos
+        
+        # Track positions we check to avoid loops
+        checked_positions = set(occupied)
+        
+        # Follow the tunnel
+        for i in range(max_tunnel_length):
+            # Move in the given direction
+            dx, dy = direction.value
+            next_pos = (current_pos[0] + dx, current_pos[1] + dy)
+            
+            # Check if hit wall or obstacle
+            x, y = next_pos
+            if (x <= 0 or x >= game_state.width - 1 or y <= 0 or y >= game_state.height - 1 or
+                next_pos in obstacles or next_pos in checked_positions):
+                return False  # Dead end
+            
+            # Add to checked positions
+            checked_positions.add(next_pos)
+            current_pos = next_pos
+            
+            # Count available directions from this position
+            available = 0
+            for test_dir in Direction.all_directions():
+                test_pos = (current_pos[0] + test_dir.value[0], current_pos[1] + test_dir.value[1])
+                test_x, test_y = test_pos
+                if (test_x <= 0 or test_x >= game_state.width - 1 or 
+                    test_y <= 0 or test_y >= game_state.height - 1 or 
+                    test_pos in obstacles or
+                    test_pos in checked_positions):
+                    continue
+                available += 1
+            
+            # If we found multiple options, it's not a pure tunnel anymore
+            if available > 1:
+                return True  # Tunnel leads to open space
+            
+            # If no directions available, it's a dead end
+            if available == 0:
+                return False
+            
+            # If exactly one direction, continue following the tunnel
+            for test_dir in Direction.all_directions():
+                test_pos = (current_pos[0] + test_dir.value[0], current_pos[1] + test_dir.value[1])
+                test_x, test_y = test_pos
+                if (test_x <= 0 or test_x >= game_state.width - 1 or 
+                    test_y <= 0 or test_y >= game_state.height - 1 or 
+                    test_pos in obstacles or
+                    test_pos in checked_positions):
+                    continue
+                direction = test_dir
+                break
+        
+        # If we checked the maximum length and didn't find a dead end or opening,
+        # assume it's risky but not necessarily fatal
+        return False
     
     def look_ahead(self, start_pos, direction, obstacles, game_state, steps):
         """Improved simulation of future moves to detect potential collisions and traps"""
@@ -386,15 +510,15 @@ class Snake:
             # Check if next position would hit a wall
             x, y = next_pos
             if x <= 0 or x >= game_state.width - 1 or y <= 0 or y >= game_state.height - 1:
-                return -200  # Increased penalty for hitting a wall
+                return -400  # Severely increased penalty for hitting a wall
                 
             # Check if next position would hit an obstacle
             if next_pos in future_obstacles:
-                return -150  # Increased penalty for hitting an obstacle
+                return -300  # Severely increased penalty for hitting an obstacle
                 
             # Check if next position would hit our own future body
             if next_pos in positions:
-                return -175  # Increased penalty for self-collision
+                return -350  # Severely increased penalty for self-collision
                 
             # Move to next position
             current_pos = next_pos
@@ -405,6 +529,8 @@ class Snake:
             
             # Count available directions for this position
             available = 0
+            available_directions = []
+            
             for test_dir in Direction.all_directions():
                 if Direction.is_opposite(test_dir, current_direction):
                     continue
@@ -416,12 +542,22 @@ class Snake:
                     test_pos in positions):
                     continue
                 available += 1
+                available_directions.append(test_dir)
             
             available_directions_count.append(available)
             
+            # If only one direction available, do a deeper check to see if it's a tunnel
+            if available == 1 and i < steps - 1:
+                # Check if this single available direction leads to a dead end
+                tunnel_dir = available_directions[0]
+                is_tunnel_safe = self.check_tunnel_safety(current_pos, tunnel_dir, future_obstacles, positions, game_state)
+                
+                if not is_tunnel_safe:
+                    return -500  # Severely penalize tunnels with no exit
+            
             # If no directions available, this is a trap!
-            if available == 0 and i < steps - 1:
-                return -250  # Severely penalize getting trapped
+            elif available == 0 and i < steps - 1:
+                return -600  # Extremely penalize getting trapped
                 
             # For subsequent steps, choose the direction with most options 
             # (more sophisticated than just continuing in the same direction)
@@ -464,10 +600,14 @@ class Snake:
         
         # Analyze the trend of available directions
         # If consistently decreasing, it's heading into a confined space
-        if len(available_directions_count) >= 3:
+        if len(available_directions_count) >= 2:
             if all(available_directions_count[i] > available_directions_count[i+1] 
                    for i in range(len(available_directions_count)-1)):
-                return -50  # Penalty for consistently decreasing options
+                return -150  # Increased penalty for consistently decreasing options
+            
+            # Especially penalize directions that end with very few options
+            if available_directions_count[-1] < 2:
+                return -200  # Significant penalty for ending with limited options
         
         # Calculate free space at final position with more weight
         free_neighbors = 0
@@ -482,10 +622,13 @@ class Snake:
         
         # Apply distance-based penalties (with diminishing effect)
         # The further we can go without issues, the better
-        step_completion_bonus = min(30, steps * 3)
+        step_completion_bonus = min(50, steps * 5)
             
-        # Return score based on simulated moves with increased weight for space
-        return 20 + free_neighbors * 10 + step_completion_bonus
+        # Add bonus for having multiple options at the end
+        options_bonus = available_directions_count[-1] * 20 if available_directions_count else 0
+            
+        # Return score based on simulated moves with increased weight for space and options
+        return 50 + free_neighbors * 25 + step_completion_bonus + options_bonus
     
     def choose_direction(self, foods, other_snakes_positions, power_ups, game_state):
         """Advanced AI logic to choose the next direction with improved decision making"""
@@ -776,13 +919,15 @@ class Snake:
             if manhattan_to_target == 1:
                 target_score += 1500
                 
-            # 2. Free space evaluation
+            # 2. Space evaluation - now with much higher priority for survival
             space = self.free_space(new_head, obstacles, foods, power_ups, game_state)
-            space_score = 0.5 * space  # Increased weight for space
+            space_score = Config.OPEN_SPACE_WEIGHT * space  # Significantly increased weight for space
             
-            # Extra penalty for very confined spaces
-            if space < 8:
-                space_score -= 300
+            # Much higher penalty for confined spaces to ensure exit paths
+            if space < Config.SURVIVAL_THRESHOLD:
+                space_score -= 600  # Severe penalty
+            elif space < 15:
+                space_score -= 300  # Significant penalty
             
             # 3. Danger zone avoidance
             danger_score = -250 if new_head in danger_zones else 0
@@ -867,26 +1012,82 @@ class Snake:
                 if manhattan_to_target < 3:
                     strategy_score += target_score
             
-            # Calculate total score
-            total_score = (
-                target_score + 
-                space_score + 
-                danger_score + 
-                direction_score + 
-                wall_score + 
-                strategy_score + 
-                look_ahead_score
-            )
+            # Safety check - enter survival mode if space is dangerously low
+            survival_mode = space < Config.SURVIVAL_THRESHOLD
             
-            # Add a bit of randomness to break ties and make behavior less predictable
-            total_score += random.uniform(-10, 10)
+            if survival_mode:
+                # In survival mode, prioritize space and exit routes above all else
+                total_score = (
+                    space_score * 3.0 +  # Triple importance of space
+                    look_ahead_score * 2.0 +  # Double importance of future path safety
+                    direction_score * 0.5 +  # Still prefer continuing same direction if safe
+                    danger_score * 2.0 +  # Double danger avoidance
+                    wall_score * 2.0 +  # Double wall avoidance
+                    target_score * 0.2  # Target is much less important when in danger
+                )
+            else:
+                # Normal mode - balanced scoring
+                total_score = (
+                    target_score + 
+                    space_score * 1.5 +  # Increased space importance
+                    danger_score + 
+                    direction_score + 
+                    wall_score + 
+                    strategy_score + 
+                    look_ahead_score * 1.2  # Slightly increased future safety importance
+                )
+            
+            # Add a small bit of randomness to break ties
+            total_score += random.uniform(-5, 5)
             
             candidates.append((direction, total_score))
         
-        # Choose direction with highest score
+        # Choose direction with highest score, with additional checks
         if candidates:
+            # First, check if we need to perform a special safety check
+            # If we have very few candidates, verify they don't lead to dead ends
+            if len(candidates) <= 2 and Config.TUNNEL_CHECK_ENABLED:
+                # For each candidate, do an extended safety check
+                safe_candidates = []
+                for dir_candidate, score in candidates:
+                    next_pos = (head[0] + dir_candidate.value[0], head[1] + dir_candidate.value[1])
+                    is_safe_path = self.check_tunnel_safety(head, dir_candidate, obstacles, set(self.body), game_state)
+                    if is_safe_path:
+                        safe_candidates.append((dir_candidate, score))
+                    else:
+                        # If not safe, significantly reduce the score
+                        safe_candidates.append((dir_candidate, score - 500))
+                        
+                candidates = safe_candidates
+            
+            # Sort candidates by score for better decision making
+            sorted_candidates = sorted(candidates, key=lambda x: x[1], reverse=True)
+            
+            # Choose the highest scoring direction
             self.prev_direction = self.direction
-            self.direction = max(candidates, key=lambda x: x[1])[0]
+            self.direction = sorted_candidates[0][0]
+            
+            # Additional safety measure: if highest-scoring direction has nearly the same score
+            # as the second-best but the second-best has more free space, prefer that
+            if len(sorted_candidates) > 1:
+                best_score = sorted_candidates[0][1]
+                second_score = sorted_candidates[1][1]
+                
+                # If scores are close (within 10%)
+                if second_score > 0 and best_score > 0 and (best_score - second_score) / best_score < 0.1:
+                    best_dir = sorted_candidates[0][0]
+                    second_dir = sorted_candidates[1][0]
+                    
+                    # Check free space for both
+                    best_pos = (head[0] + best_dir.value[0], head[1] + best_dir.value[1])
+                    second_pos = (head[0] + second_dir.value[0], head[1] + second_dir.value[1])
+                    
+                    best_space = self.free_space(best_pos, obstacles, foods, power_ups, game_state)
+                    second_space = self.free_space(second_pos, obstacles, foods, power_ups, game_state)
+                    
+                    # If second direction has significantly more space, choose it instead
+                    if second_space > best_space * 1.5:
+                        self.direction = second_dir
             
             # Increment consecutive moves counter if same direction
             if self.direction == self.prev_direction:
@@ -895,10 +1096,10 @@ class Snake:
                 self.consecutive_moves = 0
             
             # Avoid loops by occasionally changing direction if many consecutive moves
-            if self.consecutive_moves > 12 and random.random() < 0.4:
-                alternative_dirs = [d for d, _ in candidates if d != self.direction]
+            if self.consecutive_moves > 10 and random.random() < 0.5:  # More aggressive loop avoidance
+                alternative_dirs = [d for d, _ in sorted_candidates if d != self.direction]
                 if alternative_dirs:
-                    self.direction = random.choice(alternative_dirs)
+                    self.direction = alternative_dirs[0]  # Take the highest-scoring alternative
                     self.consecutive_moves = 0
 
 
