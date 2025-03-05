@@ -1,0 +1,18 @@
+\033[0;34mℹ️ Setting up Waypipe on client...\033[0m
+\033[0;34mℹ️ Checking sudo access...\033[0m
+\033[0;32m✅ Sudo access confirmed\033[0m
+\033[0;34mℹ️ Detecting package manager...\033[0m
+\033[0;32m✅ Detected pacman package manager (Arch Linux)\033[0m
+\033[0;34mℹ️ Checking for Wayland environment...\033[0m
+\033[0;32m✅ Wayland session detected: wayland-1\033[0m
+\033[0;34mℹ️ Updating package lists...\033[0m
+\033[0;34mℹ️ Installing Waypipe and dependencies...\033[0m
+\033[0;32m✅ Waypipe installed successfully: waypipe 0.10.3\033[0m
+\033[0;34mℹ️ Setting up SSH client config for Waypipe...\033[0m
+\033[0;32m✅ SSH client config created at /home/me/.ssh/config\033[0m
+\033[0;34mℹ️ You can now connect using: ssh waypipe-server\033[0m
+\033[0;34mℹ️ Creating helper scripts for Waypipe...\033[0m
+\033[0;32m✅ Helper scripts created in /home/me/.local/bin:\033[0m
+\033[0;32m✅ - waypipe-run: Client-side launcher\033[0m
+\033[0;32m✅ - waypipe-server-run: Server-side launcher\033[0m
+\033[0;32m✅ Client setup completed successfully!\033[0m

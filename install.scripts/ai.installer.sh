@@ -1,5 +1,5 @@
 #!/bin/bash
-# Enhanced Ollama Ecosystem Installer
+# Enhanced Ollama Ecosystem Installer with Original Style
 # This script installs Ollama, multiple UI options, and sets up DeepSeek models
 
 # Terminal colors for better readability
@@ -18,7 +18,12 @@ LOG_FILE="ollama_install_$(date +%Y%m%d_%H%M%S).log"
 fail() {
     echo -e "${RED}❌ ERROR: $1${NC}" | tee -a "$LOG_FILE"
     echo -e "${YELLOW}Check the log file for details: $LOG_FILE${NC}"
-    exit 1
+    read -p "Do you want to continue with the rest of the installation? [Y/n] " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Nn]$ ]]; then
+        echo -e "${RED}Installation aborted by user.${NC}"
+        exit 1
+    fi
 }
 
 # Log and display info message
@@ -307,6 +312,20 @@ install_ollama() {
         fi
     fi
     
+    # Wait for Ollama API to become available
+    info "Waiting for Ollama API to become responsive..."
+    for i in {1..10}; do
+        if curl -s http://localhost:11434/api/version &>/dev/null; then
+            success "Ollama API is available"
+            break
+        elif [ $i -eq 10 ]; then
+            warning "Ollama API may not be available yet. Continuing anyway..."
+        else
+            info "Waiting for Ollama API (attempt $i/10)..."
+            sleep 2
+        fi
+    done
+    
     # Clean up
     rm -f /tmp/ollama_install.sh
     
@@ -333,142 +352,6 @@ check_container() {
     return 0
 }
 
-# Install Open-WebUI
-install_open_webui() {
-    section "Installing Open WebUI"
-    
-    if ! check_container "open-webui"; then
-        success "Skipping Open WebUI installation"
-        return
-    fi
-    
-    info "Pulling Open WebUI image..."
-    $CONTAINER_CMD pull ghcr.io/open-webui/open-webui:main >> "$LOG_FILE" 2>&1 || fail "Failed to pull Open WebUI image"
-    
-    info "Creating Open WebUI container..."
-    $CONTAINER_CMD run -d \
-        --name "open-webui" \
-        --restart always \
-        -p 3000:8080 \
-        -v open-webui:/app/backend/data \
-        ghcr.io/open-webui/open-webui:main >> "$LOG_FILE" 2>&1 || fail "Failed to create Open WebUI container"
-    
-    success "Open WebUI installed successfully"
-}
-
-# Install Pinokio (Only on Arch-based systems)
-install_pinokio() {
-    section "Installing Pinokio"
-    
-    if ! is_arch; then
-        info "Not an Arch-based system. Skipping Pinokio installation."
-        return
-    fi
-    
-    if [ -z "$AUR_HELPER" ]; then
-        warning "No AUR helper found (yay or paru). Skipping Pinokio installation."
-        return
-    fi
-    
-    # Check if Pinokio is already installed
-    if command -v pinokio &>/dev/null; then
-        info "Pinokio is already installed"
-        read -p "Do you want to reinstall Pinokio? [y/N] " -n 1 -r
-        echo
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            success "Skipping Pinokio installation"
-            return
-        fi
-    fi
-    
-    info "Installing Pinokio from AUR..."
-    $AUR_HELPER -S --noconfirm pinokio-bin >> "$LOG_FILE" 2>&1 || fail "Failed to install Pinokio"
-    
-    success "Pinokio installed successfully"
-}
-
-# Install LobeHub
-install_lobehub() {
-    section "Installing LobeHub"
-    
-    if ! check_container "lobehub"; then
-        success "Skipping LobeHub installation"
-        return
-    fi
-    
-    info "Pulling LobeHub image..."
-    $CONTAINER_CMD pull ghcr.io/lobehub/lobe-chat >> "$LOG_FILE" 2>&1 || fail "Failed to pull LobeHub image"
-    
-    info "Creating LobeHub container..."
-    
-    # For Docker, use host.docker.internal to connect to the host
-    if [ "$CONTAINER_CMD" = "docker" ] || [ "$CONTAINER_CMD" = "sudo docker" ]; then
-        $CONTAINER_CMD run -d \
-            --name lobehub \
-            --restart always \
-            -p 3210:3210 \
-            -e OLLAMA_API_BASE_URL=http://host.docker.internal:11434/api \
-            ghcr.io/lobehub/lobe-chat >> "$LOG_FILE" 2>&1 || fail "Failed to create LobeHub container"
-    else
-        # For Podman, use the host IP
-        HOST_IP=$(hostname -I | awk '{print $1}')
-        $CONTAINER_CMD run -d \
-            --name lobehub \
-            --restart always \
-            -p 3210:3210 \
-            -e OLLAMA_API_BASE_URL=http://${HOST_IP}:11434/api \
-            ghcr.io/lobehub/lobe-chat >> "$LOG_FILE" 2>&1 || fail "Failed to create LobeHub container"
-    fi
-    
-    success "LobeHub installed successfully"
-}
-
-# Install Ollama Web UI
-install_ollama_gui() {
-    section "Installing Ollama Web UI"
-    
-    if ! check_container "ollama-gui"; then
-        success "Skipping Ollama Web UI installation"
-        return
-    fi
-    
-    info "Pulling Ollama Web UI image..."
-    $CONTAINER_CMD pull ollama/ollama-webui >> "$LOG_FILE" 2>&1 || fail "Failed to pull Ollama Web UI image"
-    
-    info "Creating Ollama Web UI container..."
-    $CONTAINER_CMD run -d \
-        --name ollama-gui \
-        --restart always \
-        -p 4000:8080 \
-        -v ollama-gui:/app/backend/data \
-        ollama/ollama-webui >> "$LOG_FILE" 2>&1 || fail "Failed to create Ollama Web UI container"
-    
-    success "Ollama Web UI installed successfully"
-}
-
-# Install Enchanted
-install_enchanted() {
-    section "Installing Enchanted"
-    
-    if ! check_container "enchanted"; then
-        success "Skipping Enchanted installation"
-        return
-    fi
-    
-    info "Pulling Enchanted image..."
-    $CONTAINER_CMD pull ghcr.io/enchanted-ai/enchanted >> "$LOG_FILE" 2>&1 || fail "Failed to pull Enchanted image"
-    
-    info "Creating Enchanted container..."
-    $CONTAINER_CMD run -d \
-        --name enchanted \
-        --restart always \
-        -p 9090:9090 \
-        -v enchanted:/app/data \
-        ghcr.io/enchanted-ai/enchanted >> "$LOG_FILE" 2>&1 || fail "Failed to create Enchanted container"
-    
-    success "Enchanted installed successfully"
-}
-
 # Choose DeepSeek model
 choose_deepseek_model() {
     section "DeepSeek Model Selection"
@@ -492,7 +375,7 @@ choose_deepseek_model() {
         4) MODEL="deepseek-r1:14b";;
         5) MODEL="deepseek-r1:32b";;
         6) MODEL="deepseek-r1:70b";;
-        7) MODEL="none"; info "Skipping model download";;
+        7) MODEL="none"; info "Skipping model download"; return;;
         *) warning "Invalid selection. Defaulting to 1.5B"; MODEL="deepseek-r1:1.5b";;
     esac
     
@@ -527,22 +410,35 @@ choose_deepseek_model() {
     fi
 }
 
-# Run or download DeepSeek model
-run_deepseek() {
+# Download DeepSeek model
+download_deepseek() {
     if [ "$MODEL" = "none" ]; then
-        warning "Skipping DeepSeek model download/run"
+        warning "Skipping DeepSeek model download"
         return
     fi
     
-    section "DeepSeek Model Setup"
+    section "DeepSeek Model Download"
     
     info "Checking if model $MODEL is already downloaded..."
     if ollama list 2>/dev/null | grep -q "$MODEL"; then
         info "Model $MODEL is already downloaded"
     else
         info "Downloading $MODEL model (this may take a while)..."
-        ollama pull "$MODEL" >> "$LOG_FILE" 2>&1 || fail "Failed to download $MODEL model"
+        echo -e "${YELLOW}This operation can take several minutes to complete depending on your internet speed and system performance.${NC}"
+        
+        # Start download with progress indicator
+        if ! ollama pull "$MODEL"; then
+            fail "Failed to download $MODEL model. You can try again later with: ollama pull $MODEL"
+            return 1
+        fi
         success "Model $MODEL downloaded successfully"
+    fi
+}
+
+# Run DeepSeek model
+run_deepseek() {
+    if [ "$MODEL" = "none" ]; then
+        return
     fi
     
     read -p "Do you want to run the $MODEL model now? [y/N] " -n 1 -r
@@ -556,6 +452,172 @@ run_deepseek() {
         info "Skipping model execution"
         info "You can run it later with: ollama run $MODEL"
     fi
+}
+
+# Install Open-WebUI
+install_open_webui() {
+    section "Installing Open WebUI"
+    
+    if ! check_container "open-webui"; then
+        success "Skipping Open WebUI installation"
+        return
+    fi
+    
+    info "Pulling Open WebUI image..."
+    if ! $CONTAINER_CMD pull ghcr.io/open-webui/open-webui:main >> "$LOG_FILE" 2>&1; then
+        fail "Failed to pull Open WebUI image"
+        return
+    fi
+    
+    info "Creating Open WebUI container..."
+    if ! $CONTAINER_CMD run -d \
+        --name "open-webui" \
+        --restart always \
+        -p 3000:8080 \
+        -v open-webui:/app/backend/data \
+        ghcr.io/open-webui/open-webui:main >> "$LOG_FILE" 2>&1; then
+        fail "Failed to create Open WebUI container"
+        return
+    fi
+    
+    success "Open WebUI installed successfully"
+}
+
+# Install Pinokio (Only on Arch-based systems)
+install_pinokio() {
+    section "Installing Pinokio"
+    
+    if ! is_arch; then
+        info "Not an Arch-based system. Skipping Pinokio installation."
+        return
+    fi
+    
+    if [ -z "$AUR_HELPER" ]; then
+        warning "No AUR helper found (yay or paru). Skipping Pinokio installation."
+        return
+    fi
+    
+    # Check if Pinokio is already installed
+    if command -v pinokio &>/dev/null; then
+        info "Pinokio is already installed"
+        read -p "Do you want to reinstall Pinokio? [y/N] " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            success "Skipping Pinokio installation"
+            return
+        fi
+    fi
+    
+    info "Installing Pinokio from AUR..."
+    if ! $AUR_HELPER -S --noconfirm pinokio-bin >> "$LOG_FILE" 2>&1; then
+        fail "Failed to install Pinokio"
+        return
+    fi
+    
+    success "Pinokio installed successfully"
+}
+
+# Install LobeHub
+install_lobehub() {
+    section "Installing LobeHub"
+    
+    if ! check_container "lobehub"; then
+        success "Skipping LobeHub installation"
+        return
+    fi
+    
+    info "Pulling LobeHub image..."
+    if ! $CONTAINER_CMD pull ghcr.io/lobehub/lobe-chat >> "$LOG_FILE" 2>&1; then
+        fail "Failed to pull LobeHub image"
+        return
+    fi
+    
+    info "Creating LobeHub container..."
+    
+    # For Docker, use host.docker.internal to connect to the host
+    if [ "$CONTAINER_CMD" = "docker" ] || [ "$CONTAINER_CMD" = "sudo docker" ]; then
+        if ! $CONTAINER_CMD run -d \
+            --name lobehub \
+            --restart always \
+            -p 3210:3210 \
+            -e OLLAMA_API_BASE_URL=http://host.docker.internal:11434/api \
+            ghcr.io/lobehub/lobe-chat >> "$LOG_FILE" 2>&1; then
+            fail "Failed to create LobeHub container"
+            return
+        fi
+    else
+        # For Podman, use the host IP
+        HOST_IP=$(hostname -I | awk '{print $1}')
+        if ! $CONTAINER_CMD run -d \
+            --name lobehub \
+            --restart always \
+            -p 3210:3210 \
+            -e OLLAMA_API_BASE_URL=http://${HOST_IP}:11434/api \
+            ghcr.io/lobehub/lobe-chat >> "$LOG_FILE" 2>&1; then
+            fail "Failed to create LobeHub container"
+            return
+        fi
+    fi
+    
+    success "LobeHub installed successfully"
+}
+
+# Install Ollama Web UI
+install_ollama_gui() {
+    section "Installing Ollama Web UI"
+    
+    if ! check_container "ollama-gui"; then
+        success "Skipping Ollama Web UI installation"
+        return
+    fi
+    
+    info "Pulling Ollama Web UI image..."
+    if ! $CONTAINER_CMD pull ollama/ollama-webui >> "$LOG_FILE" 2>&1; then
+        fail "Failed to pull Ollama Web UI image"
+        return
+    fi
+    
+    info "Creating Ollama Web UI container..."
+    if ! $CONTAINER_CMD run -d \
+        --name ollama-gui \
+        --restart always \
+        -p 4000:8080 \
+        -v ollama-gui:/app/backend/data \
+        ollama/ollama-webui >> "$LOG_FILE" 2>&1; then
+        fail "Failed to create Ollama Web UI container"
+        return
+    fi
+    
+    success "Ollama Web UI installed successfully"
+}
+
+# Install Enchanted
+install_enchanted() {
+    section "Installing Enchanted"
+    
+    if ! check_container "enchanted"; then
+        success "Skipping Enchanted installation"
+        return
+    fi
+    
+    info "Pulling Enchanted image..."
+    if ! $CONTAINER_CMD pull ghcr.io/enchanted-ai/enchanted >> "$LOG_FILE" 2>&1; then
+        fail "Failed to pull Enchanted image"
+        return
+    fi
+    
+    info "Creating Enchanted container..."
+    if ! $CONTAINER_CMD run -d \
+        --name enchanted \
+        --restart always \
+        -p 9090:9090 \
+        -v enchanted:/app/data \
+        ghcr.io/enchanted-ai/enchanted >> "$LOG_FILE" 2>&1; then
+        fail "Failed to create Enchanted container"
+        return
+    fi
+    
+    success "Enchanted installed successfully"
 }
 
 # System information
@@ -593,7 +655,7 @@ show_service_info() {
     # Check which UIs were installed
     echo -e "${BOLD}Access your AI tools at:${NC}"
     
-    if $CONTAINER_CMD container inspect "open-webui" &>/dev/null; then
+    if $CONTAINER_CMD container inspect "open-webui" &>/dev/null 2>&1; then
         echo -e "🔗 Open-WebUI → ${CYAN}http://localhost:3000${NC}"
     fi
     
@@ -601,15 +663,15 @@ show_service_info() {
         echo -e "🔗 Pinokio → Run ${CYAN}pinokio${NC} in terminal"
     fi
     
-    if $CONTAINER_CMD container inspect "ollama-gui" &>/dev/null; then
+    if $CONTAINER_CMD container inspect "ollama-gui" &>/dev/null 2>&1; then
         echo -e "🔗 Ollama Web UI → ${CYAN}http://localhost:4000${NC}"
     fi
     
-    if $CONTAINER_CMD container inspect "lobehub" &>/dev/null; then
+    if $CONTAINER_CMD container inspect "lobehub" &>/dev/null 2>&1; then
         echo -e "🔗 LobeHub → ${CYAN}http://localhost:3210${NC}"
     fi
     
-    if $CONTAINER_CMD container inspect "enchanted" &>/dev/null; then
+    if $CONTAINER_CMD container inspect "enchanted" &>/dev/null 2>&1; then
         echo -e "🔗 Enchanted → ${CYAN}http://localhost:9090${NC}"
     fi
     
@@ -619,6 +681,69 @@ show_service_info() {
     
     echo -e "\n${BOLD}${GREEN}Installation complete! Enjoy your AI tools!${NC}"
     echo -e "Installation log saved to: ${CYAN}$LOG_FILE${NC}"
+}
+
+# Connection Instructions 
+show_connection_instructions() {
+    section "Connection Instructions"
+    
+    echo -e "${BOLD}${CYAN}How to use your installed components:${NC}\n"
+    
+    # Ollama instructions
+    echo -e "${BOLD}Ollama:${NC}"
+    echo -e "  • Command line: ${CYAN}ollama run $MODEL${NC}"
+    echo -e "  • Start/stop service: ${CYAN}sudo systemctl start/stop ollama.service${NC}"
+    echo -e "  • Check status: ${CYAN}systemctl status ollama.service${NC}\n"
+    
+    # Open WebUI instructions
+    if $CONTAINER_CMD container inspect "open-webui" &>/dev/null 2>&1; then
+        echo -e "${BOLD}Open WebUI:${NC}"
+        echo -e "  • Access: ${CYAN}http://localhost:3000${NC}"
+        echo -e "  • Default credentials: Create on first login"
+        echo -e "  • Start/stop: ${CYAN}$CONTAINER_CMD start/stop open-webui${NC}"
+        echo -e "  • Logs: ${CYAN}$CONTAINER_CMD logs open-webui${NC}\n"
+    fi
+    
+    # Pinokio instructions
+    if is_arch && command -v pinokio &>/dev/null; then
+        echo -e "${BOLD}Pinokio:${NC}"
+        echo -e "  • Launch: Run ${CYAN}pinokio${NC} in terminal or through application menu"
+        echo -e "  • Configuration: Select Ollama in settings, configure URL as ${CYAN}http://localhost:11434${NC}\n"
+    fi
+    
+    # Ollama Web UI instructions
+    if $CONTAINER_CMD container inspect "ollama-gui" &>/dev/null 2>&1; then
+        echo -e "${BOLD}Ollama Web UI:${NC}"
+        echo -e "  • Access: ${CYAN}http://localhost:4000${NC}"
+        echo -e "  • Default credentials: Create on first login"
+        echo -e "  • Start/stop: ${CYAN}$CONTAINER_CMD start/stop ollama-gui${NC}"
+        echo -e "  • Logs: ${CYAN}$CONTAINER_CMD logs ollama-gui${NC}\n"
+    fi
+    
+    # LobeHub instructions
+    if $CONTAINER_CMD container inspect "lobehub" &>/dev/null 2>&1; then
+        echo -e "${BOLD}LobeHub:${NC}"
+        echo -e "  • Access: ${CYAN}http://localhost:3210${NC}"
+        echo -e "  • Configuration: Go to Settings > Select Ollama provider"
+        echo -e "  • API URL: ${CYAN}http://localhost:11434/api${NC} or ${CYAN}http://host.docker.internal:11434/api${NC}"
+        echo -e "  • Start/stop: ${CYAN}$CONTAINER_CMD start/stop lobehub${NC}"
+        echo -e "  • Logs: ${CYAN}$CONTAINER_CMD logs lobehub${NC}\n"
+    fi
+    
+    # Enchanted instructions
+    if $CONTAINER_CMD container inspect "enchanted" &>/dev/null 2>&1; then
+        echo -e "${BOLD}Enchanted:${NC}"
+        echo -e "  • Access: ${CYAN}http://localhost:9090${NC}"
+        echo -e "  • Configuration: Settings > LLM Settings > Select Ollama"
+        echo -e "  • API URL: ${CYAN}http://localhost:11434${NC}"
+        echo -e "  • Start/stop: ${CYAN}$CONTAINER_CMD start/stop enchanted${NC}"
+        echo -e "  • Logs: ${CYAN}$CONTAINER_CMD logs enchanted${NC}\n"
+    fi
+    
+    echo -e "${BOLD}Troubleshooting:${NC}"
+    echo -e "  • If UIs can't connect to Ollama, check if the Ollama service is running"
+    echo -e "  • Restart Ollama with: ${CYAN}sudo systemctl restart ollama.service${NC}"
+    echo -e "  • Check container logs for issues: ${CYAN}$CONTAINER_CMD logs [container-name]${NC}"
 }
 
 # Main function
@@ -645,16 +770,24 @@ main() {
     install_dependencies
     detect_container_runtime
     install_ollama
+    
+    # Download model first, before any UI components
+    choose_deepseek_model
+    download_deepseek
+    
+    # Install UI components
     install_open_webui
     install_pinokio
     install_lobehub
     install_ollama_gui
     install_enchanted
-    choose_deepseek_model
-    run_deepseek
     
-    # Show final information
+    # Show final information and connection instructions
     show_service_info
+    show_connection_instructions
+    
+    # Run model if user wants to
+    run_deepseek
 }
 
 # Run main function

@@ -1,0 +1,16 @@
+\033[0;34m🔄 Starting installation process...\033[0m
+\033[0;34m🔄 Checking internet connectivity...\033[0m
+\033[0;32m✅ Internet connection verified (connected to github.com)\033[0m
+\033[0;34m🔄 Detecting package manager...\033[0m
+\033[0;32m✅ Detected pacman package manager (Arch Linux)\033[0m
+\033[0;34m🔄 Checking sudo access...\033[0m
+\033[0;32m✅ Sudo access confirmed\033[0m
+\033[0;34m🔄 Installing system dependencies...\033[0m
+\033[0;32m✅ System dependencies installed\033[0m
+\033[0;34m🔄 Detecting container runtime...\033[0m
+\033[0;33m⚠️ Using Docker with sudo. Consider adding your user to the docker group:\033[0m
+\033[0;33m⚠️ sudo usermod -aG docker me && newgrp docker\033[0m
+\033[0;32m✅ Using Docker as container runtime\033[0m
+\033[0;34m🔄 Installing Ollama...\033[0m
+\033[0;34m🔄 Ollama is already installed. Checking version...\033[0m
+\033[0;34m🔄 Current Ollama version: version\033[0m
