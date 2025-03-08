@@ -21,12 +21,12 @@ check_sudo() {
         echo -e "${YELLOW}Warning: Running as root directly. It's recommended to run as a normal user with sudo.${NC}"
         return
     fi
-    
+
     if ! command -v sudo &>/dev/null; then
         echo -e "${RED}Error: sudo is not installed but is required.${NC}"
         exit 1
     fi
-    
+
     # Check if user has sudo privileges
     if ! sudo -v &>/dev/null; then
         echo -e "${RED}Error: Current user does not have sudo privileges.${NC}"
@@ -37,55 +37,55 @@ check_sudo() {
 # Function to detect package manager and set up environment
 detect_package_manager() {
     echo -e "${BLUE}Detecting package manager...${NC}"
-    
+
     if command -v apt &>/dev/null; then
         PKG_MANAGER="apt"
         PKG_CHECK="dpkg -l"
         PKG_INSTALL="sudo apt install -y"
         PKG_UPDATE="sudo apt update"
         echo -e "${GREEN}Detected apt package manager (Debian/Ubuntu)${NC}"
-        
+
         # Check if apt cache is updated recently (within 24 hours)
         if [ ! -f "/var/cache/apt/pkgcache.bin" ] || [ "$(find /var/cache/apt/pkgcache.bin -mtime +1)" ]; then
             echo -e "${BLUE}Updating apt package cache...${NC}"
             $PKG_UPDATE
         fi
-        
+
     elif command -v dnf &>/dev/null; then
         PKG_MANAGER="dnf"
         PKG_CHECK="rpm -q"
         PKG_INSTALL="sudo dnf install -y"
         PKG_UPDATE="sudo dnf check-update || true"  # The `|| true` prevents failure on exit code 100
         echo -e "${GREEN}Detected dnf package manager (Fedora/RHEL)${NC}"
-        
+
     elif command -v yum &>/dev/null; then
         PKG_MANAGER="yum"
         PKG_CHECK="rpm -q"
         PKG_INSTALL="sudo yum install -y"
         PKG_UPDATE="sudo yum check-update || true"
         echo -e "${GREEN}Detected yum package manager (RHEL/CentOS)${NC}"
-        
+
     elif command -v pacman &>/dev/null; then
         PKG_MANAGER="pacman"
         PKG_CHECK="pacman -Qs"
         PKG_INSTALL="sudo pacman -S --needed --noconfirm"
         PKG_UPDATE="sudo pacman -Sy"
         echo -e "${GREEN}Detected pacman package manager (Arch Linux)${NC}"
-        
+
     elif command -v zypper &>/dev/null; then
         PKG_MANAGER="zypper"
         PKG_CHECK="rpm -q"
         PKG_INSTALL="sudo zypper install -y"
         PKG_UPDATE="sudo zypper refresh"
         echo -e "${GREEN}Detected zypper package manager (openSUSE)${NC}"
-        
+
     elif command -v apk &>/dev/null; then
         PKG_MANAGER="apk"
         PKG_CHECK="apk info -e"
         PKG_INSTALL="sudo apk add"
         PKG_UPDATE="sudo apk update"
         echo -e "${GREEN}Detected apk package manager (Alpine Linux)${NC}"
-        
+
     else
         echo -e "${RED}Error: No supported package manager found${NC}"
         echo -e "${YELLOW}This script supports apt, dnf, yum, pacman, zypper, and apk.${NC}"
@@ -96,7 +96,7 @@ detect_package_manager() {
 # Function to check if a package is installed
 is_package_installed() {
     local package=$1
-    
+
     # Special cases for certain packages
     case $package in
         "rust")
@@ -152,23 +152,23 @@ display_header() {
     echo -e "${BOLD}${CYAN}           Development Tools Installer               ${NC}"
     echo -e "${BOLD}${BLUE}=====================================================${NC}"
     echo
-    
+
     # Display system information
     echo -e "${BOLD}System Information:${NC}"
     echo -e "${BLUE}OS:${NC} $(grep PRETTY_NAME /etc/os-release | cut -d '"' -f 2)"
     echo -e "${BLUE}Kernel:${NC} $(uname -r)"
     echo -e "${BLUE}Architecture:${NC} $(uname -m)"
-    
+
     # Show available memory
     mem_total=$(free -h | awk '/^Mem:/{print $2}')
     mem_avail=$(free -h | awk '/^Mem:/{print $7}')
     echo -e "${BLUE}Memory:${NC} ${mem_avail} available / ${mem_total} total"
-    
+
     # Show available disk space
     disk_avail=$(df -h . | awk 'NR==2 {print $4}')
     disk_total=$(df -h . | awk 'NR==2 {print $2}')
     echo -e "${BLUE}Disk Space:${NC} ${disk_avail} available / ${disk_total} total"
-    
+
     echo
 }
 
@@ -205,10 +205,10 @@ install_tool() {
     local disadvantages=$(echo "$tool" | cut -d: -f4)
     local category=$(echo "$tool" | cut -d: -f5)
     local pkg_name=$(echo "$tool" | cut -d: -f6 | sed 's/|/ /g')
-    
+
     clear
     display_description "Installing $name" "$description" "$advantages" "$disadvantages"
-    
+
     # Special case for Rust installation
     if [ "$name" = "rust" ] && ! is_package_installed "rust"; then
         echo -e "${YELLOW}Rust requires special installation...${NC}"
@@ -224,7 +224,7 @@ install_tool() {
         echo -e "\n${GREEN}Rust installed successfully.${NC}"
         return 0
     fi
-    
+
     # Special case for Nix installation
     if [ "$name" = "nix" ] && ! is_package_installed "nix"; then
         echo -e "${YELLOW}Nix requires special installation...${NC}"
@@ -232,7 +232,7 @@ install_tool() {
         echo -e "\n${GREEN}Nix installed successfully.${NC}"
         return 0
     fi
-    
+
     # Normal package installation
     if is_package_installed "$name"; then
         echo -e "${GREEN}$name is already installed.${NC}"
@@ -267,25 +267,25 @@ tools=(
     "clang:Clang/LLVM Compiler for C, C++, and more:- Fast and modular.\n- Good diagnostics and error messages.:- Less mature than GCC in some areas.:compilers:clang"
     "rust:Rust programming language and compiler:- Safe memory management.\n- Modern features.:- Newer, with less library support than C++.:compilers:rust"
     "go:Golang programming language and compiler:- Fast compile times.\n- Excellent concurrency support.:- Somewhat limited language features.:compilers:golang"
-    
+
     # Build Systems
     "cmake:Cross-platform build system generator:- Versatile and widely supported.:- Complex syntax.:build:cmake"
     "meson:Modern build system designed for speed:- Simple to use.\n- Fast.:- Newer, with smaller community.:build:meson"
     "make:Build automation tool:- Ubiquitous and powerful.:- Can be complex for large projects.:build:make"
     "ninja:Fast, small build system:- Very fast.\n- Simple configuration.:- Less feature-rich than Make.:build:ninja"
-    
+
     # Scripting Languages
     "python:Python programming language interpreter:- Versatile and widely used.\n- Extensive libraries.:- Slower execution compared to compiled languages.:scripting:python3|python3-pip"
     "node:Node.js JavaScript runtime:- Vast ecosystem.\n- Great for web development.:- Package management can be complex.:scripting:nodejs|npm"
     "ruby:Ruby programming language interpreter:- Elegant syntax.\n- Good for web applications.:- Slower than some alternatives.:scripting:ruby"
-    
+
     # Version Control
     "git:Distributed version control system:- Essential for version control.\n- Strong community support.:- Requires command-line knowledge.:version_control:git"
     "mercurial:Alternative distributed version control system:- User-friendly.\n- Good performance.:- Less popular than Git.:version_control:mercurial"
-    
+
     # Package Managers
     "nix:Powerful package manager for reproducible builds:- Reproducibility.\n- Multi-user environment support.:- Requires learning Nix syntax.:package_managers:nix"
-    
+
     # Development Utilities
     "gdb:GNU Project Debugger:- Powerful debugging capabilities.\n- Works with multiple languages.:- Steep learning curve.:debuggers:gdb"
     "valgrind:Memory debugging, memory leak detection tool:- Excellent for memory analysis.\n- Wide language support.:- Slows execution considerably.:debuggers:valgrind"
@@ -300,7 +300,7 @@ install_category() {
     local category_name=${tool_categories[$category]}
     local category_tools=()
     local total_tools=0
-    
+
     # Find tools in this category
     for tool in "${tools[@]}"; do
         if [[ "$tool" == *":$category:"* ]]; then
@@ -308,17 +308,17 @@ install_category() {
             ((total_tools++))
         fi
     done
-    
+
     if [ $total_tools -eq 0 ]; then
         echo -e "${YELLOW}No tools found in category: $category_name${NC}"
         sleep 2
         return
     fi
-    
+
     echo -e "${BLUE}Installing tools in category: ${BOLD}$category_name${NC}"
     echo -e "${YELLOW}Found $total_tools tools in this category${NC}"
     sleep 1
-    
+
     local current=0
     # Install each tool in the category
     for tool in "${category_tools[@]}"; do
@@ -332,21 +332,32 @@ install_category() {
             ((current++))
         fi
     done
-    
+
     echo -e "\n${GREEN}Completed installing tools in category: $category_name${NC}"
-    sleep 2
+    echo -e "Press any key to return to the main menu..."
+    read -n 1
 }
 
 # Function to display the category menu
 display_category_menu() {
     clear
     display_header
-    
+
     echo -e "${BOLD}${CYAN}Select a category to install:${NC}"
     echo
-    
-    local i=1
+
+    # Debug: Print categories to ensure they exist
+    echo -e "${BLUE}Available categories:${NC}"
+
+    # Sort the category keys to ensure consistent ordering
+    local sorted_categories=()
     for category in "${!tool_categories[@]}"; do
+        sorted_categories+=("$category")
+    done
+
+    # Display each category with its index
+    local i=1
+    for category in "${sorted_categories[@]}"; do
         # Count tools in this category
         local count=0
         for tool in "${tools[@]}"; do
@@ -354,12 +365,12 @@ display_category_menu() {
                 ((count++))
             fi
         done
-        
+
         echo -e "${MAGENTA}$i)${NC} ${BOLD}${tool_categories[$category]}${NC} (${YELLOW}$count tools${NC})"
         category_list[$i]=$category
         ((i++))
     done
-    
+
     echo -e "${MAGENTA}a)${NC} ${BOLD}Install all tools${NC} (${YELLOW}${#tools[@]} tools${NC})"
     echo -e "${MAGENTA}q)${NC} ${BOLD}Quit${NC}"
     echo
@@ -369,12 +380,12 @@ display_category_menu() {
 install_all() {
     local total=${#tools[@]}
     local current=0
-    
+
     clear
     display_header
     echo -e "${BLUE}Installing all development tools (${YELLOW}$total tools${NC})...${NC}"
     sleep 1
-    
+
     for tool in "${tools[@]}"; do
         if install_tool "$tool"; then
             ((current++))
@@ -386,50 +397,86 @@ install_all() {
             ((current++))
         fi
     done
-    
+
     echo -e "\n${GREEN}All development tools installed.${NC}"
-    sleep 2
+    echo -e "Press any key to return to the main menu..."
+    read -n 1
 }
 
 # Main function
 main() {
     # Check if running with sudo
     check_sudo
-    
+
     # Detect package manager
     detect_package_manager
-    
-    # Initialize category list
-    declare -A category_list
-    
-    # Main menu loop
-    while true; do
-        display_category_menu
-        echo -n -e "${CYAN}Select an option (1-$(( ${#category_list[@]} )) or a/q): ${NC}"
-        read -r choice
-        
-        case $choice in
-            [0-9]*)
-                if [ -n "${category_list[$choice]}" ]; then
-                    install_category "${category_list[$choice]}"
-                else
-                    echo -e "${RED}Invalid choice. Press any key to continue...${NC}"
-                    read -n 1
-                fi
-                ;;
-            a|A)
-                install_all
-                ;;
-            q|Q)
-                echo -e "${GREEN}Exiting. Thanks for using the Development Tools Installer!${NC}"
-                exit 0
-                ;;
-            *)
+
+    # Create a simple, direct menu
+    clear
+    display_header
+
+    echo -e "${BOLD}${CYAN}Development Tools Categories:${NC}"
+    echo
+
+    # Create a simple indexed array for categories
+    categories=("compilers" "build" "scripting" "version_control" "package_managers" "editors" "debuggers" "utilities")
+    category_names=("Compilers and Programming Languages" "Build Systems and Tools" "Scripting and Interpreted Languages"
+                    "Version Control Systems" "Package Managers" "Code Editors and IDEs"
+                    "Debugging and Profiling Tools" "Development Utilities")
+
+    # Display the simple menu
+    for i in "${!categories[@]}"; do
+        # Count tools in this category
+        local count=0
+        for tool in "${tools[@]}"; do
+            if [[ "$tool" == *":${categories[$i]}:"* ]]; then
+                ((count++))
+            fi
+        done
+
+        echo -e "${MAGENTA}$((i+1)))${NC} ${BOLD}${category_names[$i]}${NC} (${YELLOW}$count tools${NC})"
+    done
+
+    echo -e "${MAGENTA}a)${NC} ${BOLD}Install all tools${NC} (${YELLOW}${#tools[@]} tools${NC})"
+    echo -e "${MAGENTA}q)${NC} ${BOLD}Quit${NC}"
+    echo
+
+    # Get user choice
+    echo -n -e "${CYAN}Select an option (1-${#categories[@]} or a/q): ${NC}"
+    read -r choice
+
+    case $choice in
+        [0-9]*)
+            # Convert to zero-based index and check if valid
+            local index=$((choice-1))
+            if [ "$index" -ge 0 ] && [ "$index" -lt "${#categories[@]}" ]; then
+                install_category "${categories[$index]}"
+                # After installation, restart the script
+                exec "$0"
+            else
                 echo -e "${RED}Invalid choice. Press any key to continue...${NC}"
                 read -n 1
-                ;;
-        esac
-    done
+                # Restart the script
+                exec "$0"
+            fi
+            ;;
+        a|A)
+            install_all
+            # After installation, restart the script
+            exec "$0"
+            ;;
+        q|Q)
+            clear
+            echo -e "${GREEN}Exiting. Thanks for using the Development Tools Installer!${NC}"
+            exit 0
+            ;;
+        *)
+            echo -e "${RED}Invalid choice. Press any key to continue...${NC}"
+            read -n 1
+            # Restart the script
+            exec "$0"
+            ;;
+    esac
 }
 
 # Run the main function
