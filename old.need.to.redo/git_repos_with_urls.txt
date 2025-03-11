@@ -1,0 +1,11 @@
+/home/me/git/ChatGPT-AutoExpert - https://github.com/spdustin/ChatGPT-AutoExpert
+/home/me/git/telescope.nvim - https://github.com/nvim-telescope/telescope.nvim
+/home/me/git/fd - https://github.com/sharkdp/fd
+/home/me/git/conf - http://github.com/comShadowHarvy/conf
+/home/me/git/starter - https://github.com/NvChad/starter
+/home/me/git/nvim-web-devicons - https://github.com/nvim-tree/nvim-web-devicons
+/home/me/git/betterstrap - http://github.com/comShadowHarvy/betterstrap
+/home/me/git/AutoGPT - https://github.com/Significant-Gravitas/AutoGPT
+/home/me/git/plenary.nvim - https://github.com/nvim-lua/plenary.nvim
+/home/me/git/spotify-cli-linux - https://github.com/pwittchen/spotify-cli-linux
+/home/me/git/nvim-treesitter - https://github.com/nvim-treesitter/nvim-treesitter
