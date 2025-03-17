@@ -25,18 +25,17 @@ class Config:
     FOOD_POINTS = 1
     BONUS_FOOD_POINTS = 3
     TEMP_FOOD_POINTS = 1
-    MIN_FOOD_COUNT = 10  # Increased minimum food count for more snakes
+    MIN_FOOD_COUNT = 8  # Even more food to reduce competition
     
     # Snake settings
     INITIAL_SIZE = 3
-    MAX_SNAKES = 20  # Support for up to 20 snakes
     
     # Board settings
-    MIN_WIDTH = 60  # Increased minimum width for more snakes
-    MIN_HEIGHT = 25  # Increased minimum height for more snakes
+    MIN_WIDTH = 40
+    MIN_HEIGHT = 15
     
     # Power-up settings
-    POWER_UP_CHANCE = 0.02  # Increased power-up chance for more snakes
+    POWER_UP_CHANCE = 0.01  # More power-ups
     POWER_UP_DURATION = 20  # Seconds
     
     # Other settings
@@ -49,10 +48,6 @@ class Config:
     OPEN_SPACE_WEIGHT = 3.0  # How much to value open space
     SURVIVAL_THRESHOLD = 10  # Space threshold below which snake focuses on survival
     TUNNEL_CHECK_ENABLED = True  # Check tunnels for safety
-    
-    # Performance optimization settings
-    OPTIMIZE_FOR_LARGE_GAMES = True  # Enable performance optimizations for large games
-    LARGE_GAME_THRESHOLD = 12  # Number of snakes that trigger large game optimizations
 
 
 # =============================================================================
@@ -166,8 +161,6 @@ class AIStrategy(Enum):
     OPPORTUNISTIC = 3  # Balanced approach
     DEFENSIVE = 4   # Avoids other snakes
     HUNTER = 5      # Targets other snake heads
-    SCAVENGER = 6   # Prefers dropped food from dead snakes
-    TERRITORIAL = 7 # Controls and defends a specific area
 
 
 # =============================================================================
@@ -192,7 +185,6 @@ class Snake:
         self.last_ai_update = 0
         self.power_ups = {}  # Dict of active power-ups with end times
         self.consecutive_moves = 0  # Count of moves in same direction
-        self.territory_center = None  # For territorial strategy
     
     def next_head(self, new_dir=None):
         """Calculate the position of the next head"""
@@ -320,7 +312,7 @@ class Snake:
             return 0  # No free space if it's on a boundary
         
         # Use a faster, less comprehensive calculation for large games
-        if Config.OPTIMIZE_FOR_LARGE_GAMES and len(game_state.snakes) >= Config.LARGE_GAME_THRESHOLD:
+        if len(game_state.snakes) >= 8:
             # Check immediate and diagonal neighbors for large games
             free_neighbors = 0
             exit_paths = 0
@@ -660,15 +652,6 @@ class Snake:
         food_targets = []
         power_up_targets = []
         
-        # For Scavenger strategy, prioritize dropped food
-        dropped_food_bonus = 0
-        if self.strategy == AIStrategy.SCAVENGER:
-            dropped_food_bonus = 300
-            
-        # For Territorial strategy, establish a territory if none exists
-        if self.strategy == AIStrategy.TERRITORIAL and not self.territory_center:
-            self.territory_center = (self.body[0][0], self.body[0][1])
-        
         # Evaluate each food item
         for food in foods:
             food_pos = food.position
@@ -712,14 +695,7 @@ class Snake:
                 if food.type == FoodType.BONUS:
                     type_bonus = 200
                 elif food.type == FoodType.DROPPED:
-                    type_bonus = 50 + dropped_food_bonus  # Extra bonus for Scavenger strategy
-            
-            # Territorial strategy bonus/penalty based on distance from territory center
-            territorial_factor = 0
-            if self.strategy == AIStrategy.TERRITORIAL and self.territory_center:
-                dist_to_territory = abs(food_pos[0] - self.territory_center[0]) + abs(food_pos[1] - self.territory_center[1])
-                # Prefer food close to territory, penalty for food far away
-                territorial_factor = 200 - dist_to_territory * 10
+                    type_bonus = 50
             
             # Check if food is in a danger zone
             danger_penalty = 200 if food_pos in danger_zones else 0
@@ -727,7 +703,7 @@ class Snake:
             # Calculate final score for this food
             # Closer food is better, clear path is better, 
             # special food is better, but avoid dangerous areas
-            food_score = (1000 / (dist + 1)) + path_score + type_bonus - danger_penalty + territorial_factor
+            food_score = (1000 / (dist + 1)) + path_score + type_bonus - danger_penalty
             
             food_targets.append((food_pos, food_score, dist))
         
@@ -758,14 +734,8 @@ class Snake:
             # Check if power-up is in a danger zone
             danger_penalty = 150 if power_up_pos in danger_zones else 0
             
-            # Territorial strategy adjustment
-            territorial_factor = 0
-            if self.strategy == AIStrategy.TERRITORIAL and self.territory_center:
-                dist_to_territory = abs(power_up_pos[0] - self.territory_center[0]) + abs(power_up_pos[1] - self.territory_center[1])
-                territorial_factor = 150 - dist_to_territory * 8
-            
             # Calculate score
-            power_up_score = (800 / (dist + 1)) + type_value - danger_penalty + territorial_factor
+            power_up_score = (800 / (dist + 1)) + type_value - danger_penalty
             
             # If already have this power-up, less valuable
             if power_up.type in self.power_ups:
@@ -813,7 +783,7 @@ class Snake:
             return
         
         # Simple algorithm for many snakes to improve performance
-        if Config.OPTIMIZE_FOR_LARGE_GAMES and len(game_state.snakes) >= Config.LARGE_GAME_THRESHOLD:
+        if len(game_state.snakes) >= 6:
             # First priority: avoid immediate collisions
             next_pos = self.next_head()
             if not self.is_safe(next_pos, obstacles, game_state) or next_pos in danger_zones:
@@ -1041,33 +1011,6 @@ class Snake:
                 # Don't forget food when it's very close
                 if manhattan_to_target < 3:
                     strategy_score += target_score
-                    
-            elif temp_strategy == AIStrategy.SCAVENGER:
-                # Scavenger: Prioritize dropped food and safety over aggression
-                is_dropped_target = any(f.position == target and f.type == FoodType.DROPPED for f in foods)
-                dropped_bonus = 600 if is_dropped_target else 0
-                
-                strategy_score = target_score * 1.2 + space_score * 1.5 + dropped_bonus - danger_score * 1.2
-                # Extra cautious when no dropped food is targeted
-                if not is_dropped_target:
-                    strategy_score += look_ahead_score * 1.5
-                    
-            elif temp_strategy == AIStrategy.TERRITORIAL:
-                # Territorial: Prefer staying in a specific area
-                if self.territory_center:
-                    territory_dist = abs(new_head[0] - self.territory_center[0]) + abs(new_head[1] - self.territory_center[1])
-                    # Higher score for staying close to territory center
-                    territory_score = 300 - territory_dist * 15
-                    
-                    # But don't ignore food or space
-                    strategy_score = target_score * 0.8 + space_score * 1.2 + territory_score
-                    
-                    # If far from territory, prioritize getting back
-                    if territory_dist > 10:
-                        strategy_score += territory_score * 2
-                else:
-                    # No territory yet, behave opportunistically until established
-                    strategy_score = target_score + space_score * 1.5
             
             # Safety check - enter survival mode if space is dangerously low
             survival_mode = space < Config.SURVIVAL_THRESHOLD
@@ -1170,7 +1113,7 @@ class GameState:
     def __init__(self, width, height, num_snakes, human_player=False):
         self.width = width
         self.height = height
-        self.num_snakes = min(num_snakes, Config.MAX_SNAKES)  # Respect max snakes setting
+        self.num_snakes = num_snakes
         self.human_player = human_player
         self.snakes = []
         self.foods = []
@@ -1226,72 +1169,35 @@ class GameState:
                 strategies.append(random.choice(ai_strategies))
             random.shuffle(strategies)
         
-        # Calculate optimal positions for many snakes
-        # Use a quadrant-based approach for up to 20 snakes
+        # Create AI snakes in two columns with better distribution
+        num_per_column = (ai_snakes + 1) // 2
+        left_x = 5
+        right_x = self.width - 6
         
-        # Determine how many snakes to place per quadrant
-        snakes_per_quadrant = max(1, ai_snakes // 4)
-        remainder = ai_snakes % 4
+        # Calculate spacing to distribute snakes more evenly
+        spacing = (self.height - 10) // max(1, num_per_column - 1) if num_per_column > 1 else 0
         
-        quadrants = [
-            {'x_range': (self.width // 4, self.width // 2 - 5), 'y_range': (self.height // 4, self.height // 2 - 5), 'count': snakes_per_quadrant + (1 if remainder > 0 else 0)},
-            {'x_range': (self.width // 2 + 5, 3 * self.width // 4), 'y_range': (self.height // 4, self.height // 2 - 5), 'count': snakes_per_quadrant + (1 if remainder > 1 else 0)},
-            {'x_range': (self.width // 4, self.width // 2 - 5), 'y_range': (self.height // 2 + 5, 3 * self.height // 4), 'count': snakes_per_quadrant + (1 if remainder > 2 else 0)},
-            {'x_range': (self.width // 2 + 5, 3 * self.width // 4), 'y_range': (self.height // 2 + 5, 3 * self.height // 4), 'count': snakes_per_quadrant},
-        ]
-        
-        snake_idx = 0
-        
-        # Place snakes in each quadrant
-        for q, quadrant in enumerate(quadrants):
-            for i in range(quadrant['count']):
-                if snake_idx >= ai_snakes:
-                    break
-                    
-                # Calculate position within quadrant
-                x_min, x_max = quadrant['x_range']
-                y_min, y_max = quadrant['y_range']
-                
-                # Distribute snakes evenly within quadrant
-                x_pos = x_min + (i * (x_max - x_min)) // max(1, quadrant['count'])
-                y_pos = y_min + (i * (y_max - y_min)) // max(1, quadrant['count'])
-                
-                # Add some randomness to prevent collisions
-                x_pos += random.randint(-3, 3)
-                y_pos += random.randint(-3, 3)
-                
-                # Ensure position is within board boundaries
-                x_pos = max(5, min(self.width - 6, x_pos))
-                y_pos = max(5, min(self.height - 6, y_pos))
-                
-                # Determine direction based on quadrant
-                if q == 0:
-                    direction = Direction.RIGHT
-                    snake_body = [(x_pos, y_pos), (x_pos-1, y_pos), (x_pos-2, y_pos)]
-                elif q == 1:
-                    direction = Direction.LEFT
-                    snake_body = [(x_pos, y_pos), (x_pos+1, y_pos), (x_pos+2, y_pos)]
-                elif q == 2:
-                    direction = Direction.UP
-                    snake_body = [(x_pos, y_pos), (x_pos, y_pos+1), (x_pos, y_pos+2)]
-                else:
-                    direction = Direction.DOWN
-                    snake_body = [(x_pos, y_pos), (x_pos, y_pos-1), (x_pos, y_pos-2)]
-                
-                # Create snake with the assigned strategy
-                snake = Snake(
-                    body=snake_body,
-                    direction=direction,
-                    id=snake_idx+1+strat_offset,
-                    strategy=strategies[snake_idx]
-                )
-                
-                # For territorial strategy, set territory center
-                if snake.strategy == AIStrategy.TERRITORIAL:
-                    snake.territory_center = (x_pos, y_pos)
-                    
-                self.snakes.append(snake)
-                snake_idx += 1
+        for i in range(ai_snakes):
+            column_idx = i % 2
+            row_idx = i // 2
+            
+            y = 5 + row_idx * spacing
+            
+            if column_idx == 0:  # Left column, moving right
+                snake_body = [(left_x, y), (left_x-1, y), (left_x-2, y)]
+                direction = Direction.RIGHT
+            else:  # Right column, moving left
+                snake_body = [(right_x, y), (right_x+1, y), (right_x+2, y)]
+                direction = Direction.LEFT
+            
+            # Create snake with the assigned strategy
+            snake = Snake(
+                body=snake_body,
+                direction=direction,
+                id=i+1+strat_offset,
+                strategy=strategies[i]
+            )
+            self.snakes.append(snake)
     
     def create_initial_food(self):
         """Create initial food items for game start"""
@@ -1574,8 +1480,7 @@ class Renderer:
         curses.start_color()
         curses.use_default_colors()
         
-        # Initialize all color pairs - expanded to 20 for more snakes
-        # Base colors
+        # Initialize all color pairs
         curses.init_pair(1, curses.COLOR_GREEN, curses.COLOR_BLACK)    # Snake1
         curses.init_pair(2, curses.COLOR_BLUE, curses.COLOR_BLACK)     # Snake2
         curses.init_pair(3, curses.COLOR_RED, curses.COLOR_BLACK)      # Food
@@ -1583,35 +1488,11 @@ class Renderer:
         curses.init_pair(5, curses.COLOR_MAGENTA, curses.COLOR_BLACK)  # Snake4
         curses.init_pair(6, curses.COLOR_WHITE, curses.COLOR_BLACK)    # Temp food
         curses.init_pair(7, curses.COLOR_CYAN, curses.COLOR_BLACK)     # Snake5
-        
-        # Additional color pairs for more snakes - using combinations of colors and attributes
         curses.init_pair(8, curses.COLOR_RED, curses.COLOR_BLACK)      # Snake6
         curses.init_pair(9, curses.COLOR_GREEN, curses.COLOR_BLACK)    # Snake7
         curses.init_pair(10, curses.COLOR_BLUE, curses.COLOR_BLACK)    # Snake8
         curses.init_pair(11, curses.COLOR_YELLOW, curses.COLOR_BLACK)  # Snake9
         curses.init_pair(12, curses.COLOR_MAGENTA, curses.COLOR_BLACK) # Snake10
-        curses.init_pair(13, curses.COLOR_CYAN, curses.COLOR_BLACK)    # Snake11
-        curses.init_pair(14, curses.COLOR_WHITE, curses.COLOR_BLACK)   # Snake12
-        curses.init_pair(15, curses.COLOR_RED, curses.COLOR_BLACK)     # Snake13
-        curses.init_pair(16, curses.COLOR_GREEN, curses.COLOR_BLACK)   # Snake14
-        curses.init_pair(17, curses.COLOR_BLUE, curses.COLOR_BLACK)    # Snake15
-        curses.init_pair(18, curses.COLOR_YELLOW, curses.COLOR_BLACK)  # Snake16
-        curses.init_pair(19, curses.COLOR_MAGENTA, curses.COLOR_BLACK) # Snake17
-        curses.init_pair(20, curses.COLOR_CYAN, curses.COLOR_BLACK)    # Snake18
-    
-    def get_snake_color(self, snake_id):
-        """Get color for a snake with attributes for variety"""
-        # Use modulo to cycle through color pairs
-        color_pair = (snake_id % 7) + 1
-        
-        # Add attributes based on id to create more visual variety
-        attrs = 0
-        if snake_id > 7 and snake_id <= 14:
-            attrs |= curses.A_BOLD
-        elif snake_id > 14:
-            attrs |= curses.A_REVERSE
-            
-        return curses.color_pair(color_pair) | attrs
     
     def safe_addch(self, y, x, ch, attr=0):
         """Safely add a character to the screen"""
@@ -1662,7 +1543,8 @@ class Renderer:
             if not snake.alive:
                 continue
             
-            snake_color = self.get_snake_color(snake.id)
+            snake_color = (snake.id % 8) + 1
+            color_pair = curses.color_pair(snake_color)
             
             # Add special attributes for power-ups
             attrs = 0
@@ -1674,7 +1556,7 @@ class Renderer:
             # Draw each segment
             for i, cell in enumerate(snake.body):
                 char = 'H' if i == 0 else 'o'
-                self.safe_addch(cell[1] + 1, cell[0], char, snake_color | attrs)
+                self.safe_addch(cell[1] + 1, cell[0], char, color_pair | attrs)
         
         # Draw status bar
         self.draw_status_bar(game_state)
@@ -1703,8 +1585,6 @@ class Renderer:
         # Prepare status text
         speed = f"Speed: {game_state.speed_multiplier:.1f}x"
         time_str = f"Time: {minutes:02d}:{seconds:02d}"
-        alive_count = sum(1 for s in game_state.snakes if s.alive)
-        count_str = f"Snakes: {alive_count}/{len(game_state.snakes)}"
         
         # Draw status bar background
         status_color = curses.color_pair(0)
@@ -1713,60 +1593,33 @@ class Renderer:
         
         # Draw status text components
         self.safe_addstr(0, 1, time_str, status_color)
-        self.safe_addstr(0, game_state.width // 3, count_str, status_color)
         self.safe_addstr(0, 2 * game_state.width // 3, speed, status_color)
         
         # Draw each snake's score if alive
-        # For large games, draw scores in compact format
-        if len(game_state.snakes) <= 6:
-            # Standard display for few snakes
-            y_pos = 2
-            for snake in sorted(game_state.snakes, key=lambda s: s.score, reverse=True):
-                if not snake.alive:
-                    continue
-                
-                snake_color = self.get_snake_color(snake.id)
-                
-                # Show snake ID and score
-                snake_type = "Human" if snake.is_human else f"AI-{snake.strategy.name}"
-                power_ups = ""
-                if snake.power_ups:
-                    power_up_chars = {
-                        PowerUpType.SPEED_BOOST: "⚡",
-                        PowerUpType.INVINCIBILITY: "★",
-                        PowerUpType.GHOST: "👻",
-                        PowerUpType.GROWTH: "↑",
-                        PowerUpType.SCORE_MULTIPLIER: "×2"
-                    }
-                    power_ups = " " + "".join(power_up_chars.get(p, "") for p in snake.power_ups)
-                
-                score_text = f"Snake {snake.id} ({snake_type}): {snake.score}{power_ups}"
-                self.safe_addstr(y_pos, 1, score_text, snake_color)
-                y_pos += 1
-        else:
-            # Compact display for many snakes - show as grid
-            max_per_line = min(8, (game_state.width - 4) // 10)
-            alive_snakes = [s for s in game_state.snakes if s.alive]
+        y_pos = 2
+        for snake in sorted(game_state.snakes, key=lambda s: s.score, reverse=True):
+            if not snake.alive:
+                continue
             
-            for i, snake in enumerate(sorted(alive_snakes, key=lambda s: s.score, reverse=True)):
-                row = i // max_per_line
-                col = i % max_per_line
-                
-                x_pos = 1 + col * 10
-                y_pos = 2 + row
-                
-                snake_color = self.get_snake_color(snake.id)
-                score_text = f"S{snake.id}:{snake.score}"
-                
-                # Add power-up indicators
-                if snake.power_ups:
-                    for p in snake.power_ups:
-                        if p == PowerUpType.INVINCIBILITY:
-                            score_text += "*"
-                        elif p == PowerUpType.GHOST:
-                            score_text += "g"
-                
-                self.safe_addstr(y_pos, x_pos, score_text, snake_color)
+            snake_color = (snake.id % 8) + 1
+            color_pair = curses.color_pair(snake_color)
+            
+            # Show snake ID and score
+            snake_type = "Human" if snake.is_human else f"AI-{snake.strategy.name}"
+            power_ups = ""
+            if snake.power_ups:
+                power_up_chars = {
+                    PowerUpType.SPEED_BOOST: "⚡",
+                    PowerUpType.INVINCIBILITY: "★",
+                    PowerUpType.GHOST: "👻",
+                    PowerUpType.GROWTH: "↑",
+                    PowerUpType.SCORE_MULTIPLIER: "×2"
+                }
+                power_ups = " " + "".join(power_up_chars.get(p, "") for p in snake.power_ups)
+            
+            score_text = f"Snake {snake.id} ({snake_type}): {snake.score}{power_ups}"
+            self.safe_addstr(y_pos, 1, score_text, color_pair)
+            y_pos += 1
     
     def draw_title_screen(self, width, height):
         """Draw the title screen"""
@@ -1777,7 +1630,6 @@ class Renderer:
         author = "By ShadowHarvy, Enhanced with Smarter AI"
         options = [
             "2 Snakes", "4 Snakes", "6 Snakes", "8 Snakes", "10 Snakes", 
-            "12 Snakes", "14 Snakes", "16 Snakes", "18 Snakes", "20 Snakes",
             "Human + AI", "Exit"
         ]
         
@@ -1811,23 +1663,9 @@ class Renderer:
     
     def draw_menu_options(self, options, selected, start_y, width):
         """Draw menu options with selected item highlighted"""
-        # For many options, draw in multiple columns
-        if len(options) > 10:
-            items_per_col = (len(options) + 1) // 2
-            for idx, option in enumerate(options):
-                col = idx // items_per_col
-                row = idx % items_per_col
-                
-                x_pos = width//3 + col * (width//3)
-                y_pos = start_y + row
-                
-                attr = curses.A_REVERSE if idx == selected else 0
-                self.safe_addstr(y_pos, x_pos - len(option)//2, option, attr)
-        else:
-            # Original single column display
-            for idx, option in enumerate(options):
-                attr = curses.A_REVERSE if idx == selected else 0
-                self.safe_addstr(start_y + idx, (width - len(option))//2, option, attr)
+        for idx, option in enumerate(options):
+            attr = curses.A_REVERSE if idx == selected else 0
+            self.safe_addstr(start_y + idx, (width - len(option))//2, option, attr)
     
     def draw_ranking_screen(self, ranking, start_time, width, height):
         """Draw the ranking screen"""
@@ -1847,62 +1685,19 @@ class Renderer:
         time_str = f"Game Duration: {minutes:02d}:{seconds:02d}"
         self.safe_addstr(4, (width - len(time_str))//2, time_str)
         
-        # For large games, show top performers and compact display
-        if len(ranking) > 10:
-            # Top performers
-            self.safe_addstr(6, width//4, "TOP PERFORMERS", curses.A_BOLD)
+        # Display snake information
+        for idx, snake in enumerate(ranking):
+            rank = idx + 1
+            snake_type = "Human" if snake.is_human else f"AI ({snake.strategy.name})"
+            status = "ALIVE" if snake.alive else f"Died #{snake.death_order}"
+            line = f"Rank {rank}: Snake {snake.id} ({snake_type}) - Score: {snake.score} - {status}"
             
-            # Display top 5 snakes
-            for idx, snake in enumerate(ranking[:5]):
-                rank = idx + 1
-                snake_type = "Human" if snake.is_human else f"AI ({snake.strategy.name})"
-                status = "ALIVE" if snake.alive else f"Died #{snake.death_order}"
-                line = f"Rank {rank}: Snake {snake.id} ({snake_type}) - Score: {snake.score} - {status}"
+            snake_color = (snake.id % 8) + 1
+            color = curses.color_pair(snake_color)
+            if snake.alive:
+                color |= curses.A_BOLD
                 
-                snake_color = self.get_snake_color(snake.id)
-                if snake.alive:
-                    snake_color |= curses.A_BOLD
-                    
-                self.safe_addstr(7 + idx, width//4, line, snake_color)
-            
-            # Display additional rankings in a compact table
-            self.safe_addstr(6, 3*width//4, "OTHER SNAKES", curses.A_BOLD)
-            
-            # Create a compact table for remaining snakes
-            for idx, snake in enumerate(ranking[5:15]):
-                rank = idx + 6
-                snake_type = "H" if snake.is_human else "AI"
-                status = "A" if snake.alive else f"D{snake.death_order}"
-                line = f"R{rank}: S{snake.id} ({snake_type}) - {snake.score} - {status}"
-                
-                snake_color = self.get_snake_color(snake.id)
-                if snake.alive:
-                    snake_color |= curses.A_BOLD
-                    
-                row = idx // 2
-                col = idx % 2
-                
-                x_pos = 3*width//4 + col * (width//6)
-                y_pos = 7 + row
-                
-                self.safe_addstr(y_pos, x_pos, line, snake_color)
-                
-            # Indicate if there are more snakes not shown
-            if len(ranking) > 15:
-                self.safe_addstr(12, 3*width//4, f"+ {len(ranking) - 15} more snakes", curses.A_DIM)
-        else:
-            # Display snake information in the standard way for smaller games
-            for idx, snake in enumerate(ranking):
-                rank = idx + 1
-                snake_type = "Human" if snake.is_human else f"AI ({snake.strategy.name})"
-                status = "ALIVE" if snake.alive else f"Died #{snake.death_order}"
-                line = f"Rank {rank}: Snake {snake.id} ({snake_type}) - Score: {snake.score} - {status}"
-                
-                snake_color = self.get_snake_color(snake.id)
-                if snake.alive:
-                    snake_color |= curses.A_BOLD
-                    
-                self.safe_addstr(6 + idx, (width - len(line))//2, line, snake_color)
+            self.safe_addstr(6 + idx, (width - len(line))//2, line, color)
         
         # Draw restart/exit options
         options = ["Restart", "Exit"]
@@ -1917,17 +1712,17 @@ class Renderer:
         if len(alive_snakes) == 1:
             winner = alive_snakes[0]
             result = f"Snake {winner.id} wins!"
-            color = self.get_snake_color(winner.id)
+            color = curses.color_pair((winner.id % 8) + 1)
         elif len(alive_snakes) > 1:
             # Multiple survivors, highest score wins
             winner = max(alive_snakes, key=lambda s: s.score)
             result = f"Snake {winner.id} wins with highest score!"
-            color = self.get_snake_color(winner.id)
+            color = curses.color_pair((winner.id % 8) + 1)
         else:
             # No survivors, highest score from all snakes
             winner = max(snakes, key=lambda s: s.score)
             result = f"All snakes died! Snake {winner.id} had the highest score."
-            color = self.get_snake_color(winner.id)
+            color = curses.color_pair((winner.id % 8) + 1)
         
         # Draw result
         self.safe_addstr(height//3, (width - len("GAME OVER"))//2, "GAME OVER", curses.A_BOLD | curses.color_pair(3))
@@ -1998,22 +1793,20 @@ class GameController:
                         return (0, False)  # Exit if user cancels
                     return (ai_count + 1, True)  # Number of snakes, human player flag
                 else:
-                    # Parse number of snakes from option text
                     return (int(options[selected].split()[0]), False)
             
             time.sleep(0.1)
     
     def show_ai_count_menu(self):
         """Show menu to select number of AI snakes"""
-        options = [str(i) for i in range(1, Config.MAX_SNAKES)] + ["Cancel"]
+        options = [str(i) for i in range(1, 10)] + ["Cancel"]
         selected = 0
         
         while True:
             self.stdscr.clear()
             self.renderer.safe_addstr(self.screen_height//4, 
                                     self.screen_width//2 - 15, 
-                                    "Choose number of AI snakes (1-19):",
-                                    curses.A_BOLD)
+                                    "Choose number of AI snakes (1-9):")
             
             self.renderer.draw_menu_options(options, selected, self.screen_height//2, self.screen_width)
             self.stdscr.refresh()
@@ -2045,7 +1838,7 @@ class GameController:
         
         while True:
             # Calculate position based on number of snakes
-            menu_y = min(15, 8 + len(self.game_state.snakes))
+            menu_y = 8 + len(self.game_state.snakes)
             
             self.renderer.draw_menu_options(options, selected, menu_y, self.screen_width)
             self.stdscr.refresh()
