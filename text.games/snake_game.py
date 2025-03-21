@@ -16,16 +16,16 @@ class Config:
     """Game configuration settings"""
     
     # Game speed settings
-    BASE_SPEED = 0.14  # Even slower for better AI decision making
-    SPEED_INCREASE_INTERVAL = 40  # Slower speed increases
-    MAX_SPEED_MULTIPLIER = 1.8  # Lower maximum speed
+    BASE_SPEED = 0.12  # Faster overall gameplay for more excitement
+    SPEED_INCREASE_INTERVAL = 30  # Faster speed increases
+    MAX_SPEED_MULTIPLIER = 2.2  # Higher maximum speed for more challenge
     
     # Food settings
-    FOOD_BONUS_DURATION = 45  # Seconds until bonus food appears
+    FOOD_BONUS_DURATION = 35  # Seconds until bonus food appears - more frequent bonus food
     FOOD_POINTS = 1
-    BONUS_FOOD_POINTS = 3
-    TEMP_FOOD_POINTS = 1
-    MIN_FOOD_COUNT = 10  # Increased minimum food count for more snakes
+    BONUS_FOOD_POINTS = 4  # Higher value bonus food
+    TEMP_FOOD_POINTS = 2  # Higher value for dropped food to encourage scavenging
+    MIN_FOOD_COUNT = 12  # Even more food for more action
     
     # Snake settings
     INITIAL_SIZE = 3
@@ -36,18 +36,18 @@ class Config:
     MIN_HEIGHT = 25  # Increased minimum height for more snakes
     
     # Power-up settings
-    POWER_UP_CHANCE = 0.02  # Increased power-up chance for more snakes
-    POWER_UP_DURATION = 20  # Seconds
+    POWER_UP_CHANCE = 0.03  # Higher power-up chance for more excitement
+    POWER_UP_DURATION = 15  # Shorter duration for better balance
     
     # Other settings
-    MAX_IDLE_TIME = 40  # More time before game speeds up
+    MAX_IDLE_TIME = 30  # Less time before game speeds up - faster pacing
     
     # AI settings
-    AI_UPDATE_INTERVAL = 0.05  # How often AI updates its direction
+    AI_UPDATE_INTERVAL = 0.03  # More frequent AI updates for more responsive behavior
     EMERGENCY_WALL_CHECK = True  # Always check for walls even between update intervals
-    LOOK_AHEAD_STEPS = 8  # Further look ahead
-    OPEN_SPACE_WEIGHT = 3.0  # How much to value open space
-    SURVIVAL_THRESHOLD = 10  # Space threshold below which snake focuses on survival
+    LOOK_AHEAD_STEPS = 6  # Reduced look ahead to make AI less perfect and more aggressive
+    OPEN_SPACE_WEIGHT = 2.0  # Reduced space weight to make AIs more willing to enter confined areas
+    SURVIVAL_THRESHOLD = 7  # Lower space threshold for survival mode - more aggressive
     TUNNEL_CHECK_ENABLED = True  # Check tunnels for safety
     
     # Performance optimization settings
@@ -168,6 +168,12 @@ class AIStrategy(Enum):
     HUNTER = 5      # Targets other snake heads
     SCAVENGER = 6   # Prefers dropped food from dead snakes
     TERRITORIAL = 7 # Controls and defends a specific area
+    BERSERKER = 8   # Super aggressive, targets food and other snakes with minimal safety checks
+    INTERCEPTOR = 9 # Tries to cut off other snakes' paths to food
+    POWERUP_SEEKER = 10 # Prioritizes power-ups over food
+    STALKER = 11    # Follows the largest snake, waiting for an opportunity to attack
+    TRAP_SETTER = 12 # Creates loops and traps for other snakes
+    KAMIKAZE = 13   # Grows quickly and then charges at other snakes, accepting high risk
 
 
 # =============================================================================
@@ -983,11 +989,14 @@ class Snake:
             strategy_score = 0
             
             if temp_strategy == AIStrategy.AGGRESSIVE:
-                # Aggressive: Go straight for target, ignore some danger
-                strategy_score = target_score * 2.0 - danger_score * 0.7
-                # If very close to target, be even more aggressive
-                if manhattan_to_target < 3:
-                    strategy_score += 400
+                # Aggressive: Go straight for target, ignore most danger
+                strategy_score = target_score * 3.0 - danger_score * 0.3  # Much more aggressive
+                # If close to target, be extremely aggressive
+                if manhattan_to_target < 5:
+                    strategy_score += 800
+                # Significantly less concerned with space
+                space_weight_reduction = min(0.6, 1.0 - len(self.body) * 0.02)  # Bigger snakes care less about space
+                strategy_score -= space_score * space_weight_reduction
             
             elif temp_strategy == AIStrategy.CAUTIOUS:
                 # Cautious: Value space and safety more than target
@@ -998,13 +1007,13 @@ class Snake:
             
             elif temp_strategy == AIStrategy.OPPORTUNISTIC:
                 # Opportunistic: Balance target and space, change direction based on situation
-                strategy_score = target_score + space_score * 1.5 - danger_score + random.randint(0, 50)
+                strategy_score = target_score * 1.5 + space_score * 1.2 - danger_score * 0.8 + random.randint(0, 100)
                 # More aggressive when target is close
                 if manhattan_to_target < 5:
-                    strategy_score += 250
+                    strategy_score += 300
                 # More cautious when space is limited
-                if space < 15:
-                    strategy_score += space_score * 1.5
+                if space < 12:
+                    strategy_score += space_score * 1.2
             
             elif temp_strategy == AIStrategy.DEFENSIVE:
                 # Defensive: Stay away from other snakes
@@ -1012,9 +1021,9 @@ class Snake:
                 for pos in other_snakes_positions:
                     dist = abs(new_head[0] - pos[0]) + abs(new_head[1] - pos[1])
                     if dist < 5:
-                        snake_proximity += (5 - dist) * 30
+                        snake_proximity += (5 - dist) * 35
                 
-                strategy_score = target_score * 0.8 + space_score * 1.8 - snake_proximity * 1.5 + look_ahead_score * 1.5
+                strategy_score = target_score * 0.8 + space_score * 1.8 - snake_proximity * 1.8 + look_ahead_score * 1.5
                 # Stronger space preference
                 if space < 20:
                     strategy_score += space_score * 2
@@ -1026,41 +1035,59 @@ class Snake:
                 # Hunter: Target other snake heads to try to kill them
                 hunter_score = 0
                 for other_snake in game_state.snakes:
-                    if other_snake is not self and other_snake.alive and len(self.body) > len(other_snake.body):
+                    if other_snake is not self and other_snake.alive:
                         other_head = other_snake.body[0]
                         dist = abs(new_head[0] - other_head[0]) + abs(new_head[1] - other_head[1])
-                        # Only consider hunting when we're bigger and close
-                        if dist < 6:
-                            # More points for being exactly 1 space away - perfect for cutting off
-                            if dist == 2:  # One move away
-                                hunter_score += 400
-                            elif dist < 4:  # Within hunting range
-                                hunter_score += (6 - dist) * 80
+                        
+                        # More aggressive hunting - consider attacking even smaller snakes
+                        size_advantage = len(self.body) - len(other_snake.body)
+                        
+                        # Only hunt if we're bigger or same size
+                        if size_advantage >= 0 and dist < 8:
+                            # Perfect position for head-on collision when we're bigger
+                            if dist == 2 and size_advantage > 0:  
+                                hunter_score += 800
+                            # Within hunting range
+                            elif dist < 5:  
+                                hunter_score += (8 - dist) * 120
                 
-                strategy_score = hunter_score + target_score * 0.6 + space_score
+                strategy_score = hunter_score + target_score * 0.4 + space_score * 0.7
                 # Don't forget food when it's very close
                 if manhattan_to_target < 3:
-                    strategy_score += target_score
+                    strategy_score += target_score * 0.8
                     
             elif temp_strategy == AIStrategy.SCAVENGER:
                 # Scavenger: Prioritize dropped food and safety over aggression
                 is_dropped_target = any(f.position == target and f.type == FoodType.DROPPED for f in foods)
-                dropped_bonus = 600 if is_dropped_target else 0
+                dropped_bonus = 800 if is_dropped_target else 0
                 
-                strategy_score = target_score * 1.2 + space_score * 1.5 + dropped_bonus - danger_score * 1.2
-                # Extra cautious when no dropped food is targeted
+                strategy_score = target_score * 1.2 + space_score * 1.2 + dropped_bonus - danger_score * 1.0
+                # Less cautious overall, more focused on finding dropped food
                 if not is_dropped_target:
-                    strategy_score += look_ahead_score * 1.5
+                    strategy_score += look_ahead_score * 1.2
                     
             elif temp_strategy == AIStrategy.TERRITORIAL:
-                # Territorial: Prefer staying in a specific area
+                # Territorial: Prefer staying in a specific area but more aggressive in defense
                 if self.territory_center:
                     territory_dist = abs(new_head[0] - self.territory_center[0]) + abs(new_head[1] - self.territory_center[1])
                     # Higher score for staying close to territory center
-                    territory_score = 300 - territory_dist * 15
+                    territory_score = 400 - territory_dist * 12
                     
-                    # But don't ignore food or space
-                    strategy_score = target_score * 0.8 + space_score * 1.2 + territory_score
+                    # Check if any other snakes are in our territory
+                    invaders = 0
+                    for other_snake in game_state.snakes:
+                        if other_snake is not self and other_snake.alive:
+                            other_head = other_snake.body[0]
+                            dist_to_territory = abs(other_head[0] - self.territory_center[0]) + abs(other_head[1] - self.territory_center[1])
+                            if dist_to_territory < 8:  # Close to our territory
+                                invaders += 1
+                                invader_dist = abs(new_head[0] - other_head[0]) + abs(new_head[1] - other_head[1])
+                                if invader_dist < 5:  # We're close to invader
+                                    # Become more aggressive to defend territory
+                                    territory_score += (5 - invader_dist) * 150
+                    
+                    # Balance between territory defense and food/space
+                    strategy_score = target_score * 0.7 + space_score * 1.0 + territory_score
                     
                     # If far from territory, prioritize getting back
                     if territory_dist > 10:
@@ -1068,9 +1095,214 @@ class Snake:
                 else:
                     # No territory yet, behave opportunistically until established
                     strategy_score = target_score + space_score * 1.5
+                    
+            elif temp_strategy == AIStrategy.BERSERKER:
+                # Berserker: Super aggressive, minimal safety checks
+                # Target score is massively important
+                strategy_score = target_score * 5.0 - danger_score * 0.2
+                
+                # Almost no concern for space unless critically low
+                if space < 5:  # Only care about space if it's extremely confined
+                    strategy_score += space_score * 0.5
+                
+                # Even more aggressive when target is close
+                if manhattan_to_target < 6:
+                    strategy_score += 1000
+                
+                # Also aggressive toward other snakes
+                for other_snake in game_state.snakes:
+                    if other_snake is not self and other_snake.alive:
+                        other_head = other_snake.body[0]
+                        dist = abs(new_head[0] - other_head[0]) + abs(new_head[1] - other_head[1])
+                        
+                        # If we're bigger and close, consider attacking
+                        if len(self.body) > len(other_snake.body) and dist < 4:
+                            strategy_score += (4 - dist) * 200
+                
+            elif temp_strategy == AIStrategy.INTERCEPTOR:
+                # Interceptor: Tries to cut off other snakes' paths to food
+                intercept_score = 0
+                
+                # Identify other snakes close to food
+                for food_item in foods:
+                    food_pos = food_item.position
+                    food_value = food_item.points
+                    
+                    # Find snakes heading toward this food
+                    for other_snake in game_state.snakes:
+                        if other_snake is not self and other_snake.alive:
+                            other_head = other_snake.body[0]
+                            other_dist = abs(other_head[0] - food_pos[0]) + abs(other_head[1] - food_pos[1])
+                            
+                            # If another snake is close to food
+                            if other_dist < 8:
+                                # Calculate ideal intercept position
+                                intercept_x = (food_pos[0] + other_head[0]) // 2
+                                intercept_y = (food_pos[1] + other_head[1]) // 2
+                                
+                                # Calculate our distance to intercept
+                                intercept_dist = abs(head[0] - intercept_x) + abs(head[1] - intercept_y)
+                                
+                                # Higher score for closer intercepts with more valuable food
+                                if intercept_dist < 10:
+                                    intercept_value = (food_value * 100) / (intercept_dist + 1)
+                                    intercept_score += intercept_value
+                
+                # Balance between interception and normal targeting
+                strategy_score = intercept_score + target_score * 0.6 + space_score * 0.8
+                
+            elif temp_strategy == AIStrategy.POWERUP_SEEKER:
+                # PowerUp Seeker: Prioritizes power-ups above all else
+                powerup_score = 0
+                
+                # Check if we're targeting a power-up
+                is_powerup_target = any(p.position == target for p in power_ups)
+                
+                if is_powerup_target:
+                    # Massively boost score for power-up targets
+                    powerup_score = 1500
+                    
+                    # Check which type of power-up
+                    for p in power_ups:
+                        if p.position == target:
+                            # Additional bonus based on power-up type
+                            if p.type == PowerUpType.INVINCIBILITY:
+                                powerup_score += 300
+                            elif p.type == PowerUpType.GHOST:
+                                powerup_score += 250
+                            elif p.type == PowerUpType.SPEED_BOOST:
+                                powerup_score += 200
+                            break
+                else:
+                    # If not targeting a power-up, normal scoring but with slight preference for being in center
+                    center_dist = abs(new_head[0] - game_state.width//2) + abs(new_head[1] - game_state.height//2)
+                    center_bonus = 100 - (center_dist * 2)
+                    strategy_score = target_score * 0.7 + space_score + center_bonus
+                
+                strategy_score = powerup_score + target_score * 0.5 + space_score * 0.8
+                
+            elif temp_strategy == AIStrategy.STALKER:
+                # Stalker: Follows the largest snake, waiting for opportunity
+                stalker_score = 0
+                target_snake = None
+                max_size = 0
+                
+                # Find the largest snake
+                for other_snake in game_state.snakes:
+                    if other_snake is not self and other_snake.alive and len(other_snake.body) > max_size:
+                        max_size = len(other_snake.body)
+                        target_snake = other_snake
+                
+                if target_snake:
+                    target_head = target_snake.body[0]
+                    target_tail = target_snake.body[-1]
+                    
+                    head_dist = abs(new_head[0] - target_head[0]) + abs(new_head[1] - target_head[1])
+                    tail_dist = abs(new_head[0] - target_tail[0]) + abs(new_head[1] - target_tail[1])
+                    
+                    # Prefer to stay close but not too close to the target snake
+                    if head_dist < 3:  # Too close to head - might be dangerous
+                        stalker_score -= 200
+                    elif head_dist < 6:  # Ideal distance to track
+                        stalker_score += 600 - (head_dist * 50)
+                    elif head_dist < 12:  # Still tracking but further
+                        stalker_score += 300 - (head_dist * 20)
+                    
+                    # Bonus for being near the tail - good to pick up dropped food
+                    if tail_dist < 5:
+                        stalker_score += 250 - (tail_dist * 30)
+                
+                # Balance between stalking and normal targeting
+                strategy_score = stalker_score + target_score * 0.6 + space_score
+                
+            elif temp_strategy == AIStrategy.TRAP_SETTER:
+                # Trap Setter: Creates loops and traps for other snakes
+                trap_score = 0
+                
+                # Check if we're near a wall - good for creating traps
+                wall_dist = min(
+                    new_head[0],  # Distance to left wall
+                    game_state.width - 1 - new_head[0],  # Distance to right wall
+                    new_head[1],  # Distance to top wall
+                    game_state.height - 1 - new_head[1]  # Distance to bottom wall
+                )
+                
+                # Prefer to stay near walls but not right against them
+                if wall_dist == 1:
+                    trap_score += 200
+                elif wall_dist == 2:
+                    trap_score += 300
+                elif wall_dist == 3:
+                    trap_score += 100
+                
+                # Check for other snakes nearby to trap
+                for other_snake in game_state.snakes:
+                    if other_snake is not self and other_snake.alive:
+                        other_head = other_snake.body[0]
+                        dist = abs(new_head[0] - other_head[0]) + abs(new_head[1] - other_head[1])
+                        
+                        if dist < 8:  # Snake is close enough to potentially trap
+                            # Calculate position where we might cut off their path
+                            # Prefer to be in their most likely path to food
+                            for food_item in foods:
+                                food_dist = abs(other_head[0] - food_item.position[0]) + abs(other_head[1] - food_item.position[1])
+                                if food_dist < 10:  # Food is close to other snake
+                                    # Position between snake and food is ideal for trapping
+                                    mid_x = (other_head[0] + food_item.position[0]) // 2
+                                    mid_y = (other_head[1] + food_item.position[1]) // 2
+                                    
+                                    # Distance to ideal trap position
+                                    trap_pos_dist = abs(new_head[0] - mid_x) + abs(new_head[1] - mid_y)
+                                    if trap_pos_dist < 5:
+                                        trap_score += (5 - trap_pos_dist) * 150
+                
+                # Balance between trapping and normal strategy
+                strategy_score = trap_score + target_score * 0.7 + space_score
+                
+            elif temp_strategy == AIStrategy.KAMIKAZE:
+                # Kamikaze: Grows quickly then charges at other snakes
+                kamikaze_score = 0
+                
+                # Early game strategy - focus on growth
+                if len(self.body) < 15:
+                    # Be food-focused to grow quickly
+                    strategy_score = target_score * 2.5 + space_score * 0.5
+                    
+                    # More aggressive for nearby food
+                    if manhattan_to_target < 4:
+                        strategy_score += 500
+                else:
+                    # Late game - target other snakes aggressively
+                    for other_snake in game_state.snakes:
+                        if other_snake is not self and other_snake.alive:
+                            other_head = other_snake.body[0]
+                            dist = abs(new_head[0] - other_head[0]) + abs(new_head[1] - other_head[1])
+                            
+                            if dist < 10:  # Close enough to charge
+                                # Charge regardless of size
+                                charge_score = 1000 - (dist * 100)
+                                kamikaze_score += charge_score
+                                
+                                # Even more aggressive when in striking distance
+                                if dist < 3:
+                                    kamikaze_score += 1000
+                    
+                    # Ignore safety concerns when charging
+                    strategy_score = kamikaze_score + target_score * 0.3
+                    
+                    # Almost zero concern for space
+                    if space < 3:  # Only care if critically confined
+                        strategy_score += space_score * 0.3
             
             # Safety check - enter survival mode if space is dangerously low
-            survival_mode = space < Config.SURVIVAL_THRESHOLD
+            # Only certain strategies will enter survival mode, others will be more reckless
+            survival_strategies = [AIStrategy.CAUTIOUS, AIStrategy.DEFENSIVE, AIStrategy.SCAVENGER, AIStrategy.TERRITORIAL]
+            reckless_strategies = [AIStrategy.BERSERKER, AIStrategy.KAMIKAZE]
+            
+            survival_mode = space < Config.SURVIVAL_THRESHOLD and self.strategy in survival_strategies
+            
+            # Super aggressive strategies like BERSERKER and KAMIKAZE ignore danger completely unless extremely confined
+            reckless_mode = self.strategy in reckless_strategies and space > 3
             
             if survival_mode:
                 # In survival mode, prioritize space and exit routes above all else
@@ -1082,16 +1314,27 @@ class Snake:
                     wall_score * 2.0 +  # Double wall avoidance
                     target_score * 0.2  # Target is much less important when in danger
                 )
-            else:
-                # Normal mode - balanced scoring
+            elif reckless_mode:
+                # In reckless mode, almost completely ignore safety concerns
                 total_score = (
-                    target_score + 
-                    space_score * 1.5 +  # Increased space importance
-                    danger_score + 
+                    target_score * 2.5 +  # Massively boost target importance
+                    strategy_score * 2.0 +  # Double strategy-specific behavior
+                    space_score * 0.2 +   # Almost no concern for space
+                    danger_score * 0.2 +  # Almost no concern for danger
+                    direction_score +     # Normal preference for continuing in same direction
+                    wall_score * 0.5 +    # Reduced wall avoidance
+                    look_ahead_score * 0.3  # Minimal concern for future safety
+                )
+            else:
+                # Normal mode - balanced but more aggressive scoring
+                total_score = (
+                    target_score * 1.3 +  # Increased target importance
+                    space_score * 1.2 +   # Slightly reduced space importance
+                    danger_score * 0.8 +  # Reduced danger avoidance
                     direction_score + 
                     wall_score + 
-                    strategy_score + 
-                    look_ahead_score * 1.2  # Slightly increased future safety importance
+                    strategy_score * 1.5 + # Increased strategy weight
+                    look_ahead_score * 0.8  # Reduced future safety importance
                 )
             
             # Add a small bit of randomness to break ties
@@ -1212,18 +1455,61 @@ class GameState:
             ai_snakes = self.num_snakes
             strat_offset = 0
         
-        # Create AI snakes with different strategies
+        # Create AI snakes with different strategies - favoring aggressive ones
         ai_strategies = list(AIStrategy)
+        
+        # Define aggressive strategies with higher weights for selection
+        aggressive_strategies = [
+            AIStrategy.AGGRESSIVE,
+            AIStrategy.HUNTER,
+            AIStrategy.BERSERKER,
+            AIStrategy.KAMIKAZE,
+            AIStrategy.INTERCEPTOR
+        ]
+        
+        # Define tactical strategies with medium weights
+        tactical_strategies = [
+            AIStrategy.OPPORTUNISTIC,
+            AIStrategy.TERRITORIAL,
+            AIStrategy.TRAP_SETTER,
+            AIStrategy.STALKER
+        ]
+        
+        # Define defensive strategies with lower weights
+        defensive_strategies = [
+            AIStrategy.CAUTIOUS,
+            AIStrategy.DEFENSIVE,
+            AIStrategy.SCAVENGER,
+            AIStrategy.POWERUP_SEEKER
+        ]
+        
+        # Create a weighted strategy pool to favor more aggressive behavior
+        weighted_strategies = []
+        weighted_strategies.extend(aggressive_strategies * 5)  # 5x weight for aggressive
+        weighted_strategies.extend(tactical_strategies * 3)    # 3x weight for tactical
+        weighted_strategies.extend(defensive_strategies * 1)   # 1x weight for defensive
         
         # Ensure a good distribution of strategies for AI snakes
         if ai_snakes <= len(ai_strategies):
-            # Use each strategy once if possible
-            strategies = random.sample(ai_strategies, ai_snakes)
+            # Guarantee at least one berserker and one kamikaze for excitement
+            strategies = []
+            if ai_snakes >= 2:
+                strategies.append(AIStrategy.BERSERKER)
+                strategies.append(AIStrategy.KAMIKAZE)
+                # Fill the rest with weighted random selection
+                strategies.extend(random.sample(weighted_strategies, ai_snakes - 2))
+            else:
+                # Just one snake - make it aggressive
+                strategies = [random.choice(aggressive_strategies)]
         else:
-            # Use all strategies at least once, then repeat randomly
+            # Use all strategies at least once, then add extras with weighting
             strategies = ai_strategies.copy()
-            while len(strategies) < ai_snakes:
-                strategies.append(random.choice(ai_strategies))
+            remaining = ai_snakes - len(strategies)
+            
+            # Add extras based on weighted selection
+            for _ in range(remaining):
+                strategies.append(random.choice(weighted_strategies))
+                
             random.shuffle(strategies)
         
         # Calculate optimal positions for many snakes
@@ -1944,6 +2230,563 @@ class Renderer:
 
 
 # =============================================================================
+# MENU SYSTEM CLASS
+# =============================================================================
+
+class MenuSystem:
+    """Advanced menu system for the game"""
+    
+    def __init__(self, stdscr, renderer, screen_width, screen_height):
+        self.stdscr = stdscr
+        self.renderer = renderer
+        self.screen_width = screen_width
+        self.screen_height = screen_height
+        self.current_menu = "main"
+        self.settings = {
+            "difficulty": "Normal",
+            "sound": "On",
+            "theme": "Classic",
+            "game_speed": 1.0
+        }
+        
+    def draw_menu_border(self, title):
+        """Draw a decorative border around the menu"""
+        # Draw box border
+        box_width = min(60, self.screen_width - 4)
+        box_height = min(20, self.screen_height - 4)
+        
+        start_x = (self.screen_width - box_width) // 2
+        start_y = (self.screen_height - box_height) // 2
+        
+        # Draw horizontal borders
+        for x in range(start_x, start_x + box_width):
+            self.renderer.safe_addch(start_y, x, '═', curses.color_pair(4))
+            self.renderer.safe_addch(start_y + box_height, x, '═', curses.color_pair(4))
+            
+        # Draw vertical borders
+        for y in range(start_y + 1, start_y + box_height):
+            self.renderer.safe_addch(y, start_x, '║', curses.color_pair(4))
+            self.renderer.safe_addch(y, start_x + box_width - 1, '║', curses.color_pair(4))
+            
+        # Draw corners
+        self.renderer.safe_addch(start_y, start_x, '╔', curses.color_pair(4))
+        self.renderer.safe_addch(start_y, start_x + box_width - 1, '╗', curses.color_pair(4))
+        self.renderer.safe_addch(start_y + box_height, start_x, '╚', curses.color_pair(4))
+        self.renderer.safe_addch(start_y + box_height, start_x + box_width - 1, '╝', curses.color_pair(4))
+        
+        # Draw title
+        title_x = start_x + (box_width - len(title) - 2) // 2
+        self.renderer.safe_addstr(start_y, title_x, f" {title} ", curses.color_pair(4) | curses.A_BOLD)
+        
+        return (start_x, start_y, box_width, box_height)
+        
+    def display_menu(self, options, selected, title):
+        """Display a menu with options"""
+        self.stdscr.clear()
+        
+        # Draw decorative border
+        border_info = self.draw_menu_border(title)
+        start_x, start_y, box_width, box_height = border_info
+        
+        # Calculate starting position for the menu items
+        menu_start_y = start_y + 3
+        
+        # Draw help text at the bottom
+        help_text = "↑↓: Navigate   Enter: Select   Esc: Back"
+        help_x = (self.screen_width - len(help_text)) // 2
+        self.renderer.safe_addstr(start_y + box_height - 1, help_x, help_text, curses.color_pair(6))
+        
+        # Draw options
+        for idx, option in enumerate(options):
+            # Check if this is a menu category header
+            if option.startswith("--"):
+                # It's a header, draw it differently
+                header_text = option[2:]  # Remove the -- prefix
+                header_x = start_x + (box_width - len(header_text)) // 2
+                self.renderer.safe_addstr(menu_start_y + idx, header_x, header_text, 
+                                         curses.A_BOLD | curses.color_pair(5))
+            else:
+                # Regular menu option
+                option_x = start_x + 4
+                
+                # For settings options, show current value
+                if ":" in option:
+                    option_parts = option.split(":", 1)
+                    option_text = option_parts[0].strip()
+                    option_value = option_parts[1].strip()
+                    
+                    # Draw the option text
+                    attr = curses.A_REVERSE if idx == selected else 0
+                    self.renderer.safe_addstr(menu_start_y + idx, option_x, option_text, attr)
+                    
+                    # Draw the value with a different style
+                    value_x = option_x + len(option_text) + 2
+                    value_attr = curses.color_pair(3) | (curses.A_REVERSE if idx == selected else 0)
+                    self.renderer.safe_addstr(menu_start_y + idx, value_x, option_value, value_attr)
+                else:
+                    # Standard option
+                    attr = curses.A_REVERSE if idx == selected else 0
+                    self.renderer.safe_addstr(menu_start_y + idx, option_x, option, attr)
+                    
+                    # If this is a selected option, add a cursor indicator
+                    if idx == selected:
+                        self.renderer.safe_addstr(menu_start_y + idx, option_x - 2, ">", curses.color_pair(2))
+        
+        self.stdscr.refresh()
+        
+    def handle_menu_input(self, options):
+        """Handle user input for menu navigation"""
+        # Calculate which options are selectable (not headers)
+        selectable_indices = [i for i, opt in enumerate(options) if not opt.startswith("--")]
+        if not selectable_indices:
+            return -1  # No selectable options
+            
+        selected_idx = selectable_indices[0]  # Start with first selectable option
+        
+        while True:
+            # Get current position in selectable options list
+            current_position = selectable_indices.index(selected_idx)
+            
+            # Display the menu
+            self.display_menu(options, selected_idx, self.get_menu_title())
+            
+            # Handle input
+            key = self.stdscr.getch()
+            
+            if key == curses.KEY_UP:
+                # Move to previous selectable option
+                if current_position > 0:
+                    selected_idx = selectable_indices[current_position - 1]
+                else:
+                    selected_idx = selectable_indices[-1]  # Wrap around to the last option
+                    
+            elif key == curses.KEY_DOWN:
+                # Move to next selectable option
+                if current_position < len(selectable_indices) - 1:
+                    selected_idx = selectable_indices[current_position + 1]
+                else:
+                    selected_idx = selectable_indices[0]  # Wrap around to the first option
+                    
+            elif key in [curses.KEY_ENTER, ord('\n'), ord('\r')]:
+                # Return the selected option text
+                return options[selected_idx]
+                
+            elif key == 27:  # ESC key
+                return "BACK"
+                
+            time.sleep(0.1)
+    
+    def get_menu_title(self):
+        """Get the title for the current menu"""
+        menu_titles = {
+            "main": "ULTIMATE SNAKE SHOWDOWN",
+            "settings": "GAME SETTINGS",
+            "help": "GAME HELP",
+            "difficulty": "DIFFICULTY SETTINGS",
+            "themes": "VISUAL THEMES",
+            "ai_count": "AI SNAKE COUNT",
+            "game_over": "GAME OVER"
+        }
+        return menu_titles.get(self.current_menu, "SNAKE GAME")
+    
+    def show_main_menu(self):
+        """Show the main menu and handle selection"""
+        self.current_menu = "main"
+        
+        # Create a more organized main menu
+        options = [
+            "--GAME MODES--",
+            "Quick Game (4 AI Snakes)",
+            "Human vs AI",
+            "AI Battle Royale",
+            "",
+            "--OPTIONS--",
+            "Settings",
+            "Help",
+            "Exit Game"
+        ]
+        
+        selection = self.handle_menu_input(options)
+        
+        if selection == "Quick Game (4 AI Snakes)":
+            return (4, False)  # 4 AI snakes
+        elif selection == "Human vs AI":
+            ai_count = self.show_ai_count_menu()
+            if ai_count == 0:
+                return self.show_main_menu()  # Go back to main menu
+            return (ai_count + 1, True)  # Human + AI count
+        elif selection == "AI Battle Royale":
+            return self.show_snake_count_menu()
+        elif selection == "Settings":
+            self.show_settings_menu()
+            return self.show_main_menu()  # Return to main menu after settings
+        elif selection == "Help":
+            self.show_help_screen()
+            return self.show_main_menu()  # Return to main menu after help
+        elif selection == "Exit Game":
+            return (0, False)  # Exit code
+        else:
+            # If we get here, user likely pressed ESC
+            return self.show_main_menu()
+    
+    def show_settings_menu(self):
+        """Show and handle the settings menu"""
+        self.current_menu = "settings"
+        
+        # Create settings menu with current values
+        options = [
+            "--GAME SETTINGS--",
+            f"Difficulty: {self.settings['difficulty']}",
+            f"Game Speed: {self.settings['game_speed']}x",
+            f"Sound Effects: {self.settings['sound']}",
+            f"Visual Theme: {self.settings['theme']}",
+            "",
+            "Save and Return"
+        ]
+        
+        while True:
+            selection = self.handle_menu_input(options)
+            
+            if selection == "Save and Return" or selection == "BACK":
+                return  # Return to previous menu
+            elif "Difficulty:" in selection:
+                # Cycle through difficulty options
+                difficulties = ["Easy", "Normal", "Hard", "Extreme"]
+                current_idx = difficulties.index(self.settings['difficulty'])
+                next_idx = (current_idx + 1) % len(difficulties)
+                self.settings['difficulty'] = difficulties[next_idx]
+                
+                # Update the menu option
+                diff_idx = next(i for i, opt in enumerate(options) if "Difficulty:" in opt)
+                options[diff_idx] = f"Difficulty: {self.settings['difficulty']}"
+                
+            elif "Game Speed:" in selection:
+                # Cycle through speed options
+                speeds = [0.5, 0.75, 1.0, 1.25, 1.5]
+                current_speed = self.settings['game_speed']
+                current_idx = speeds.index(current_speed) if current_speed in speeds else 2
+                next_idx = (current_idx + 1) % len(speeds)
+                self.settings['game_speed'] = speeds[next_idx]
+                
+                # Update the menu option
+                speed_idx = next(i for i, opt in enumerate(options) if "Game Speed:" in opt)
+                options[speed_idx] = f"Game Speed: {self.settings['game_speed']}x"
+                
+            elif "Sound Effects:" in selection:
+                # Toggle sound on/off
+                self.settings['sound'] = "Off" if self.settings['sound'] == "On" else "On"
+                
+                # Update the menu option
+                sound_idx = next(i for i, opt in enumerate(options) if "Sound Effects:" in opt)
+                options[sound_idx] = f"Sound Effects: {self.settings['sound']}"
+                
+            elif "Visual Theme:" in selection:
+                # Cycle through theme options
+                themes = ["Classic", "Neon", "Retro", "Dark"]
+                current_idx = themes.index(self.settings['theme'])
+                next_idx = (current_idx + 1) % len(themes)
+                self.settings['theme'] = themes[next_idx]
+                
+                # Update the menu option
+                theme_idx = next(i for i, opt in enumerate(options) if "Visual Theme:" in opt)
+                options[theme_idx] = f"Visual Theme: {self.settings['theme']}"
+    
+    def show_help_screen(self):
+        """Show help information"""
+        self.current_menu = "help"
+        self.stdscr.clear()
+        
+        # Draw decorative border
+        border_info = self.draw_menu_border("GAME HELP")
+        start_x, start_y, box_width, box_height = border_info
+        
+        # Help content
+        help_text = [
+            "CONTROLS:",
+            "- Arrow Keys: Change snake direction",
+            "- WASD: Alternative movement controls",
+            "- P: Pause game",
+            "- Q: Quit to menu",
+            "",
+            "GAMEPLAY:",
+            "- Eat food (*) to grow and earn points",
+            "- Bonus food appears regularly (blinking)",
+            "- Power-ups give special abilities:",
+            "  S: Speed boost",
+            "  I: Invincibility",
+            "  G: Ghost mode (pass through other snakes)",
+            "  +: Growth boost",
+            "  M: Score multiplier",
+            "",
+            "Press any key to return..."
+        ]
+        
+        # Display help text
+        for i, line in enumerate(help_text):
+            y_pos = start_y + 2 + i
+            x_pos = start_x + 2
+            
+            if ":" in line and not line.startswith("-"):
+                # It's a section header
+                self.renderer.safe_addstr(y_pos, x_pos, line, curses.A_BOLD | curses.color_pair(5))
+            else:
+                self.renderer.safe_addstr(y_pos, x_pos, line)
+        
+        self.stdscr.refresh()
+        
+        # Wait for any key
+        self.stdscr.nodelay(0)  # Switch to blocking input
+        self.stdscr.getch()
+        self.stdscr.nodelay(1)  # Switch back to non-blocking
+    
+    def show_snake_count_menu(self):
+        """Show menu to select number of AI snakes for AI battle"""
+        self.current_menu = "ai_count"
+        
+        options = [
+            "--SELECT NUMBER OF AI SNAKES--",
+            "2 Snakes", 
+            "4 Snakes", 
+            "6 Snakes", 
+            "8 Snakes", 
+            "10 Snakes", 
+            "12 Snakes", 
+            "14 Snakes", 
+            "16 Snakes", 
+            "18 Snakes", 
+            "20 Snakes",
+            "",
+            "Back to Main Menu"
+        ]
+        
+        selection = self.handle_menu_input(options)
+        
+        if selection == "Back to Main Menu" or selection == "BACK":
+            return self.show_main_menu()
+        else:
+            # Parse snake count from option text
+            try:
+                snake_count = int(selection.split()[0])
+                return (snake_count, False)
+            except (ValueError, IndexError):
+                return self.show_main_menu()
+    
+    def show_ai_count_menu(self):
+        """Show menu to select number of AI snakes for human vs AI"""
+        self.current_menu = "ai_count"
+        
+        options = ["--SELECT AI OPPONENTS--"]
+        
+        # Add options for 1-10 AI snakes
+        for i in range(1, min(11, Config.MAX_SNAKES)):
+            snake_text = "Snake" if i == 1 else "Snakes"
+            options.append(f"{i} AI {snake_text}")
+            
+        options.append("")
+        options.append("Back to Main Menu")
+        
+        selection = self.handle_menu_input(options)
+        
+        if selection == "Back to Main Menu" or selection == "BACK":
+            return 0
+        else:
+            # Parse AI count from option text
+            try:
+                ai_count = int(selection.split()[0])
+                return ai_count
+            except (ValueError, IndexError):
+                return 0
+    
+    def show_game_over_menu(self, game_state):
+        """Show enhanced game over screen with options"""
+        self.current_menu = "game_over"
+        
+        # Determine winner
+        alive_snakes = [s for s in game_state.snakes if s.alive]
+        if len(alive_snakes) == 1:
+            winner = alive_snakes[0]
+            result = f"Snake {winner.id} wins!"
+            color = self.renderer.get_snake_color(winner.id)
+        elif len(alive_snakes) > 1:
+            # Multiple survivors, highest score wins
+            winner = max(alive_snakes, key=lambda s: s.score)
+            result = f"Snake {winner.id} wins with highest score!"
+            color = self.renderer.get_snake_color(winner.id)
+        else:
+            # No survivors, highest score from all snakes
+            winner = max(game_state.snakes, key=lambda s: s.score)
+            result = f"All snakes died! Snake {winner.id} had the highest score."
+            color = self.renderer.get_snake_color(winner.id)
+        
+        self.stdscr.clear()
+        
+        # Draw a fancy game over header
+        game_over_text = "GAME OVER"
+        self.renderer.safe_addstr(self.screen_height//3, 
+                                 (self.screen_width - len(game_over_text))//2, 
+                                 game_over_text, 
+                                 curses.A_BOLD | curses.color_pair(3))
+        
+        # Draw winner information
+        self.renderer.safe_addstr(self.screen_height//3 + 2, 
+                                 (self.screen_width - len(result))//2, 
+                                 result, 
+                                 color | curses.A_BOLD)
+        
+        # Show winner's strategy if AI
+        if not winner.is_human:
+            strategy_text = f"Winning strategy: {winner.strategy.name}"
+            self.renderer.safe_addstr(self.screen_height//3 + 3, 
+                                     (self.screen_width - len(strategy_text))//2, 
+                                     strategy_text, 
+                                     color)
+        
+        # Show game statistics
+        game_duration = time.time() - game_state.start_time
+        minutes = int(game_duration // 60)
+        seconds = int(game_duration % 60)
+        time_str = f"Game Duration: {minutes:02d}:{seconds:02d}"
+        
+        self.renderer.safe_addstr(self.screen_height//3 + 5, 
+                                 (self.screen_width - len(time_str))//2, 
+                                 time_str)
+                                 
+        # Game over options
+        options = [
+            "--GAME FINISHED--",
+            "View Rankings",
+            "Play Again",
+            "Change Settings",
+            "Return to Main Menu",
+            "Exit Game"
+        ]
+        
+        selection = self.handle_menu_input(options)
+        
+        if selection == "View Rankings":
+            return self.show_ranking_screen(game_state)
+        elif selection == "Play Again":
+            return True  # Restart the game with the same settings
+        elif selection == "Change Settings":
+            self.show_settings_menu()
+            return self.show_game_over_menu(game_state)
+        elif selection == "Return to Main Menu":
+            # Return to main menu and get a new game configuration
+            result = self.show_main_menu()
+            if result == (0, False):
+                return False  # Exit
+            return result
+        elif selection == "Exit Game":
+            return False  # Exit the game
+        else:
+            return False
+            
+    def show_ranking_screen(self, game_state):
+        """Show enhanced ranking screen"""
+        self.current_menu = "ranking"
+        
+        # Sort snakes by score
+        ranking = sorted(game_state.snakes, 
+                        key=lambda s: (s.score, 0 if s.alive else 1, s.death_order if s.death_order else float('inf')),
+                        reverse=True)
+        
+        self.stdscr.clear()
+        
+        # Draw decorative border
+        border_info = self.draw_menu_border("FINAL RANKINGS")
+        start_x, start_y, box_width, box_height = border_info
+        
+        # Calculate game duration
+        game_duration = time.time() - game_state.start_time
+        minutes = int(game_duration // 60)
+        seconds = int(game_duration % 60)
+        
+        # Display game duration
+        time_str = f"Game Duration: {minutes:02d}:{seconds:02d}"
+        self.renderer.safe_addstr(start_y + 2, start_x + (box_width - len(time_str))//2, time_str)
+        
+        # Display ranking table header
+        header_y = start_y + 4
+        self.renderer.safe_addstr(header_y, start_x + 3, "Rank", curses.A_BOLD)
+        self.renderer.safe_addstr(header_y, start_x + 10, "Snake", curses.A_BOLD)
+        self.renderer.safe_addstr(header_y, start_x + 25, "Type", curses.A_BOLD)
+        self.renderer.safe_addstr(header_y, start_x + 40, "Score", curses.A_BOLD)
+        self.renderer.safe_addstr(header_y, start_x + 50, "Status", curses.A_BOLD)
+        
+        # Draw separator line
+        for x in range(start_x + 2, start_x + box_width - 2):
+            self.renderer.safe_addch(header_y + 1, x, '─')
+        
+        # Display snake rankings
+        max_display = min(10, len(ranking))  # Display up to 10 snakes
+        for idx, snake in enumerate(ranking[:max_display]):
+            row_y = header_y + 2 + idx
+            
+            # Get snake color and set attributes
+            snake_color = self.renderer.get_snake_color(snake.id)
+            if snake.alive:
+                snake_color |= curses.A_BOLD
+            
+            # Rank
+            rank_text = f"#{idx+1}"
+            self.renderer.safe_addstr(row_y, start_x + 3, rank_text, snake_color)
+            
+            # Snake ID
+            snake_text = f"Snake {snake.id}"
+            self.renderer.safe_addstr(row_y, start_x + 10, snake_text, snake_color)
+            
+            # Snake type
+            type_text = "Human" if snake.is_human else f"AI ({snake.strategy.name[:4]})"
+            self.renderer.safe_addstr(row_y, start_x + 25, type_text, snake_color)
+            
+            # Score
+            score_text = str(snake.score)
+            self.renderer.safe_addstr(row_y, start_x + 40, score_text, snake_color)
+            
+            # Status
+            status = "ALIVE" if snake.alive else f"#{snake.death_order}" if snake.death_order else "DEAD"
+            self.renderer.safe_addstr(row_y, start_x + 50, status, snake_color)
+        
+        # Options at the bottom
+        options = ["Play Again", "Return to Main Menu", "Exit Game"]
+        
+        # Calculate options position
+        options_y = start_y + box_height - 4
+        options_x = start_x + (box_width - sum(len(opt) for opt in options) - 4) // 2
+        
+        # Draw options
+        selected = 0
+        while True:
+            for idx, option in enumerate(options):
+                attr = curses.A_REVERSE if idx == selected else 0
+                self.renderer.safe_addstr(options_y, options_x, option, attr)
+                options_x += len(option) + 2
+            
+            self.stdscr.refresh()
+            
+            # Handle input
+            key = self.stdscr.getch()
+            if key == curses.KEY_LEFT:
+                selected = (selected - 1) % len(options)
+            elif key == curses.KEY_RIGHT:
+                selected = (selected + 1) % len(options)
+            elif key in [curses.KEY_ENTER, ord('\n'), ord('\r')]:
+                if options[selected] == "Exit Game":
+                    return False  # Exit
+                elif options[selected] == "Play Again":
+                    return True  # Restart
+                elif options[selected] == "Return to Main Menu":
+                    # Return to main menu and get a new game configuration
+                    result = self.show_main_menu()
+                    if result == (0, False):
+                        return False  # Exit
+                    return result
+            
+            # Reset options position for redrawing
+            options_x = start_x + (box_width - sum(len(opt) for opt in options) - 4) // 2
+            time.sleep(0.1)
+
+# =============================================================================
 # GAME CONTROLLER CLASS
 # =============================================================================
 
@@ -1965,6 +2808,7 @@ class GameController:
             raise ValueError(f"Terminal too small! Need at least {Config.MIN_WIDTH}x{Config.MIN_HEIGHT}")
         
         self.game_state = None
+        self.menu_system = MenuSystem(stdscr, self.renderer, self.screen_width, self.screen_height)
     
     def setup_terminal(self):
         """Set up terminal for the game"""
@@ -1975,121 +2819,20 @@ class GameController:
     
     def show_title_screen(self):
         """Show title screen and get game mode selection"""
-        options = self.renderer.draw_title_screen(self.screen_width, self.screen_height)
-        selected = 0
-        
-        while True:
-            self.renderer.draw_menu_options(options, selected, self.screen_height//2, self.screen_width)
-            self.stdscr.refresh()
-            
-            # Handle input
-            key = self.stdscr.getch()
-            if key == curses.KEY_UP:
-                selected = (selected - 1) % len(options)
-            elif key == curses.KEY_DOWN:
-                selected = (selected + 1) % len(options)
-            elif key in [curses.KEY_ENTER, ord('\n'), ord('\r')]:
-                if options[selected] == "Exit":
-                    return (0, False)  # Exit code
-                elif options[selected] == "Human + AI":
-                    # Show submenu for number of AI snakes
-                    ai_count = self.show_ai_count_menu()
-                    if ai_count == 0:
-                        return (0, False)  # Exit if user cancels
-                    return (ai_count + 1, True)  # Number of snakes, human player flag
-                else:
-                    # Parse number of snakes from option text
-                    return (int(options[selected].split()[0]), False)
-            
-            time.sleep(0.1)
+        # Use the new menu system
+        return self.menu_system.show_main_menu()
     
     def show_ai_count_menu(self):
         """Show menu to select number of AI snakes"""
-        options = [str(i) for i in range(1, Config.MAX_SNAKES)] + ["Cancel"]
-        selected = 0
-        
-        while True:
-            self.stdscr.clear()
-            self.renderer.safe_addstr(self.screen_height//4, 
-                                    self.screen_width//2 - 15, 
-                                    "Choose number of AI snakes (1-19):",
-                                    curses.A_BOLD)
-            
-            self.renderer.draw_menu_options(options, selected, self.screen_height//2, self.screen_width)
-            self.stdscr.refresh()
-            
-            # Handle input
-            key = self.stdscr.getch()
-            if key == curses.KEY_UP:
-                selected = (selected - 1) % len(options)
-            elif key == curses.KEY_DOWN:
-                selected = (selected + 1) % len(options)
-            elif key in [curses.KEY_ENTER, ord('\n'), ord('\r')]:
-                if options[selected] == "Cancel":
-                    return 0
-                else:
-                    return int(options[selected])
-            
-            time.sleep(0.1)
+        return self.menu_system.show_ai_count_menu()
     
     def show_ranking_screen(self):
         """Show ranking screen and handle restart/exit choice"""
-        # Sort snakes by score
-        ranking = sorted(self.game_state.snakes, 
-                        key=lambda s: (s.score, 0 if s.alive else 1, s.death_order if s.death_order else float('inf')),
-                        reverse=True)
-        
-        options = self.renderer.draw_ranking_screen(ranking, self.game_state.start_time, 
-                                                 self.screen_width, self.screen_height)
-        selected = 0
-        
-        while True:
-            # Calculate position based on number of snakes
-            menu_y = min(15, 8 + len(self.game_state.snakes))
-            
-            self.renderer.draw_menu_options(options, selected, menu_y, self.screen_width)
-            self.stdscr.refresh()
-            
-            # Handle input
-            key = self.stdscr.getch()
-            if key == curses.KEY_UP:
-                selected = (selected - 1) % len(options)
-            elif key == curses.KEY_DOWN:
-                selected = (selected + 1) % len(options)
-            elif key in [curses.KEY_ENTER, ord('\n'), ord('\r')]:
-                if options[selected] == "Restart":
-                    return True  # Restart
-                else:
-                    return False  # Exit
-            
-            time.sleep(0.1)
+        return self.menu_system.show_ranking_screen(self.game_state)
     
     def show_game_over_screen(self):
         """Show game over screen and handle restart/exit choice"""
-        options = self.renderer.draw_game_over_screen(self.game_state.snakes, 
-                                                    self.screen_width, self.screen_height)
-        selected = 0
-        
-        while True:
-            self.renderer.draw_menu_options(options, selected, 
-                                          self.screen_height//2 + 5, self.screen_width)
-            self.stdscr.refresh()
-            
-            # Handle input
-            key = self.stdscr.getch()
-            if key == curses.KEY_UP:
-                selected = (selected - 1) % len(options)
-            elif key == curses.KEY_DOWN:
-                selected = (selected + 1) % len(options)
-            elif key in [curses.KEY_ENTER, ord('\n'), ord('\r')]:
-                if options[selected] == "Exit":
-                    return False  # Exit
-                elif options[selected] == "Restart":
-                    return True  # Restart
-                elif options[selected] == "See Rankings":
-                    return self.show_ranking_screen()  # Show rankings, then get restart choice
-            
-            time.sleep(0.1)
+        return self.menu_system.show_game_over_menu(self.game_state)
     
     def handle_input(self):
         """Handle user input during gameplay"""
@@ -2115,9 +2858,14 @@ class GameController:
     def run_game(self):
         """Main game loop"""
         # Show title screen and get game mode
-        num_snakes, human_player = self.show_title_screen()
-        if num_snakes == 0:
-            return  # Exit if user chose to exit
+        result = self.show_title_screen()
+        if isinstance(result, tuple):
+            num_snakes, human_player = result
+            if num_snakes == 0:
+                return  # Exit if user chose to exit
+        else:
+            # In case we get a non-tuple result
+            return
         
         # Main game loop
         restart = True
@@ -2125,6 +2873,24 @@ class GameController:
             # Initialize game state
             self.game_state = GameState(self.screen_width, self.screen_height, num_snakes, human_player)
             self.game_state.initialize_game()
+            
+            # Apply game settings from the menu system
+            if 'difficulty' in self.menu_system.settings:
+                # Adjust game parameters based on difficulty
+                if self.menu_system.settings['difficulty'] == 'Easy':
+                    self.game_state.game_speed = Config.BASE_SPEED * 1.3  # Slower
+                    self.game_state.idle_time_threshold = Config.MAX_IDLE_TIME * 1.5  # More time before speed up
+                elif self.menu_system.settings['difficulty'] == 'Hard':
+                    self.game_state.game_speed = Config.BASE_SPEED * 0.8  # Faster
+                    self.game_state.idle_time_threshold = Config.MAX_IDLE_TIME * 0.8  # Less time before speed up
+                elif self.menu_system.settings['difficulty'] == 'Extreme':
+                    self.game_state.game_speed = Config.BASE_SPEED * 0.6  # Much faster
+                    self.game_state.idle_time_threshold = Config.MAX_IDLE_TIME * 0.5  # Much less time before speed up
+            
+            # Apply game speed from settings
+            if 'game_speed' in self.menu_system.settings:
+                speed_multiplier = self.menu_system.settings['game_speed']
+                self.game_state.game_speed /= speed_multiplier  # Adjust base speed (lower = faster)
             
             # Game loop
             while not self.game_state.game_over:
@@ -2142,7 +2908,18 @@ class GameController:
                 time.sleep(self.game_state.game_speed)
             
             # Game over - show ranking and ask for restart
-            restart = self.show_game_over_screen()
+            restart_result = self.show_game_over_screen()
+            
+            # Check if we need to restart with the same settings or start a new game
+            if isinstance(restart_result, tuple):
+                # We got a new game configuration from the menu
+                num_snakes, human_player = restart_result
+                if num_snakes == 0:
+                    return  # Exit if user chose to exit
+                restart = True
+            else:
+                # Simple boolean restart
+                restart = restart_result
 
 
 # =============================================================================
