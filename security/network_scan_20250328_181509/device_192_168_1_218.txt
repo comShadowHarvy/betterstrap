@@ -1,0 +1,29 @@
+Detailed scan for 192.168.1.218
+======================
+## Basic Information
+IP Address: 192.168.1.218
+Hostname: Unknown
+MAC Address: d0:ef:76:69:04:74
+d0:ef:76:69:04:74
+Vendor: Espressif Inc.
+Gateway Device: No
+
+## OS Detection
+Device type: specialized
+Running: lovebox embedded, lwIP 2.X, M5Stack embedded
+OS CPE: cpe:/a:lwip_project:lwip:2
+OS details: Lovebox (lwIP 2.1.0 - 2.2.0), lwIP 2.1.0 - 2.2.0, M5Stack M5GO (lwIP 2.1.0 - 2.2.0)
+
+## Service Scan
+# Nmap 7.95 scan initiated Fri Mar 28 18:47:16 2025 as: nmap -sV -T4 --version-all -p 1-1000 -oN - 192.168.1.218
+Nmap scan report for 192.168.1.218
+Host is up (0.076s latency).
+All 1000 scanned ports on 192.168.1.218 are in ignored states.
+Not shown: 1000 closed tcp ports (reset)
+MAC Address: D0:EF:76:69:04:74 (Espressif)
+
+Service detection performed. Please report any incorrect results at https://nmap.org/submit/ .
+# Nmap done at Fri Mar 28 18:47:22 2025 -- 1 IP address (1 host up) scanned in 6.57 seconds
+
+## Network Path
+Device Type: Unknown

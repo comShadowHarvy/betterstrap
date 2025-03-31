@@ -1,0 +1,28 @@
+Detailed scan for 192.168.1.23
+======================
+## Basic Information
+IP Address: 192.168.1.23
+Hostname: Unknown
+MAC Address: c4:4f:33:a3:f8:70
+c4:4f:33:a3:f8:70
+Vendor: Espressif Inc.
+Gateway Device: No
+
+## OS Detection
+Device type: specialized|general purpose|bridge|webcam|media device
+Running (JUST GUESSING): lwIP 2.X (99%), Gosund embedded (92%), Rigol Technologies embedded (91%), Oracle Virtualbox (90%), 2N embedded (90%), Eve Systems embedded (90%), Yamaha embedded (89%)
+OS CPE: cpe:/a:lwip_project:lwip cpe:/a:lwip_project:lwip:2 cpe:/a:oracle:vm_virtualbox cpe:/h:2n:helios cpe:/h:yamaha:rx-v671
+
+## Service Scan
+# Nmap 7.95 scan initiated Fri Mar 28 18:47:53 2025 as: nmap -sV -T4 --version-all -p 1-1000 -oN - 192.168.1.23
+Nmap scan report for 192.168.1.23
+Host is up (0.0099s latency).
+All 1000 scanned ports on 192.168.1.23 are in ignored states.
+Not shown: 1000 closed tcp ports (reset)
+MAC Address: C4:4F:33:A3:F8:70 (Espressif)
+
+Service detection performed. Please report any incorrect results at https://nmap.org/submit/ .
+# Nmap done at Fri Mar 28 18:48:09 2025 -- 1 IP address (1 host up) scanned in 15.56 seconds
+
+## Network Path
+Device Type: Unknown

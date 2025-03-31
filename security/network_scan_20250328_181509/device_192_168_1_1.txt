@@ -1,0 +1,61 @@
+Detailed scan for 192.168.1.1
+======================
+## Basic Information
+IP Address: 192.168.1.1
+Hostname: Unknown
+MAC Address: c4:5b:be:e2:a5:05
+d0:73:d5:41:f7:7a
+34:20:03:b0:91:53
+2c:9e:00:6d:ed:dd
+84:0d:8e:5d:47:da
+f4:8c:eb:b7:51:27
+d4:f5:47:0e:e3:6e
+bc:24:11:8f:2b:40
+bc:24:11:8f:2b:40
+d4:f5:47:0e:e3:6e
+c4:5b:be:e2:a4:d1
+f4:8c:eb:b7:51:27
+2c:9e:00:6d:ed:dd
+c4:5b:be:e2:a4:d1
+84:0d:8e:5d:47:da
+34:20:03:b0:91:53
+d0:73:d5:41:f7:7a
+bc:24:11:8a:a8:86
+ec:0b:ae:9e:26:64
+7c:2e:bd:4e:c1:f8
+bc:24:11:04:ae:89
+c4:5b:be:e2:a5:05
+ec:0b:ae:9e:26:64
+bc:24:11:04:ae:89
+c8:db:26:0f:76:48
+bc:24:11:8a:a8:86
+c8:db:26:0f:76:48
+7c:2e:bd:4e:c1:f8
+Vendor: Sony Interactive Entertainment Inc.
+Gateway Device: Yes
+
+## OS Detection
+Device type: general purpose|WAP|broadband router
+Running (JUST GUESSING): Linux 4.X|3.X|2.6.X|2.4.X|5.X (95%)
+OS CPE: cpe:/o:linux:linux_kernel:4.4 cpe:/o:linux:linux_kernel:3.18 cpe:/o:linux:linux_kernel:4.1 cpe:/o:linux:linux_kernel:3 cpe:/o:linux:linux_kernel:2.6.22 cpe:/o:linux:linux_kernel:2.4 cpe:/o:linux:linux_kernel:5 cpe:/o:linux:linux_kernel
+
+## Service Scan
+# Nmap 7.95 scan initiated Fri Mar 28 18:15:14 2025 as: nmap -sV -T4 --version-all -p 1-1000 -oN - 192.168.1.1
+Nmap scan report for Shadow (192.168.1.1)
+Host is up (0.0087s latency).
+Not shown: 997 closed tcp ports (reset)
+PORT    STATE SERVICE  VERSION
+53/tcp  open  domain   dnsmasq 2.80
+80/tcp  open  http     nginx 1.12.2
+443/tcp open  ssl/http nginx 1.12.2
+MAC Address: F4:8C:EB:B7:51:27 (D-Link International)
+
+Service detection performed. Please report any incorrect results at https://nmap.org/submit/ .
+# Nmap done at Fri Mar 28 18:15:28 2025 -- 1 IP address (1 host up) scanned in 14.01 seconds
+
+## Network Path
+
+## Web Server Information
+Failed to connect to HTTP
+Failed to connect to HTTPS
+Device Type: Gateway/Router

@@ -1,0 +1,28 @@
+Detailed scan for 192.168.1.29
+======================
+## Basic Information
+IP Address: 192.168.1.29
+Hostname: Unknown
+MAC Address: 48:d6:d5:5b:e1:34
+48:d6:d5:5b:e1:34
+Vendor: Google, Inc.
+Gateway Device: No
+
+## OS Detection
+Device type: media device
+Running: Google embedded
+OS details: Google Home device
+
+## Service Scan
+# Nmap 7.95 scan initiated Fri Mar 28 18:59:01 2025 as: nmap -sV -T4 --version-all -p 1-1000 -oN - 192.168.1.29
+Nmap scan report for 192.168.1.29
+Host is up (0.032s latency).
+All 1000 scanned ports on 192.168.1.29 are in ignored states.
+Not shown: 1000 closed tcp ports (reset)
+MAC Address: 48:D6:D5:5B:E1:34 (Google)
+
+Service detection performed. Please report any incorrect results at https://nmap.org/submit/ .
+# Nmap done at Fri Mar 28 18:59:03 2025 -- 1 IP address (1 host up) scanned in 1.97 seconds
+
+## Network Path
+Device Type: Unknown

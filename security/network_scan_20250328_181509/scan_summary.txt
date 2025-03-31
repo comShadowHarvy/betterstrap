@@ -1,0 +1,344 @@
+Network Scan Results - Fri Mar 28 06:15:09 PM UTC 2025
+=================================
+IP: 192.168.1.1
+Hostname: Unknown
+MAC: c4:5b:be:e2:a5:05
+d0:73:d5:41:f7:7a
+34:20:03:b0:91:53
+2c:9e:00:6d:ed:dd
+84:0d:8e:5d:47:da
+f4:8c:eb:b7:51:27
+d4:f5:47:0e:e3:6e
+bc:24:11:8f:2b:40
+bc:24:11:8f:2b:40
+d4:f5:47:0e:e3:6e
+c4:5b:be:e2:a4:d1
+f4:8c:eb:b7:51:27
+2c:9e:00:6d:ed:dd
+c4:5b:be:e2:a4:d1
+84:0d:8e:5d:47:da
+34:20:03:b0:91:53
+d0:73:d5:41:f7:7a
+bc:24:11:8a:a8:86
+ec:0b:ae:9e:26:64
+7c:2e:bd:4e:c1:f8
+bc:24:11:04:ae:89
+c4:5b:be:e2:a5:05
+ec:0b:ae:9e:26:64
+bc:24:11:04:ae:89
+c8:db:26:0f:76:48
+bc:24:11:8a:a8:86
+c8:db:26:0f:76:48
+7c:2e:bd:4e:c1:f8
+Vendor: Sony Interactive Entertainment Inc.
+Device Type: Gateway/Router
+Open Ports: 53,80,443
+OS: Device type: general purpose|WAP|broadband router
+----------------------------
+IP: 192.168.1.11
+Hostname: Unknown
+MAC: 7c:2e:bd:4e:c1:f8
+7c:2e:bd:4e:c1:f8
+Vendor: Google, Inc.
+Device Type: Unknown
+Open Ports: 
+OS: Device type: media device
+----------------------------
+IP: 192.168.1.12
+Hostname: Unknown
+MAC: d4:f5:47:0e:e3:6e
+d4:f5:47:0e:e3:6e
+Vendor: Google, Inc.
+Device Type: Linux Device
+Open Ports: 
+OS: Device type: general purpose
+----------------------------
+IP: 192.168.1.13
+Hostname: Unknown
+MAC: bc:24:11:04:ae:89
+bc:24:11:04:ae:89
+Vendor: Proxmox Server Solutions GmbH
+Device Type: Linux Device
+Open Ports: 22
+OS: Device type: general purpose
+----------------------------
+IP: 192.168.1.14
+Hostname: Unknown
+MAC: 34:20:03:b0:91:53
+2c:9e:00:6d:ed:dd
+2c:9e:00:6d:ed:dd
+34:20:03:b0:91:53
+ec:0b:ae:9e:26:64
+ec:0b:ae:9e:26:64
+Vendor: Sony Interactive Entertainment Inc.
+Device Type: Linux Device
+Open Ports: 23,80
+OS: Device type: general purpose
+----------------------------
+IP: 192.168.1.146
+Hostname: Unknown
+MAC: 2c:9e:00:6d:ed:dd
+2c:9e:00:6d:ed:dd
+Vendor: Sony Interactive Entertainment Inc.
+Device Type: Unknown
+Open Ports: 
+OS: Device type: general purpose|game console
+----------------------------
+IP: 192.168.1.148
+Hostname: Unknown
+MAC: ec:0b:ae:9e:26:64
+ec:0b:ae:9e:26:64
+Vendor: Hangzhou BroadLink Technology Co.,Ltd
+Device Type: Unknown
+Open Ports: 
+OS: Device type: general purpose|specialized
+----------------------------
+IP: 192.168.1.15
+Hostname: Unknown
+MAC: 84:0d:8e:5d:47:da
+84:0d:8e:5d:47:da
+Vendor: Espressif Inc.
+Device Type: Unknown
+Open Ports: 
+OS: Device type: specialized
+----------------------------
+IP: 192.168.1.160
+Hostname: Unknown
+MAC: c4:5b:be:e2:a4:d1
+c4:5b:be:e2:a4:d1
+Vendor: Espressif Inc.
+Device Type: Unknown
+Open Ports: 80
+OS: Device type: general purpose
+----------------------------
+IP: 192.168.1.161
+Hostname: Unknown
+MAC: c4:5b:be:e2:a5:05
+c4:5b:be:e2:a5:05
+Vendor: Espressif Inc.
+Device Type: Unknown
+Open Ports: 80
+OS: Device type: general purpose
+----------------------------
+IP: 192.168.1.17
+Hostname: Unknown
+MAC: bc:24:11:8f:2b:40
+bc:24:11:8f:2b:40
+Vendor: Proxmox Server Solutions GmbH
+Device Type: Linux Device
+Open Ports: 22
+OS: Device type: general purpose|router
+----------------------------
+IP: 192.168.1.178
+Hostname: Unknown
+MAC: Unknown
+Vendor: Unknown
+Device Type: Gateway/Router
+Open Ports: 
+OS: Too many fingerprints match this host to give specific OS details
+----------------------------
+IP: 192.168.1.18
+Hostname: Unknown
+MAC: bc:24:11:8a:a8:86
+c8:db:26:0f:76:48
+bc:24:11:8a:a8:86
+c8:db:26:0f:76:48
+Vendor: Proxmox Server Solutions GmbH
+Device Type: Linux Device
+Open Ports: 22
+OS: Device type: general purpose|router
+----------------------------
+IP: 192.168.1.185
+Hostname: Unknown
+MAC: c8:db:26:0f:76:48
+c8:db:26:0f:76:48
+Vendor: Logitech
+Device Type: Linux Device
+Open Ports: 
+OS: Device type: general purpose
+----------------------------
+IP: 192.168.1.188
+Hostname: Unknown
+MAC: Unknown
+Vendor: Unknown
+Device Type: Gateway/Router
+Open Ports: 
+OS: Too many fingerprints match this host to give specific OS details
+----------------------------
+IP: 192.168.1.19
+Hostname: Unknown
+MAC: d0:73:d5:41:f7:7a
+d0:73:d5:41:f7:7a
+Vendor: LIFI LABS MANAGEMENT PTY LTD
+Device Type: Unknown
+Open Ports: 80
+OS: Too many fingerprints match this host to give specific OS details
+----------------------------
+IP: 192.168.1.2
+Hostname: Unknown
+MAC: bc:24:11:48:4f:5d
+34:2f:bd:5e:ea:b8
+c4:4f:33:a3:f8:70
+bc:24:11:82:57:87
+34:af:b3:e7:9b:62
+02:2c:fa:4d:76:be
+bc:24:11:81:f1:31
+d0:ef:76:69:04:74
+cc:7b:5c:26:d6:37
+e6:22:dd:d4:08:8c
+e6:22:dd:d4:08:8c
+34:af:b3:e7:9b:62
+bc:24:11:81:f1:31
+bc:24:11:82:57:87
+c4:4f:33:a3:f8:70
+bc:24:11:48:4f:5d
+54:32:04:11:de:5c
+34:2f:bd:5e:ea:b8
+bc:24:11:24:d4:46
+bc:24:11:ca:91:92
+54:32:04:11:de:5c
+48:d6:d5:5b:e1:34
+bc:24:11:ca:91:92
+48:d6:d5:5b:e1:34
+cc:7b:5c:26:d6:37
+02:2c:fa:4d:76:be
+d0:ef:76:69:04:74
+bc:24:11:24:d4:46
+Vendor: Nintendo Co.,Ltd
+Device Type: Linux Device
+Open Ports: 22
+OS: Device type: general purpose|router
+----------------------------
+IP: 192.168.1.20
+Hostname: Unknown
+MAC: 34:af:b3:e7:9b:62
+cc:7b:5c:26:d6:37
+34:af:b3:e7:9b:62
+cc:7b:5c:26:d6:37
+Vendor: Espressif Inc.
+Device Type: Unknown
+Open Ports: 
+OS: Device type: general purpose|router
+----------------------------
+IP: 192.168.1.202
+Hostname: Unknown
+MAC: cc:7b:5c:26:d6:37
+cc:7b:5c:26:d6:37
+Vendor: Espressif Inc.
+Device Type: Unknown
+Open Ports: 80
+OS: Device type: specialized|webcam|general purpose
+----------------------------
+IP: 192.168.1.21
+Hostname: Unknown
+MAC: 02:2c:fa:4d:76:be
+d0:ef:76:69:04:74
+bc:24:11:ca:91:92
+bc:24:11:ca:91:92
+02:2c:fa:4d:76:be
+d0:ef:76:69:04:74
+Vendor: Proxmox Server Solutions GmbH
+Device Type: Linux Device
+Open Ports: 22
+OS: Device type: general purpose
+----------------------------
+IP: 192.168.1.210
+Hostname: HOMEASSISTANT
+MAC: 02:2c:fa:4d:76:be
+02:2c:fa:4d:76:be
+Vendor: Unknown vendor
+Device Type: Linux Device
+Open Ports: 22,111,139,445
+OS: Device type: general purpose|router
+----------------------------
+IP: 192.168.1.218
+Hostname: Unknown
+MAC: d0:ef:76:69:04:74
+d0:ef:76:69:04:74
+Vendor: Espressif Inc.
+Device Type: Unknown
+Open Ports: 
+OS: Device type: specialized
+----------------------------
+IP: 192.168.1.22
+Hostname: Unknown
+MAC: bc:24:11:82:57:87
+bc:24:11:82:57:87
+Vendor: Proxmox Server Solutions GmbH
+Device Type: Linux Device
+Open Ports: 22
+OS: Device type: general purpose|router
+----------------------------
+IP: 192.168.1.23
+Hostname: Unknown
+MAC: c4:4f:33:a3:f8:70
+c4:4f:33:a3:f8:70
+Vendor: Espressif Inc.
+Device Type: Unknown
+Open Ports: 
+OS: Device type: specialized|general purpose|bridge|webcam|media device
+----------------------------
+IP: 192.168.1.24
+Hostname: Unknown
+MAC: bc:24:11:24:d4:46
+bc:24:11:24:d4:46
+Vendor: Proxmox Server Solutions GmbH
+Device Type: Linux Device
+Open Ports: 22
+OS: Device type: general purpose|router
+----------------------------
+IP: 192.168.1.25
+Hostname: Unknown
+MAC: e6:22:dd:d4:08:8c
+e6:22:dd:d4:08:8c
+54:32:04:11:de:5c
+54:32:04:11:de:5c
+Vendor: Espressif Inc.
+Device Type: Unknown
+Open Ports: 22
+OS: Device type: general purpose|router
+----------------------------
+IP: 192.168.1.252
+Hostname: Unknown
+MAC: 54:32:04:11:de:5c
+54:32:04:11:de:5c
+Vendor: Espressif Inc.
+Device Type: Unknown
+Open Ports: 
+OS: Device type: general purpose|router
+----------------------------
+IP: 192.168.1.255
+Hostname: Unknown
+MAC: Unknown
+Vendor: Unknown
+Device Type: Unknown
+Open Ports: 
+OS: Device type: general purpose|router
+----------------------------
+IP: 192.168.1.27
+Hostname: Unknown
+MAC: 34:2f:bd:5e:ea:b8
+34:2f:bd:5e:ea:b8
+Vendor: Nintendo Co.,Ltd
+Device Type: Unknown
+Open Ports: 
+OS: Too many fingerprints match this host to give specific OS details
+----------------------------
+IP: 192.168.1.28
+Hostname: Unknown
+MAC: bc:24:11:81:f1:31
+bc:24:11:81:f1:31
+Vendor: Proxmox Server Solutions GmbH
+Device Type: Linux Device
+Open Ports: 22
+OS: Device type: general purpose|router
+----------------------------
+IP: 192.168.1.29
+Hostname: Unknown
+MAC: 48:d6:d5:5b:e1:34
+48:d6:d5:5b:e1:34
+Vendor: Google, Inc.
+Device Type: Unknown
+Open Ports: 
+OS: Device type: media device
+----------------------------

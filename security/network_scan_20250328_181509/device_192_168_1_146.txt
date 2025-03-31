@@ -1,0 +1,29 @@
+Detailed scan for 192.168.1.146
+======================
+## Basic Information
+IP Address: 192.168.1.146
+Hostname: Unknown
+MAC Address: 2c:9e:00:6d:ed:dd
+2c:9e:00:6d:ed:dd
+Vendor: Sony Interactive Entertainment Inc.
+Gateway Device: No
+
+## OS Detection
+Device type: general purpose|game console
+Running: FreeBSD 11.X|12.X, Sony embedded
+OS CPE: cpe:/o:freebsd:freebsd:11 cpe:/o:freebsd:freebsd:12 cpe:/o:freebsd:freebsd:11.0
+OS details: FreeBSD 11.0-RELEASE - 12.0-CURRENT, FreeBSD 11.0-STABLE, FreeBSD 11.1-RELEASE, FreeBSD 11.1-RELEASE or 11.2-STABLE, FreeBSD 11.1-STABLE, FreeBSD 11.2-RELEASE - 11.3 RELEASE, FreeBSD 11.3-RELEASE, Sony PS5 (FreeBSD 11.0)
+
+## Service Scan
+# Nmap 7.95 scan initiated Fri Mar 28 18:16:11 2025 as: nmap -sV -T4 --version-all -p 1-1000 -oN - 192.168.1.146
+Nmap scan report for 192.168.1.146
+Host is up (0.0044s latency).
+All 1000 scanned ports on 192.168.1.146 are in ignored states.
+Not shown: 1000 closed tcp ports (reset)
+MAC Address: 2C:9E:00:6D:ED:DD (Sony Interactive Entertainment)
+
+Service detection performed. Please report any incorrect results at https://nmap.org/submit/ .
+# Nmap done at Fri Mar 28 18:16:18 2025 -- 1 IP address (1 host up) scanned in 7.15 seconds
+
+## Network Path
+Device Type: Unknown

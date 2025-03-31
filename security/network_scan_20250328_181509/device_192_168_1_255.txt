@@ -1,0 +1,25 @@
+Detailed scan for 192.168.1.255
+======================
+## Basic Information
+IP Address: 192.168.1.255
+Hostname: Unknown
+MAC Address: Unknown
+Vendor: Unknown
+Gateway Device: No
+
+## OS Detection
+OS Detection: Failed or insufficient information
+
+## Service Scan
+# Nmap 7.95 scan initiated Fri Mar 28 18:55:19 2025 as: nmap -sV -T4 --version-all -p 1-1000 -oN - 192.168.1.255
+Nmap scan report for 192.168.1.255
+Host is up (0.096s latency).
+All 1000 scanned ports on 192.168.1.255 are in ignored states.
+Not shown: 1000 filtered tcp ports (no-response)
+MAC Address: 7C:D9:5C:37:0B:DA (Google)
+
+Service detection performed. Please report any incorrect results at https://nmap.org/submit/ .
+# Nmap done at Fri Mar 28 18:56:57 2025 -- 1 IP address (1 host up) scanned in 98.16 seconds
+
+## Network Path
+Device Type: Unknown

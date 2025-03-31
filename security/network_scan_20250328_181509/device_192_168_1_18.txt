@@ -1,0 +1,33 @@
+Detailed scan for 192.168.1.18
+======================
+## Basic Information
+IP Address: 192.168.1.18
+Hostname: Unknown
+MAC Address: bc:24:11:8a:a8:86
+c8:db:26:0f:76:48
+bc:24:11:8a:a8:86
+c8:db:26:0f:76:48
+Vendor: Proxmox Server Solutions GmbH
+Gateway Device: No
+
+## OS Detection
+Device type: general purpose|router
+Running: Linux 4.X|5.X, MikroTik RouterOS 7.X
+OS CPE: cpe:/o:linux:linux_kernel:4 cpe:/o:linux:linux_kernel:5 cpe:/o:mikrotik:routeros:7 cpe:/o:linux:linux_kernel:5.6.3
+OS details: Linux 4.15 - 5.19, OpenWrt 21.02 (Linux 5.4), MikroTik RouterOS 7.2 - 7.5 (Linux 5.6.3)
+
+## Service Scan
+# Nmap 7.95 scan initiated Fri Mar 28 18:36:00 2025 as: nmap -sV -T4 --version-all -p 1-1000 -oN - 192.168.1.18
+Nmap scan report for 192.168.1.18
+Host is up (0.00054s latency).
+Not shown: 999 closed tcp ports (reset)
+PORT   STATE SERVICE VERSION
+22/tcp open  ssh     OpenSSH 9.2p1 Debian 2+deb12u5 (protocol 2.0)
+MAC Address: BC:24:11:8A:A8:86 (Proxmox Server Solutions GmbH)
+Service Info: OS: Linux; CPE: cpe:/o:linux:linux_kernel
+
+Service detection performed. Please report any incorrect results at https://nmap.org/submit/ .
+# Nmap done at Fri Mar 28 18:36:01 2025 -- 1 IP address (1 host up) scanned in 0.58 seconds
+
+## Network Path
+Device Type: Linux Device

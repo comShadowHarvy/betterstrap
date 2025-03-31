@@ -1,0 +1,30 @@
+Detailed scan for 192.168.1.25
+======================
+## Basic Information
+IP Address: 192.168.1.25
+Hostname: Unknown
+MAC Address: e6:22:dd:d4:08:8c
+e6:22:dd:d4:08:8c
+54:32:04:11:de:5c
+54:32:04:11:de:5c
+Vendor: Espressif Inc.
+Gateway Device: No
+
+## OS Detection
+OS Detection: Failed or insufficient information
+
+## Service Scan
+# Nmap 7.95 scan initiated Fri Mar 28 18:48:19 2025 as: nmap -sV -T4 --version-all -p 1-1000 -oN - 192.168.1.25
+Nmap scan report for 192.168.1.25
+Host is up (0.012s latency).
+Not shown: 998 closed tcp ports (reset)
+PORT   STATE    SERVICE VERSION
+7/tcp  filtered echo
+22/tcp open     ssh     OpenSSH 9.9 (protocol 2.0)
+MAC Address: E6:22:DD:D4:08:8C (Unknown)
+
+Service detection performed. Please report any incorrect results at https://nmap.org/submit/ .
+# Nmap done at Fri Mar 28 18:48:22 2025 -- 1 IP address (1 host up) scanned in 2.97 seconds
+
+## Network Path
+Device Type: Unknown

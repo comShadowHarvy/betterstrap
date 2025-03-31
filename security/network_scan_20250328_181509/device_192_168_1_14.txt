@@ -1,0 +1,74 @@
+Detailed scan for 192.168.1.14
+======================
+## Basic Information
+IP Address: 192.168.1.14
+Hostname: Unknown
+MAC Address: 34:20:03:b0:91:53
+2c:9e:00:6d:ed:dd
+2c:9e:00:6d:ed:dd
+34:20:03:b0:91:53
+ec:0b:ae:9e:26:64
+ec:0b:ae:9e:26:64
+Vendor: Sony Interactive Entertainment Inc.
+Gateway Device: No
+
+## OS Detection
+Device type: general purpose
+Running: Linux 3.X|4.X
+OS CPE: cpe:/o:linux:linux_kernel:3 cpe:/o:linux:linux_kernel:4
+OS details: Linux 3.2 - 4.14
+
+## Service Scan
+# Nmap 7.95 scan initiated Fri Mar 28 18:15:48 2025 as: nmap -sV -T4 --version-all -p 1-1000 -oN - 192.168.1.14
+Nmap scan report for 192.168.1.14
+Host is up (0.063s latency).
+Not shown: 998 closed tcp ports (reset)
+PORT   STATE SERVICE VERSION
+23/tcp open  telnet  security DVR telnetd (many brands)
+80/tcp open  http
+1 service unrecognized despite returning data. If you know the service/version, please submit the following fingerprint at https://nmap.org/cgi-bin/submit.cgi?new-service :
+SF-Port80-TCP:V=7.95%I=9%D=3/28%Time=67E6E75C%P=x86_64-pc-linux-gnu%r(GetR
+SF:equest,3F,"HTTP/1\.1\x20200\x20OK\nAccept-Ranges:\x20bytes\nContent-Len
+SF:gth:\x2016\n\nOK\n\n0\n")%r(HTTPOptions,3F,"HTTP/1\.1\x20200\x20OK\nAcc
+SF:ept-Ranges:\x20bytes\nContent-Length:\x2016\n\nOK\n\n0\n")%r(RTSPReques
+SF:t,3F,"HTTP/1\.1\x20200\x20OK\nAccept-Ranges:\x20bytes\nContent-Length:\
+SF:x2016\n\nOK\n\n0\n")%r(X11Probe,3F,"HTTP/1\.1\x20200\x20OK\nAccept-Rang
+SF:es:\x20bytes\nContent-Length:\x2016\n\nOK\n\n0\n")%r(FourOhFourRequest,
+SF:3F,"HTTP/1\.1\x20200\x20OK\nAccept-Ranges:\x20bytes\nContent-Length:\x2
+SF:016\n\nOK\n\n0\n")%r(GenericLines,3F,"HTTP/1\.1\x20200\x20OK\nAccept-Ra
+SF:nges:\x20bytes\nContent-Length:\x2016\n\nOK\n\n0\n")%r(RPCCheck,3F,"HTT
+SF:P/1\.1\x20200\x20OK\nAccept-Ranges:\x20bytes\nContent-Length:\x2016\n\n
+SF:OK\n\n0\n")%r(DNSVersionBindReqTCP,3F,"HTTP/1\.1\x20200\x20OK\nAccept-R
+SF:anges:\x20bytes\nContent-Length:\x2016\n\nOK\n\n0\n")%r(DNSStatusReques
+SF:tTCP,3F,"HTTP/1\.1\x20200\x20OK\nAccept-Ranges:\x20bytes\nContent-Lengt
+SF:h:\x2016\n\nOK\n\n0\n")%r(Hello,3F,"HTTP/1\.1\x20200\x20OK\nAccept-Rang
+SF:es:\x20bytes\nContent-Length:\x2016\n\nOK\n\n0\n")%r(Help,3F,"HTTP/1\.1
+SF:\x20200\x20OK\nAccept-Ranges:\x20bytes\nContent-Length:\x2016\n\nOK\n\n
+SF:0\n")%r(SSLSessionReq,3F,"HTTP/1\.1\x20200\x20OK\nAccept-Ranges:\x20byt
+SF:es\nContent-Length:\x2016\n\nOK\n\n0\n")%r(TerminalServerCookie,3F,"HTT
+SF:P/1\.1\x20200\x20OK\nAccept-Ranges:\x20bytes\nContent-Length:\x2016\n\n
+SF:OK\n\n0\n")%r(TLSSessionReq,3F,"HTTP/1\.1\x20200\x20OK\nAccept-Ranges:\
+SF:x20bytes\nContent-Length:\x2016\n\nOK\n\n0\n")%r(SSLv23SessionReq,3F,"H
+SF:TTP/1\.1\x20200\x20OK\nAccept-Ranges:\x20bytes\nContent-Length:\x2016\n
+SF:\nOK\n\n0\n")%r(Kerberos,3F,"HTTP/1\.1\x20200\x20OK\nAccept-Ranges:\x20
+SF:bytes\nContent-Length:\x2016\n\nOK\n\n0\n")%r(SMBProgNeg,3F,"HTTP/1\.1\
+SF:x20200\x20OK\nAccept-Ranges:\x20bytes\nContent-Length:\x2016\n\nOK\n\n0
+SF:\n")%r(LPDString,3F,"HTTP/1\.1\x20200\x20OK\nAccept-Ranges:\x20bytes\nC
+SF:ontent-Length:\x2016\n\nOK\n\n0\n")%r(LDAPSearchReq,3F,"HTTP/1\.1\x2020
+SF:0\x20OK\nAccept-Ranges:\x20bytes\nContent-Length:\x2016\n\nOK\n\n0\n")%
+SF:r(LDAPBindReq,3F,"HTTP/1\.1\x20200\x20OK\nAccept-Ranges:\x20bytes\nCont
+SF:ent-Length:\x2016\n\nOK\n\n0\n");
+MAC Address: 34:20:03:B0:91:53 (Shenzhen Feitengyun Technology)
+
+Service detection performed. Please report any incorrect results at https://nmap.org/submit/ .
+# Nmap done at Fri Mar 28 18:16:02 2025 -- 1 IP address (1 host up) scanned in 13.50 seconds
+
+## Network Path
+
+## Web Server Information
+HTTP/1.1 200 OK
+Accept-Ranges: bytes
+Content-Length: 16
+
+Failed to connect to HTTPS
+Device Type: Linux Device

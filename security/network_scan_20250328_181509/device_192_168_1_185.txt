@@ -1,0 +1,29 @@
+Detailed scan for 192.168.1.185
+======================
+## Basic Information
+IP Address: 192.168.1.185
+Hostname: Unknown
+MAC Address: c8:db:26:0f:76:48
+c8:db:26:0f:76:48
+Vendor: Logitech
+Gateway Device: No
+
+## OS Detection
+Device type: general purpose
+Running: Linux 2.6.X
+OS CPE: cpe:/o:linux:linux_kernel:2.6
+OS details: Linux 2.6.17 - 2.6.36
+
+## Service Scan
+# Nmap 7.95 scan initiated Fri Mar 28 18:36:05 2025 as: nmap -sV -T4 --version-all -p 1-1000 -oN - 192.168.1.185
+Nmap scan report for 192.168.1.185
+Host is up (0.033s latency).
+All 1000 scanned ports on 192.168.1.185 are in ignored states.
+Not shown: 1000 closed tcp ports (reset)
+MAC Address: C8:DB:26:0F:76:48 (Logitech)
+
+Service detection performed. Please report any incorrect results at https://nmap.org/submit/ .
+# Nmap done at Fri Mar 28 18:36:06 2025 -- 1 IP address (1 host up) scanned in 0.89 seconds
+
+## Network Path
+Device Type: Linux Device

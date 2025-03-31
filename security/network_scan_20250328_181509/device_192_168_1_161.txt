@@ -1,0 +1,66 @@
+Detailed scan for 192.168.1.161
+======================
+## Basic Information
+IP Address: 192.168.1.161
+Hostname: Unknown
+MAC Address: c4:5b:be:e2:a5:05
+c4:5b:be:e2:a5:05
+Vendor: Espressif Inc.
+Gateway Device: No
+
+## OS Detection
+Device type: general purpose
+Running: lwIP 2.X
+OS CPE: cpe:/a:lwip_project:lwip:2
+OS details: lwIP 2.1.0 - 2.2.0
+
+## Service Scan
+# Nmap 7.95 scan initiated Fri Mar 28 18:26:32 2025 as: nmap -sV -T4 --version-all -p 1-1000 -oN - 192.168.1.161
+Nmap scan report for 192.168.1.161
+Host is up (0.032s latency).
+Not shown: 999 closed tcp ports (reset)
+PORT   STATE SERVICE VERSION
+80/tcp open  http    Tasmota/13.3.0 (ESP8266EX)
+1 service unrecognized despite returning data. If you know the service/version, please submit the following fingerprint at https://nmap.org/cgi-bin/submit.cgi?new-service :
+SF-Port80-TCP:V=7.95%I=9%D=3/28%Time=67E6E9E1%P=x86_64-pc-linux-gnu%r(GetR
+SF:equest,10F4,"HTTP/1\.0\x20200\x20OK\r\nContent-Type:\x20text/html\r\nSe
+SF:rver:\x20Tasmota/13\.3\.0\x20\(ESP8266EX\)\r\nCache-Control:\x20no-cach
+SF:e,\x20no-store,\x20must-revalidate\r\nPragma:\x20no-cache\r\nExpires:\x
+SF:20-1\r\nConnection:\x20close\r\n\r\n<!DOCTYPE\x20html><html\x20lang=\"e
+SF:n\"\x20class=\"\"><head><meta\x20charset='utf-8'><meta\x20name=\"viewpo
+SF:rt\"\x20content=\"width=device-width,initial-scale=1,user-scalable=no\"
+SF:/><link\x20rel=\"icon\"\x20href=\"data:image/x-icon;base64,AAABAAEAEBAC
+SF:AAEAAQCwAAAAFgAAACgAAAAQAAAAIAAAAAEAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+SF:AAAAA////AP5/b\+H6X2/h8k9v4eZnb\+Hud2/h7ndv4e53b\+FmZm/hMkxv4ZgZb\+HOc2
+SF:/h5\+dv4fPPb\+H5n2/h/D9v4f5/b\+EAAO4EAADuBAAA7gQAAO4EAADuBAAA7gQAAO4EAA
+SF:DuBAAA7gQAAO4EAADuBAAA7gQAAO4EAADuBAAA7gQAAO4E\"><title>plug2\x20-\x20M
+SF:ain\x20Menu</title><script>var\x20x=null,lt,to,tp,pc='';eb=s=>document\
+SF:.getElementById\(s\);qs=s=>document\.querySelector\(s\);sp=i=>eb\(i\)\.
+SF:type=\(eb\(i\)\.type==='text'\?'password':'text'\);wl=f=>window\.addEve
+SF:ntListener\('load',f\);var\x20ft;function\x20la\(p\){a")%r(HTTPOptions,
+SF:10F4,"HTTP/1\.0\x20200\x20OK\r\nContent-Type:\x20text/html\r\nServer:\x
+SF:20Tasmota/13\.3\.0\x20\(ESP8266EX\)\r\nCache-Control:\x20no-cache,\x20n
+SF:o-store,\x20must-revalidate\r\nPragma:\x20no-cache\r\nExpires:\x20-1\r\
+SF:nConnection:\x20close\r\n\r\n<!DOCTYPE\x20html><html\x20lang=\"en\"\x20
+SF:class=\"\"><head><meta\x20charset='utf-8'><meta\x20name=\"viewport\"\x2
+SF:0content=\"width=device-width,initial-scale=1,user-scalable=no\"/><link
+SF:\x20rel=\"icon\"\x20href=\"data:image/x-icon;base64,AAABAAEAEBACAAEAAQC
+SF:wAAAAFgAAACgAAAAQAAAAIAAAAAEAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA//
+SF://AP5/b\+H6X2/h8k9v4eZnb\+Hud2/h7ndv4e53b\+FmZm/hMkxv4ZgZb\+HOc2/h5\+dv
+SF:4fPPb\+H5n2/h/D9v4f5/b\+EAAO4EAADuBAAA7gQAAO4EAADuBAAA7gQAAO4EAADuBAAA7
+SF:gQAAO4EAADuBAAA7gQAAO4EAADuBAAA7gQAAO4E\"><title>plug2\x20-\x20Main\x20
+SF:Menu</title><script>var\x20x=null,lt,to,tp,pc='';eb=s=>document\.getEle
+SF:mentById\(s\);qs=s=>document\.querySelector\(s\);sp=i=>eb\(i\)\.type=\(
+SF:eb\(i\)\.type==='text'\?'password':'text'\);wl=f=>window\.addEventListe
+SF:ner\('load',f\);var\x20ft;function\x20la\(p\){a");
+MAC Address: C4:5B:BE:E2:A5:05 (Espressif)
+
+Service detection performed. Please report any incorrect results at https://nmap.org/submit/ .
+# Nmap done at Fri Mar 28 18:35:42 2025 -- 1 IP address (1 host up) scanned in 550.23 seconds
+
+## Network Path
+
+## Web Server Information
+Failed to connect to HTTP
+Failed to connect to HTTPS
+Device Type: Unknown

@@ -1,0 +1,66 @@
+Detailed scan for 192.168.1.19
+======================
+## Basic Information
+IP Address: 192.168.1.19
+Hostname: Unknown
+MAC Address: d0:73:d5:41:f7:7a
+d0:73:d5:41:f7:7a
+Vendor: LIFI LABS MANAGEMENT PTY LTD
+Gateway Device: No
+
+## OS Detection
+OS Detection: Failed or insufficient information
+
+## Service Scan
+# Nmap 7.95 scan initiated Fri Mar 28 18:36:27 2025 as: nmap -sV -T4 --version-all -p 1-1000 -oN - 192.168.1.19
+Nmap scan report for 192.168.1.19
+Host is up (0.023s latency).
+Not shown: 999 filtered tcp ports (no-response)
+PORT   STATE SERVICE VERSION
+80/tcp open  http
+1 service unrecognized despite returning data. If you know the service/version, please submit the following fingerprint at https://nmap.org/cgi-bin/submit.cgi?new-service :
+SF-Port80-TCP:V=7.95%I=9%D=3/28%Time=67E6EC3C%P=x86_64-pc-linux-gnu%r(GetR
+SF:equest,F1,"HTTP/1\.1\x20404\x20Not\x20Found\r\nContent-Type:\x20text/ht
+SF:ml\r\nContent-Length:\x20145\r\nConnection:\x20Keep-Alive\r\n\r\n<html>
+SF:<head><title>404\x20Not\x20Found</title></head><body><h1>404\x20Not\x20
+SF:Found</h1><p>The\x20resource\x20you\x20have\x20requested\x20is\x20not\x
+SF:20available\.</p></body></html>")%r(HTTPOptions,F1,"HTTP/1\.1\x20404\x2
+SF:0Not\x20Found\r\nContent-Type:\x20text/html\r\nContent-Length:\x20145\r
+SF:\nConnection:\x20Keep-Alive\r\n\r\n<html><head><title>404\x20Not\x20Fou
+SF:nd</title></head><body><h1>404\x20Not\x20Found</h1><p>The\x20resource\x
+SF:20you\x20have\x20requested\x20is\x20not\x20available\.</p></body></html
+SF:>")%r(X11Probe,1C,"HTTP/1\.1\x20400\x20Bad\x20Request\r\n\r\n")%r(RPCCh
+SF:eck,1C,"HTTP/1\.1\x20400\x20Bad\x20Request\r\n\r\n")%r(DNSVersionBindRe
+SF:qTCP,1C,"HTTP/1\.1\x20400\x20Bad\x20Request\r\n\r\n")%r(DNSStatusReques
+SF:tTCP,1C,"HTTP/1\.1\x20400\x20Bad\x20Request\r\n\r\n")%r(Hello,1C,"HTTP/
+SF:1\.1\x20400\x20Bad\x20Request\r\n\r\n")%r(Help,1C,"HTTP/1\.1\x20400\x20
+SF:Bad\x20Request\r\n\r\n")%r(SSLSessionReq,1C,"HTTP/1\.1\x20400\x20Bad\x2
+SF:0Request\r\n\r\n")%r(TerminalServerCookie,1C,"HTTP/1\.1\x20400\x20Bad\x
+SF:20Request\r\n\r\n")%r(TLSSessionReq,1C,"HTTP/1\.1\x20400\x20Bad\x20Requ
+SF:est\r\n\r\n")%r(SSLv23SessionReq,1C,"HTTP/1\.1\x20400\x20Bad\x20Request
+SF:\r\n\r\n")%r(Kerberos,1C,"HTTP/1\.1\x20400\x20Bad\x20Request\r\n\r\n")%
+SF:r(SMBProgNeg,1C,"HTTP/1\.1\x20400\x20Bad\x20Request\r\n\r\n")%r(LPDStri
+SF:ng,1C,"HTTP/1\.1\x20400\x20Bad\x20Request\r\n\r\n")%r(LDAPSearchReq,1C,
+SF:"HTTP/1\.1\x20400\x20Bad\x20Request\r\n\r\n")%r(LDAPBindReq,1C,"HTTP/1\
+SF:.1\x20400\x20Bad\x20Request\r\n\r\n")%r(LANDesk-RC,1C,"HTTP/1\.1\x20400
+SF:\x20Bad\x20Request\r\n\r\n")%r(TerminalServer,1C,"HTTP/1\.1\x20400\x20B
+SF:ad\x20Request\r\n\r\n")%r(NCP,1C,"HTTP/1\.1\x20400\x20Bad\x20Request\r\
+SF:n\r\n")%r(NotesRPC,1C,"HTTP/1\.1\x20400\x20Bad\x20Request\r\n\r\n")%r(D
+SF:istCCD,1C,"HTTP/1\.1\x20400\x20Bad\x20Request\r\n\r\n")%r(JavaRMI,1C,"H
+SF:TTP/1\.1\x20400\x20Bad\x20Request\r\n\r\n")%r(Radmin,1C,"HTTP/1\.1\x204
+SF:00\x20Bad\x20Request\r\n\r\n");
+MAC Address: D0:73:D5:41:F7:7A (Lifi Labs Management)
+
+Service detection performed. Please report any incorrect results at https://nmap.org/submit/ .
+# Nmap done at Fri Mar 28 18:44:50 2025 -- 1 IP address (1 host up) scanned in 502.93 seconds
+
+## Network Path
+
+## Web Server Information
+HTTP/1.1 404 Not Found
+Content-Type: text/html
+Content-Length: 145
+Connection: Keep-Alive
+
+Failed to connect to HTTPS
+Device Type: Unknown

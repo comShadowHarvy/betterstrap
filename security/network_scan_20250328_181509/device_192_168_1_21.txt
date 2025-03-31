@@ -1,0 +1,35 @@
+Detailed scan for 192.168.1.21
+======================
+## Basic Information
+IP Address: 192.168.1.21
+Hostname: Unknown
+MAC Address: 02:2c:fa:4d:76:be
+d0:ef:76:69:04:74
+bc:24:11:ca:91:92
+bc:24:11:ca:91:92
+02:2c:fa:4d:76:be
+d0:ef:76:69:04:74
+Vendor: Proxmox Server Solutions GmbH
+Gateway Device: No
+
+## OS Detection
+Device type: general purpose
+Running: Linux 4.X|5.X
+OS CPE: cpe:/o:linux:linux_kernel:4 cpe:/o:linux:linux_kernel:5
+OS details: Linux 4.15 - 5.19, OpenWrt 21.02 (Linux 5.4)
+
+## Service Scan
+# Nmap 7.95 scan initiated Fri Mar 28 18:46:45 2025 as: nmap -sV -T4 --version-all -p 1-1000 -oN - 192.168.1.21
+Nmap scan report for 192.168.1.21
+Host is up (0.00057s latency).
+Not shown: 999 closed tcp ports (reset)
+PORT   STATE SERVICE VERSION
+22/tcp open  ssh     OpenSSH 9.2p1 Debian 2+deb12u5 (protocol 2.0)
+MAC Address: BC:24:11:CA:91:92 (Proxmox Server Solutions GmbH)
+Service Info: OS: Linux; CPE: cpe:/o:linux:linux_kernel
+
+Service detection performed. Please report any incorrect results at https://nmap.org/submit/ .
+# Nmap done at Fri Mar 28 18:46:46 2025 -- 1 IP address (1 host up) scanned in 1.33 seconds
+
+## Network Path
+Device Type: Linux Device
