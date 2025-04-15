@@ -135,6 +135,11 @@ class PowerUpType(Enum):
     FOOD_RAIN = 23        # Causes food to spawn around the snake
     ACID_TRAIL = 24       # Leaves a deadly trail behind
     TIME_WARP = 25        # Temporarily rewinds snake's position if it dies
+    PHASE_SHIFT = 26      # Allows passing through walls once
+    GOLD_RUSH = 27        # Temporarily turns all food into bonus food
+    RAINBOW = 28          # Snake changes colors and gets bonus points for food variety
+    GRAVITY = 29          # Creates a gravitational pull affecting other snakes
+    MIMIC = 30            # Copies the power-up effect of the nearest snake
 
 
 @dataclass
@@ -266,6 +271,21 @@ class PowerUp:
             self.color = 2
         elif self.type == PowerUpType.TIME_WARP:
             self.char = "↺"
+            self.color = 5
+        elif self.type == PowerUpType.PHASE_SHIFT:
+            self.char = "Φ"
+            self.color = 4
+        elif self.type == PowerUpType.GOLD_RUSH:
+            self.char = "G"
+            self.color = 3
+        elif self.type == PowerUpType.RAINBOW:
+            self.char = "R"
+            self.color = 7
+        elif self.type == PowerUpType.GRAVITY:
+            self.char = "∇"
+            self.color = 6
+        elif self.type == PowerUpType.MIMIC:
+            self.char = "M"
             self.color = 5
     
     def __eq__(self, other):
@@ -2908,11 +2928,11 @@ class Renderer:
                     head_char = 'F'
                 
                 # Confusion effect
-                if snake.is_confused():
+                if snake.has_power_up(PowerUpType.CONFUSION):
                     head_char = '?'
                 
                 # Reverse effect
-                if snake.is_reversed():
+                if snake.has_power_up(PowerUpType.REVERSE):
                     head_char = 'R'
             
             # Special effect for the leader snake
@@ -3388,8 +3408,7 @@ class MenuSystem:
             if option.startswith("--"):
                 # It's a header, draw it differently
                 header_text = option[2:]  # Remove the -- prefix
-                header_x = start_x + (box_width - len(header_text)) // 2
-                self.renderer.safe_addstr(menu_start_y + idx, header_x, header_text, 
+                self.renderer.safe_addstr(menu_start_y + idx, start_x + (box_width - len(header_text)) // 2, header_text, 
                                          curses.A_BOLD | curses.color_pair(5))
             else:
                 # Regular menu option
