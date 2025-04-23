@@ -561,7 +561,7 @@ display_category_software() {
     if [ $total -eq 0 ]; then
         echo -e "${YELLOW}No software found in category $category_name.${NC}"
         return
-    }
+    fi
     
     clear
     display_header
@@ -597,7 +597,7 @@ display_category_software() {
 # Function for category menu
 category_menu() {
     local category=$1
-    declare -A category_items
+    declare -A category_items # Declare category_items here
     
     while true; do
         display_category_software "$category"
@@ -713,16 +713,22 @@ main() {
     init_log
     check_sudo
     detect_system
-    
-    # Initialize menu categories
-    declare -A menu_categories
-    
+
     # Main menu loop
     while true; do
+        # Populate menu_categories array
+        unset menu_categories
+        declare -A menu_categories
+        local i=1
+        for category in "${!categories[@]}"; do
+            menu_categories[$i]=$category
+            ((i++))
+        done
+
         display_main_menu
         echo -n -e "${CYAN}Select an option (1-${#menu_categories[@]}, a, u, or q): ${NC}"
         read -r choice
-        
+
         case $choice in
             [0-9]*)
                 if [ -n "${menu_categories[$choice]}" ]; then
