@@ -1,0 +1,99 @@
+{
+    "player_chips": 11425,
+    "ai_players": {
+        "Kevin": {
+            "hand": [
+                [
+                    "Clubs",
+                    "\u2663",
+                    "7"
+                ],
+                [
+                    "Clubs",
+                    "\u2663",
+                    "8"
+                ],
+                [
+                    "Clubs",
+                    "\u2663",
+                    "8"
+                ]
+            ],
+            "type": "AGGRESSIVE",
+            "chips": 100,
+            "current_bet": 10
+        },
+        "Alice": {
+            "hand": [
+                [
+                    "Spades",
+                    "\u2660",
+                    "2"
+                ],
+                [
+                    "Hearts",
+                    "\u2665",
+                    "7"
+                ]
+            ],
+            "type": "RANDOM",
+            "chips": 80,
+            "current_bet": 10
+        },
+        "Diana": {
+            "hand": [
+                [
+                    "Spades",
+                    "\u2660",
+                    "9"
+                ],
+                [
+                    "Spades",
+                    "\u2660",
+                    "3"
+                ]
+            ],
+            "type": "RANDOM",
+            "chips": 80,
+            "current_bet": 10
+        },
+        "Hannah": {
+            "hand": [
+                [
+                    "Clubs",
+                    "\u2663",
+                    "6"
+                ],
+                [
+                    "Hearts",
+                    "\u2665",
+                    "2"
+                ],
+                [
+                    "Clubs",
+                    "\u2663",
+                    "10"
+                ]
+            ],
+            "type": "COUNTER",
+            "chips": 90,
+            "current_bet": 10
+        }
+    },
+    "session_stats": {
+        "hands_played": 19,
+        "player_wins": 8,
+        "dealer_wins": 7,
+        "pushes": 2,
+        "player_blackjacks": 0,
+        "player_busts": 5,
+        "chips_won": 775,
+        "chips_lost": 450
+    },
+    "game_mode": "POKER_STYLE",
+    "settings": {
+        "num_decks": 2,
+        "easy_mode": true,
+        "card_counting_cheat": true
+    }
+}

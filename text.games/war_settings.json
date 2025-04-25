@@ -1,0 +1,9 @@
+{
+    "player_name": "ShadowHarvy",
+    "use_ascii_art": true,
+    "show_flavor_text": true,
+    "clear_screen_enabled": true,
+    "shuffle_won_cards": true,
+    "max_rounds": 0,
+    "autoplay": true
+}
