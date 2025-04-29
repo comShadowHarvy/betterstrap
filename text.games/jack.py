@@ -443,7 +443,7 @@ class BlackjackGame:
 
             if bet_amount > 0:
                 ai_data['chips'] -= bet_amount; ai_data['current_bet'] = bet_amount
-                print(f"{COLOR_BLUE}{name}{COLOR_RESET} bets {COLOR_YELLOW}{bet_amount}{COLOR_RESET} chips. (Remaining: {ai_data['chips']})")
+                print(f"{COLOR_BLUE}{name}{COLOR_RESET} bets {COLOR_YELLOW}{bet_amount}{COLOR_RESET} chips. ({COLOR_RED}-{bet_amount}{COLOR_RESET}) (Remaining: {ai_data['chips']})") # Added visual chip change
             else: ai_data['current_bet'] = 0; print(f"{COLOR_BLUE}{name}{COLOR_RESET} cannot bet.")
             time.sleep(0.7)
         print("-" * 30)
@@ -508,7 +508,7 @@ class BlackjackGame:
                 else:
                     self.player_hands = [[]]; self.player_bets = [bet]
                     self.player_chips -= bet; self.current_hand_index = 0
-                    print(f"{COLOR_GREEN}Betting {bet} chips.{COLOR_RESET}"); time.sleep(1); return True
+                    print(f"{COLOR_GREEN}Betting {bet} chips. ({COLOR_RED}-{bet}{COLOR_RESET}){COLOR_RESET}"); time.sleep(1); return True # Added visual chip change
             except ValueError: print(f"{COLOR_RED}Invalid input. Please enter a number or 'q'.{COLOR_RESET}")
             except EOFError: print(f"\n{COLOR_RED}Input error. Returning to menu.{COLOR_RESET}"); return False
 
@@ -561,7 +561,7 @@ class BlackjackGame:
                     if ins_choice.startswith('y'):
                         insurance_bet = max_insurance
                         self.player_chips -= insurance_bet
-                        print(f"{COLOR_GREEN}Placed insurance bet of {insurance_bet} chips.{COLOR_RESET}"); time.sleep(1)
+                        print(f"{COLOR_GREEN}Placed insurance bet of {insurance_bet} chips. ({COLOR_RED}-{insurance_bet}{COLOR_RESET}){COLOR_RESET}"); time.sleep(1) # Added visual chip change
                         return insurance_bet
                     elif ins_choice.startswith('n'): print(f"{COLOR_BLUE}Insurance declined.{COLOR_RESET}"); time.sleep(1); return 0
                     else: print(f"{COLOR_RED}Invalid input. Please enter 'y' or 'n'.{COLOR_RESET}")
@@ -578,8 +578,9 @@ class BlackjackGame:
             self._update_count(self.dealer_hand[0][2]) # Count hidden card now
             self.display_table(hide_dealer=False)
             if is_dealer_blackjack:
-                winnings = insurance_bet * 3
-                print(f"{COLOR_GREEN}Dealer has Blackjack! Insurance pays {insurance_bet * 2}. You win {winnings} chips back.{COLOR_RESET}")
+                winnings = insurance_bet * 3 # Total returned (original insurance + 2:1 payout)
+                payout = insurance_bet * 2 # The actual winnings
+                print(f"{COLOR_GREEN}Dealer has Blackjack! Insurance pays {payout}. You win {winnings} chips back. ({COLOR_GREEN}+{winnings}{COLOR_RESET}){COLOR_RESET}") # Added visual chip change
                 self.player_chips += winnings
             else: print(f"{COLOR_RED}Dealer does not have Blackjack. Insurance bet lost.{COLOR_RESET}")
             time.sleep(2.5); return is_dealer_blackjack
@@ -593,7 +594,10 @@ class BlackjackGame:
         if player_has_bj and dealer_shows_ace:
             while True:
                 choice = input(f"{COLOR_YELLOW}You have Blackjack, Dealer shows Ace. Take Even Money (1:1 payout)? (y/n): {COLOR_RESET}").lower().strip()
-                if choice.startswith('y'): print(f"{COLOR_GREEN}Taking Even Money!{COLOR_RESET}"); return True
+                if choice.startswith('y'):
+                    payout = self.player_bets[0] # Even money pays 1:1 on the original bet
+                    print(f"{COLOR_GREEN}Taking Even Money! Guaranteed win of {payout} chips. ({COLOR_GREEN}+{payout}{COLOR_RESET}){COLOR_RESET}"); # Added visual chip change
+                    return True
                 elif choice.startswith('n'): print(f"{COLOR_BLUE}Declining Even Money. Playing out the hand...{COLOR_RESET}"); return False
                 else: print(f"{COLOR_RED}Invalid input. Please enter 'y' or 'n'.{COLOR_RESET}")
         return False
@@ -901,51 +905,53 @@ class BlackjackGame:
                 player_wins_this_hand = False
 
                 if player_value > 21:
-                    result_text = f"{COLOR_RED}{hand_label}: Busted! You lose your bet of {bet} chips.{COLOR_RESET}"
+                    result_text = f"{COLOR_RED}{hand_label}: Busted! You lose your bet of {bet} chips. ({COLOR_RED}-{bet}{COLOR_RESET}){COLOR_RESET}" # Added visual
                     payout = 0
                     chips_change = -bet
                     self.session_stats['dealer_wins'] += 1
                 elif is_initial_hand_blackjack and not dealer_blackjack:
                     blackjack_payout = int(bet * 1.5)
                     total_win = bet + blackjack_payout
-                    result_text = f"{COLOR_GREEN}{COLOR_BOLD}{hand_label}: BLACKJACK! You win {total_win} chips (payout 3:2).{COLOR_RESET}"
+                    result_text = f"{COLOR_GREEN}{COLOR_BOLD}{hand_label}: BLACKJACK! You win {total_win} chips (payout 3:2). ({COLOR_GREEN}+{total_win}{COLOR_RESET}){COLOR_RESET}" # Added visual
                     payout = total_win
                     chips_change = blackjack_payout
                     self.session_stats['player_wins'] += 1
                     self.session_stats['player_blackjacks'] += 1
                     player_wins_this_hand = True
                 elif player_21 and dealer_blackjack:
-                    result_text = f"{COLOR_RED}{hand_label}: Dealer has Blackjack and beats your 21. You lose your bet of {bet} chips.{COLOR_RESET}"
+                    result_text = f"{COLOR_RED}{hand_label}: Dealer has Blackjack and beats your 21. You lose your bet of {bet} chips. ({COLOR_RED}-{bet}{COLOR_RESET}){COLOR_RESET}" # Added visual
                     payout = 0
                     chips_change = -bet
                     self.session_stats['dealer_wins'] += 1
                 elif dealer_blackjack and not player_21:
-                    result_text = f"{COLOR_RED}{hand_label}: Dealer has Blackjack! You lose your bet of {bet} chips.{COLOR_RESET}"
+                    result_text = f"{COLOR_RED}{hand_label}: Dealer has Blackjack! You lose your bet of {bet} chips. ({COLOR_RED}-{bet}{COLOR_RESET}){COLOR_RESET}" # Added visual
                     payout = 0
                     chips_change = -bet
                     self.session_stats['dealer_wins'] += 1
                 elif dealer_value > 21:
-                    result_text = f"{COLOR_GREEN}{hand_label}: Dealer busts! You win {bet * 2} chips.{COLOR_RESET}"
-                    payout = bet * 2
+                    total_win = bet * 2
+                    result_text = f"{COLOR_GREEN}{hand_label}: Dealer busts! You win {total_win} chips. ({COLOR_GREEN}+{total_win}{COLOR_RESET}){COLOR_RESET}" # Added visual
+                    payout = total_win
                     chips_change = bet
                     self.session_stats['player_wins'] += 1
                     player_wins_this_hand = True
                 elif player_value > dealer_value:
-                    result_text = f"{COLOR_GREEN}{hand_label}: You beat the dealer! You win {bet * 2} chips.{COLOR_RESET}"
-                    payout = bet * 2
+                    total_win = bet * 2
+                    result_text = f"{COLOR_GREEN}{hand_label}: You beat the dealer! You win {total_win} chips. ({COLOR_GREEN}+{total_win}{COLOR_RESET}){COLOR_RESET}" # Added visual
+                    payout = total_win
                     chips_change = bet
                     self.session_stats['player_wins'] += 1
                     player_wins_this_hand = True
                 elif player_value == dealer_value:
                     if is_initial_hand_blackjack and dealer_blackjack:
-                        result_text = f"{COLOR_YELLOW}{hand_label}: Push! Both you and the dealer have Blackjack. Your bet is returned.{COLOR_RESET}"
+                        result_text = f"{COLOR_YELLOW}{hand_label}: Push! Both you and the dealer have Blackjack. Your bet is returned. ({COLOR_YELLOW}±0{COLOR_RESET}){COLOR_RESET}" # Added visual
                     else:
-                        result_text = f"{COLOR_YELLOW}{hand_label}: Push! You tie with the dealer. Your bet is returned.{COLOR_RESET}"
+                        result_text = f"{COLOR_YELLOW}{hand_label}: Push! You tie with the dealer. Your bet is returned. ({COLOR_YELLOW}±0{COLOR_RESET}){COLOR_RESET}" # Added visual
                     payout = bet
                     chips_change = 0
                     self.session_stats['pushes'] += 1
                 else:
-                    result_text = f"{COLOR_RED}{hand_label}: Dealer wins. You lose your bet of {bet} chips.{COLOR_RESET}"
+                    result_text = f"{COLOR_RED}{hand_label}: Dealer wins. You lose your bet of {bet} chips. ({COLOR_RED}-{bet}{COLOR_RESET}){COLOR_RESET}" # Added visual
                     payout = 0
                     chips_change = -bet
                     self.session_stats['dealer_wins'] += 1
@@ -983,19 +989,30 @@ class BlackjackGame:
                 if ai_bet > 0:
                     ai_value = calculate_hand_value(hand)
                     ai_blackjack = ai_value == 21 and len(hand) == 2
-                    if ai_value > 21: result = "Busted!"; result_color = COLOR_RED; ai_payout = 0 # Bust chat handled in ai_turns
-                    elif ai_blackjack and not dealer_blackjack: result = "Blackjack! (Wins)"; result_color = COLOR_GREEN; ai_payout = ai_bet + int(ai_bet * 1.5); self._ai_chat("ai_win")
-                    elif dealer_blackjack and not ai_blackjack: result = "Loses (vs Dealer BJ)"; result_color = COLOR_RED; ai_payout = 0
-                    elif dealer_value > 21: result = "Wins (Dealer Bust)"; result_color = COLOR_GREEN; ai_payout = ai_bet * 2; self._ai_chat("ai_win")
-                    elif ai_value > dealer_value: result = f"Wins ({ai_value} vs {dealer_value})"; result_color = COLOR_GREEN; ai_payout = ai_bet * 2; self._ai_chat("ai_win")
+                    net_change = 0 # Calculate net change for visual
+                    if ai_value > 21:
+                        result = "Busted!"; result_color = COLOR_RED; ai_payout = 0; net_change = -ai_bet
+                    elif ai_blackjack and not dealer_blackjack:
+                        result = "Blackjack! (Wins)"; result_color = COLOR_GREEN; ai_payout = ai_bet + int(ai_bet * 1.5); net_change = int(ai_bet * 1.5); self._ai_chat("ai_win")
+                    elif dealer_blackjack and not ai_blackjack:
+                        result = "Loses (vs Dealer BJ)"; result_color = COLOR_RED; ai_payout = 0; net_change = -ai_bet
+                    elif dealer_value > 21:
+                        result = "Wins (Dealer Bust)"; result_color = COLOR_GREEN; ai_payout = ai_bet * 2; net_change = ai_bet; self._ai_chat("ai_win")
+                    elif ai_value > dealer_value:
+                        result = f"Wins ({ai_value} vs {dealer_value})"; result_color = COLOR_GREEN; ai_payout = ai_bet * 2; net_change = ai_bet; self._ai_chat("ai_win")
                     elif ai_value == dealer_value:
                          if ai_blackjack and dealer_blackjack: result = "Push (Both BJ)"
-                         elif ai_blackjack: result = "Blackjack! (Wins vs 21)" ; result_color = COLOR_GREEN; ai_payout = ai_bet + int(ai_bet * 1.5); self._ai_chat("ai_win")
+                         elif ai_blackjack: result = "Blackjack! (Wins vs 21)" ; result_color = COLOR_GREEN; ai_payout = ai_bet + int(ai_bet * 1.5); net_change = int(ai_bet*1.5); self._ai_chat("ai_win")
                          else: result = f"Push ({ai_value})"
-                         if "Push" in result: result_color = COLOR_YELLOW; ai_payout = ai_bet
-                    else: result = f"Loses ({ai_value} vs {dealer_value})" ; result_color = COLOR_RED; ai_payout = 0
+                         if "Push" in result: result_color = COLOR_YELLOW; ai_payout = ai_bet; net_change = 0
+                    else:
+                        result = f"Loses ({ai_value} vs {dealer_value})" ; result_color = COLOR_RED; ai_payout = 0; net_change = -ai_bet
+
                     if self.game_mode == GameMode.POKER_STYLE:
-                        ai_data['chips'] += ai_payout; result += f" | Chips: {ai_data['chips']}"
+                        ai_data['chips'] += ai_payout
+                        chip_change_color = COLOR_GREEN if net_change > 0 else (COLOR_RED if net_change < 0 else COLOR_YELLOW)
+                        chip_change_sign = "+" if net_change > 0 else ""
+                        result += f" ({chip_change_color}{chip_change_sign}{net_change}{COLOR_RESET}) | Chips: {ai_data['chips']}" # Added visual chip change
                         if ai_data['chips'] <= 0:
                              print(f"{COLOR_RED}{name} ran out of chips and leaves the table!{COLOR_RESET}")
                              del self.ai_players[name]; time.sleep(1); continue
@@ -1051,11 +1068,17 @@ class BlackjackGame:
         insurance_bet = self._offer_insurance()
 
         if self._offer_even_money():
-             payout = self.player_bets[0]
-             self.player_chips += payout * 2
+             payout = self.player_bets[0] # This is the *winnings*, not the total returned
+             total_returned = payout * 2
+             self.player_chips += total_returned # Add original bet back + winnings
              self.session_stats['player_wins'] += 1; self.session_stats['player_blackjacks'] += 1; self.session_stats['chips_won'] += payout
-             print(f"{COLOR_GREEN}Paid {payout} chips. Round over.{COLOR_RESET}"); time.sleep(2)
-             self.dealer_turn(); self.determine_winner(); return True
+             # Message already printed in _offer_even_money
+             print(f"{COLOR_GREEN}Round over.{COLOR_RESET}"); time.sleep(2)
+             # Need to resolve AI/Dealer turns if they exist for chip counts, even though player hand is done
+             self.ai_turns()
+             self.dealer_turn()
+             self.determine_winner() # Call determine winner to show final hands and process AI results
+             return True
 
         dealer_had_blackjack = self._resolve_insurance(insurance_bet)
 
