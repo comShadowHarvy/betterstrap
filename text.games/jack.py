@@ -53,17 +53,17 @@ class AIType(enum.Enum):
 
 # --- AI Chat Lines (Expanded) ---
 AI_CHAT = {
-    "hit_good": ["Nice hit!", "Good card!", "Looking sharp.", "Calculated risk."],
-    "hit_bad": ["Oof, tough luck.", "That didn't help much.", "Getting close...", "Risky!"],
-    "stand_good": ["Smart stand.", "Good call.", "Solid play.", "Playing it safe."],
-    "stand_bad": ["Standing on that? Bold.", "Feeling brave?", "Hope that holds up!", "Interesting strategy..."],
-    "player_bust": ["Busted! Too greedy?", "Ouch, over 21!", "Better luck next time!", "Happens to the best of us."],
-    "player_win": ["Congrats!", "You got lucky!", "Nice hand!", "Well played!"],
-    "player_blackjack": ["Blackjack! Wow!", "Can't beat that!", "Beginner's luck?"],
-    "ai_win": ["Winner!", "Gotcha!", "Too easy.", "Read 'em and weep!", "My turn!", "Dealer's loss is my gain."],
-    "ai_bust": ["Darn!", "Too many!", "Argh, busted!", "Miscalculated!", "Pushed my luck."],
-    "taunt": ["My chips are piling up!", "Feeling confident?", "Easy money!", "You can't beat me!", "Is that all you've got?", "Think you can win?", "Dealer looks weak..."],
-    "general_insult": ["Are you even trying?", "My grandma plays better than that.", "Was that intentional?", "Seriously?", "..."] # Keep some generic
+    "hit_good": ["Nice hit!", "Good card!", "Looking sharp.", "Calculated risk.", "That's the spirit!", "Keep 'em coming!", "Bold move paying off."],
+    "hit_bad": ["Oof, tough luck.", "That didn't help much.", "Getting close...", "Risky!", "Careful now...", "Hmm, not ideal.", "Pushing your luck?"],
+    "stand_good": ["Smart stand.", "Good call.", "Solid play.", "Playing it safe.", "Wise decision.", "Holding strong.", "I respect that."],
+    "stand_bad": ["Standing on that? Bold.", "Feeling brave?", "Hope that holds up!", "Interesting strategy...", "Are you sure about that?", "Dealer might like that.", "Living dangerously!"],
+    "player_bust": ["Busted! Too greedy?", "Ouch, over 21!", "Better luck next time!", "Happens to the best of us.", "Too many!", "The house always wins... sometimes.", "Greed is a killer."],
+    "player_win": ["Congrats!", "You got lucky!", "Nice hand!", "Well played!", "Beginner's luck holds!", "Impressive.", "You earned that one."],
+    "player_blackjack": ["Blackjack! Wow!", "Can't beat that!", "Beginner's luck?", "Natural 21! Sweet!", "Right off the deal!", "Impossible!"],
+    "ai_win": ["Winner!", "Gotcha!", "Too easy.", "Read 'em and weep!", "My turn!", "Dealer's loss is my gain.", "That's how it's done!", "Chip stack growing!", "Victory!"],
+    "ai_bust": ["Darn!", "Too many!", "Argh, busted!", "Miscalculated!", "Pushed my luck.", "Blast!", "Overcooked it.", "My bad."],
+    "taunt": ["My chips are piling up!", "Feeling confident?", "Easy money!", "You can't beat me!", "Is that all you've got?", "Think you can win?", "Dealer looks weak...", "I could do this all day.", "Getting predictable?", "Maybe try a different strategy?", "I'm just getting started."],
+    "general_insult": ["Are you even trying?", "My grandma plays better than that.", "Was that intentional?", "Seriously?", "...", "Did you forget the rules?", "That was... a choice.", "Were you aiming for 21 or 31?", "Painful to watch.", "Just give me your chips already."] # Keep some generic
 }
 
 # --- Helper Functions (Global Scope) ---
@@ -464,7 +464,7 @@ class BlackjackGame:
     def _ai_chat(self, category, player_action=None):
         """Makes an AI player say something based on category and context."""
         if not self.ai_players: return
-        if random.random() < 0.25: # Increased chat chance slightly
+        if random.random() < 0.40: # Increased chat chance significantly (e.g., 40%)
             if not self.ai_players: return # Check again in case AI left
             ai_name = random.choice(list(self.ai_players.keys()))
 
@@ -480,13 +480,15 @@ class BlackjackGame:
                 elif player_action == 'stand':
                      chat_list = AI_CHAT.get("stand_good", []) + AI_CHAT.get("stand_bad", [])
                 elif player_action == 'double':
-                     chat_list = AI_CHAT.get("compliment", []) + AI_CHAT.get("taunt", [])
+                     # Combine taunts and general insults for doubling
+                     chat_list = AI_CHAT.get("taunt", []) + AI_CHAT.get("general_insult", []) + ["Feeling lucky, punk?", "Double or nothing!"]
                 elif player_action == 'split':
-                     chat_list = AI_CHAT.get("compliment", []) + AI_CHAT.get("insult", [])
+                     # Combine taunts and general insults for splitting
+                     chat_list = AI_CHAT.get("taunt", []) + AI_CHAT.get("general_insult", []) + ["Twice the fun, twice the loss?", "Splitting? Interesting..."]
                 elif player_action == 'surrender':
-                     chat_list = AI_CHAT.get("insult", []) + ["Playing it safe, huh?", "Scared money don't make money!"]
-                else: # Default action comment
-                     chat_list = AI_CHAT.get("compliment", []) + AI_CHAT.get("insult", [])
+                     chat_list = AI_CHAT.get("general_insult", []) + ["Playing it safe, huh?", "Scared money don't make money!", "Giving up already?", "Wise retreat... or cowardice?"]
+                else: # Default action comment (less likely now)
+                     chat_list = AI_CHAT.get("taunt", []) + AI_CHAT.get("general_insult", [])
 
 
             if chat_list: # Ensure the list exists and is not empty
@@ -1070,7 +1072,7 @@ class BlackjackGame:
         if self._offer_even_money():
              payout = self.player_bets[0] # This is the *winnings*, not the total returned
              total_returned = payout * 2
-             self.player_chips += total_returned # Add original bet back + winnings
+             self.player_chips += total_returned # Add originalbet back + winnings
              self.session_stats['player_wins'] += 1; self.session_stats['player_blackjacks'] += 1; self.session_stats['chips_won'] += payout
              # Message already printed in _offer_even_money
              print(f"{COLOR_GREEN}Round over.{COLOR_RESET}"); time.sleep(2)
