@@ -110,6 +110,7 @@ def calculate_hand_value(hand):
 def display_card(card, hidden=False):
     """Returns the string representation of a card with color."""
     if hidden:
+        # Keep hidden card simple
         back = CARD_BACK * 9
         lines = ["┌─────────┐", f"│{back}│", f"│{back}│", f"│{COLOR_DIM} HIDDEN {COLOR_RESET}{COLOR_WHITE_BG}{COLOR_BLACK}│", f"│{back}│", f"│{back}│", "└─────────┘"]
         return [f"{COLOR_WHITE_BG}{COLOR_BLACK}{line}{COLOR_RESET}" for line in lines]
@@ -117,9 +118,22 @@ def display_card(card, hidden=False):
         print(f"{COLOR_RED}Error: Invalid card data format: {card}{COLOR_RESET}")
         lines = ["┌─────────┐", "│  ERROR  │", "│ INVALID │", "│  CARD   │", "│  DATA   │", "│         │", "└─────────┘"]
         return [f"{COLOR_WHITE_BG}{COLOR_RED}{line}{COLOR_RESET}" for line in lines]
+
     suit_name, suit_symbol, rank = card
-    card_color = get_card_color(suit_name); rank_str = rank.ljust(2)
-    lines = ["┌─────────┐", f"│ {card_color}{rank_str}{COLOR_BLACK}      │", "│         │", f"│    {card_color}{suit_symbol}{COLOR_BLACK}    │", "│         │", f"│      {card_color}{rank_str}{COLOR_BLACK} │", "└─────────┘"]
+    card_color = get_card_color(suit_name)
+    rank_str = rank.ljust(2) # Ensure rank takes 2 spaces (e.g., '10', 'K ', 'A ')
+    suit_str = suit_symbol
+
+    # Enhanced card layout
+    lines = [
+        "┌─────────┐",
+        f"│{card_color}{rank_str}{COLOR_BLACK}       │", # Rank top-left
+        f"│ {card_color}{suit_str}{COLOR_BLACK}       │", # Suit top-left (optional, can be blank)
+        f"│    {card_color}{suit_str}{COLOR_BLACK}    │", # Suit middle
+        f"│       {card_color}{suit_str}{COLOR_BLACK} │", # Suit bottom-right (optional, can be blank)
+        f"│       {card_color}{rank_str}{COLOR_BLACK}│", # Rank bottom-right
+        "└─────────┘"
+    ]
     return [f"{COLOR_WHITE_BG}{COLOR_BLACK}{line}{COLOR_RESET}" for line in lines]
 
 def strip_ansi_codes(text):
@@ -473,21 +487,7 @@ class BlackjackGame:
 
             # More specific chat based on player action
             if category == "player_action":
-                if player_action == 'hit':
-                    # Distinguish between good/bad hit? Maybe based on resulting value?
-                    # For now, just mix them.
-                    chat_list = AI_CHAT.get("hit_good", []) + AI_CHAT.get("hit_bad", [])
-                elif player_action == 'stand':
-                     chat_list = AI_CHAT.get("stand_good", []) + AI_CHAT.get("stand_bad", [])
-                elif player_action == 'double':
-                     # Combine taunts and general insults for doubling
-                     chat_list = AI_CHAT.get("taunt", []) + AI_CHAT.get("general_insult", []) + ["Feeling lucky, punk?", "Double or nothing!"]
-                elif player_action == 'split':
-                     # Combine taunts and general insults for splitting
-                     chat_list = AI_CHAT.get("taunt", []) + AI_CHAT.get("general_insult", []) + ["Twice the fun, twice the loss?", "Splitting? Interesting..."]
-                elif player_action == 'surrender':
-                     chat_list = AI_CHAT.get("general_insult", []) + ["Playing it safe, huh?", "Scared money don't make money!", "Giving up already?", "Wise retreat... or cowardice?"]
-                else: # Default action comment (less likely now)
+               
                      chat_list = AI_CHAT.get("taunt", []) + AI_CHAT.get("general_insult", [])
 
 
