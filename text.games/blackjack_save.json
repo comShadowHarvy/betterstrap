@@ -1,90 +1,116 @@
 {
-    "player_chips": 10300,
+    "player_chips": 10000,
     "ai_players": {
-        "Kevin": {
-            "hand": [
-                [
-                    "Spades",
-                    "\u2660",
-                    "K"
-                ],
-                [
-                    "Diamonds",
-                    "\u2666",
-                    "9"
-                ]
-            ],
-            "type": "AGGRESSIVE",
-            "chips": 85,
-            "current_bet": 5
-        },
         "Bob": {
             "hand": [
                 [
-                    "Clubs",
-                    "\u2663",
-                    "7"
+                    "Diamonds",
+                    "\u2666",
+                    "3"
                 ],
                 [
-                    "Spades",
-                    "\u2660",
-                    "5"
-                ]
-            ],
-            "type": "CONSERVATIVE",
-            "chips": 90,
-            "current_bet": 5
-        },
-        "Ethan": {
-            "hand": [
-                [
                     "Clubs",
                     "\u2663",
-                    "10"
+                    "J"
                 ],
                 [
                     "Hearts",
                     "\u2665",
-                    "2"
+                    "A"
+                ],
+                [
+                    "Hearts",
+                    "\u2665",
+                    "6"
                 ]
             ],
             "type": "CONSERVATIVE",
-            "chips": 97,
+            "chips": 75,
             "current_bet": 5
         },
         "Hannah": {
             "hand": [
                 [
-                    "Spades",
-                    "\u2660",
-                    "2"
+                    "Diamonds",
+                    "\u2666",
+                    "4"
                 ],
                 [
                     "Hearts",
                     "\u2665",
-                    "8"
+                    "J"
                 ]
             ],
             "type": "RANDOM",
-            "chips": 90,
+            "chips": 80,
             "current_bet": 5
         },
-        "Alice": {
-            "hand": [],
+        "Fiona": {
+            "hand": [
+                [
+                    "Hearts",
+                    "\u2665",
+                    "K"
+                ],
+                [
+                    "Diamonds",
+                    "\u2666",
+                    "8"
+                ],
+                [
+                    "Hearts",
+                    "\u2665",
+                    "7"
+                ]
+            ],
             "type": "RANDOM",
-            "chips": 100,
-            "current_bet": 0
+            "chips": 80,
+            "current_bet": 5
+        },
+        "Ivan": {
+            "hand": [
+                [
+                    "Hearts",
+                    "\u2665",
+                    "Q"
+                ],
+                [
+                    "Hearts",
+                    "\u2665",
+                    "9"
+                ]
+            ],
+            "type": "CONSERVATIVE",
+            "chips": 80,
+            "current_bet": 5
+        },
+        "Charlie": {
+            "hand": [
+                [
+                    "Hearts",
+                    "\u2665",
+                    "10"
+                ],
+                [
+                    "Diamonds",
+                    "\u2666",
+                    "J"
+                ]
+            ],
+            "type": "COUNTER",
+            "chips": 95,
+            "current_bet": 5
         }
     },
     "session_stats": {
-        "hands_played": 25,
-        "player_wins": 9,
-        "dealer_wins": 11,
+        "hands_played": 30,
+        "player_wins": 11,
+        "dealer_wins": 14,
         "pushes": 2,
-        "player_blackjacks": 1,
-        "player_busts": 6,
-        "chips_won": 850,
-        "chips_lost": 1650
+        "player_blackjacks": 2,
+        "player_busts": 8,
+        "chips_won": 1550,
+        "chips_lost": 2650
     },
     "game_mode": "POKER_STYLE",
     "settings": {
