@@ -1,8 +1,0 @@
-=== Software Installation Log - Fri Apr 25 04:48:35 PM EDT 2025 ===
-System: Linux archlinux 6.14.3-zen1-1-zen #1 ZEN SMP PREEMPT_DYNAMIC Sun, 20 Apr 2025 12:38:36 +0000 x86_64 GNU/Linux
-2025-04-25 16:48:35 [INFO] Checking for sudo privileges...
-2025-04-25 16:48:35 [INFO] Sudo privileges confirmed.
-2025-04-25 16:48:35 [INFO] Detecting system...
-2025-04-25 16:48:35 [INFO] Using yay as AUR helper
-2025-04-25 16:48:35 [INFO] Detected distribution: Arch Linux 
-2025-04-25 16:48:35 [INFO] Package manager: pacman
