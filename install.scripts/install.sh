@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Script Author: ShadowHarvy
-# Purpose: Simulate a loading screen and run a sequence of custom setup scripts.
+# Purpose: Simulate a loading screen and run a sequence of custom setup scripts, showing their live output.
 # Disclaimer: Run with caution. Ensure you understand the commands being executed.
 #             This script will execute other scripts and download and run one from the internet.
 
@@ -37,7 +37,6 @@ fake_progress() {
     local sleep_interval=0
   fi
 
-
   echo -n "  [" # Start progress bar
   for ((i=0; i<progress_bar_width; i++)); do
     echo -n "#"
@@ -50,12 +49,12 @@ fake_progress() {
   sleep 0.5 # Small pause after completion
 }
 
-# Function to log messages to console and file
+# Function to log messages to console and file (this script's own messages)
 log_message() {
   echo "$(date +'%Y-%m-%d %H:%M:%S') - $1" | tee -a "$LOG_FILE"
 }
 
-# Function to execute a command and log its status
+# Function to execute a command, show its live output, log it, and log its status
 run_command() {
   local cmd_description="$1"
   local current_step_num="$2"
@@ -63,26 +62,28 @@ run_command() {
   shift 3 # Remove the first three arguments (description, current_step, total_steps)
   local cmd="$@"
 
-
   log_message "Starting: $cmd_description [$current_step_num/$total_step_count]"
   echo "----------------------------------------------------------------------" | tee -a "$LOG_FILE"
   echo "Executing: $cmd" | tee -a "$LOG_FILE"
-  echo "Output for '$cmd_description':" | tee -a "$LOG_FILE"
+  echo "Output from '$cmd_description' will now be displayed and logged:" | tee -a "$LOG_FILE"
   echo "----------------------------------------------------------------------" | tee -a "$LOG_FILE"
 
-  # Execute the command
-  # Using a subshell to capture output and exit status properly, especially for piped commands
-  if (eval "$cmd") >> "$LOG_FILE" 2>&1; then
+  # Execute the command.
+  # (set -o pipefail; ...) ensures that if 'eval "$cmd"' fails, the pipeline's exit status reflects that failure.
+  # 'eval "$cmd" 2>&1' executes the command and merges its standard error into its standard output.
+  # '| tee -a "$LOG_FILE"' pipes this combined output to 'tee', which displays it on the terminal
+  # and appends it to the specified log file.
+  if (set -o pipefail; eval "$cmd" 2>&1 | tee -a "$LOG_FILE"); then
+    # This block executes if the entire pipeline was successful (i.e., eval "$cmd" succeeded)
     log_message "SUCCESS: $cmd_description completed."
-    echo "----------------------------------------------------------------------" | tee -a "$LOG_FILE"
-    echo # Newline for better readability in console
   else
-    local exit_code=$?
+    # This block executes if the pipeline failed (i.e., eval "$cmd" likely failed)
+    local exit_code=$? # Capture the pipeline's exit code
     log_message "ERROR: $cmd_description failed with exit code $exit_code. Check $LOG_FILE for details."
-    echo "----------------------------------------------------------------------" | tee -a "$LOG_FILE"
-    echo # Newline for better readability in console
-    # Optionally, you could add 'exit 1' here to stop the script on error
+    # Optionally, you could add 'exit 1' here to stop the entire script on error
   fi
+  echo "----------------------------------------------------------------------" | tee -a "$LOG_FILE"
+  echo # Newline for better readability in console after command output
   sleep 1 # Small pause after command
 }
 
