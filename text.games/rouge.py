@@ -35,15 +35,21 @@ PLAYER_CLASSES = [
     {"name": "Druid", "char": "D", "hp": 25, "base_attack": 5, "color_code": "\033[33m", # Orange/Yellow
      "passives": {"name": "Thorns Aura", "desc": "Enemies take 1 damage when they hit you in melee."}},
     {"name": "Monk", "char": "O", "hp": 22, "base_attack": 5, "color_code": "\033[93m", # Light Yellow
-     "passives": {"name": "Precise Strikes", "desc": "Attacks ignore 1 enemy defense."}}
+     "passives": {"name": "Precise Strikes", "desc": "Attacks ignore 1 enemy defense."}},
+    {"name": "Archer", "char": "A", "hp": 20, "base_attack": 5, "color_code": "\033[92m",
+     "passives": {"name": "Sharpshooter", "desc": "Can attack enemies up to 5 tiles away."}, "range": 5},
+    {"name": "Sorcerer", "char": "S", "hp": 16, "base_attack": 6, "color_code": "\033[35m",
+     "passives": {"name": "Spellbolt", "desc": "Can attack enemies up to 6 tiles away."}, "range": 6},
 ]
 ANSI_RESET = "\033[0m"
 
 # --- Enemy Definitions (can be expanded) ---
 ENEMY_TYPES = [
-    {"name": "Goblin", "char": "g", "hp": 7, "attack": 3, "defense": 1, "color_code": "\033[31m"},
-    {"name": "Orc", "char": "o", "hp": 15, "attack": 5, "defense": 2, "color_code": "\033[33m"},
-    {"name": "Skeleton", "char": "s", "hp": 10, "attack": 4, "defense": 1, "color_code": "\033[97m"},
+    {"name": "Goblin", "char": "g", "hp": 7, "attack": 3, "defense": 1, "color_code": "\033[31m", "ai": "melee"},
+    {"name": "Orc", "char": "o", "hp": 15, "attack": 5, "defense": 2, "color_code": "\033[33m", "ai": "melee"},
+    {"name": "Skeleton", "char": "s", "hp": 10, "attack": 4, "defense": 1, "color_code": "\033[97m", "ai": "melee"},
+    {"name": "Archer", "char": "a", "hp": 8, "attack": 3, "defense": 0, "color_code": "\033[92m", "ai": "ranged", "range": 5},
+    {"name": "Mage", "char": "m", "hp": 12, "attack": 6, "defense": 0, "color_code": "\033[95m", "ai": "ranged", "range": 6}
 ]
 
 # --- Player Stats (Global) ---
@@ -320,23 +326,22 @@ def draw_game(): # (Updated UI Panel)
             for x_disp in range(MAP_WIDTH)
         )
         print(row_str)
-    
     print("-" * MAP_WIDTH)
     class_display = f"Class: {player_class_info['color_code']}{player_class_info['name']}{ANSI_RESET}"
     hp_display = f"HP: {player_class_info['color_code']}{player_current_hp}/{player_max_hp}{ANSI_RESET}"
-    
     current_attack = get_player_attack_power()
     attack_display = f"Atk: {current_attack}"
+    if player_can_ranged_attack():
+        attack_display += f" (Range: {player_ranged_range()})"
     if player_class_info["passives"]["name"] == "Rage" and player_current_hp <= math.floor(player_max_hp * 0.3):
         attack_display += " (Raging!)"
-
     turns_display = f"Turns: {turns}"
     print(f"{class_display:<25} {hp_display:<20} {attack_display:<20} {turns_display:<10}")
     passive_display = f"Passive: {player_class_info['passives']['name']}"
     print(f"{passive_display:<50} FOV: {player_fov_radius}")
     print("-" * MAP_WIDTH)
     for msg in game_message: print(msg)
-    print("Move:W,A,S,D | Q:Quit")
+    print("Move:W,A,S,D | F:Ranged Attack | Q:Quit")
 
 
 # --- Game Logic (Handle Cleric Regen, Barbarian Rage message) ---
@@ -354,6 +359,17 @@ def handle_input():
     elif action == 's': player_y += 1; moved = True
     elif action == 'a': player_x -= 1; moved = True
     elif action == 'd': player_x += 1; moved = True
+    elif action == 'f':
+        if player_can_ranged_attack():
+            if not player_ranged_attack():
+                add_message("No enemy in range/line of sight.")
+        else:
+            add_message("Your class cannot perform ranged attacks.")
+        turns += 1
+        turns_since_regen += 1
+        enemy_turn()
+        if player_current_hp <= 0: return "lost"
+        return "playing"
     elif action == 'q': return "quit"
     else: add_message("Invalid command."); return "playing"
 
@@ -399,7 +415,7 @@ def handle_input():
                             player_attack_enemy(enemy)
                             attacked_this_turn = True; break
             if attacked_this_turn: break
-            
+        enemy_turn()
     # Placeholder for enemy turn / attacks (where player_take_damage would be called by enemies)
     # for enemy in list(enemies):
     #     if enemy_can_attack_player(enemy): # hypothetical function
@@ -410,6 +426,41 @@ def handle_input():
 
     if player_current_hp <= 0: return "lost"
     return "playing"
+
+# --- Enemy AI ---
+def enemy_turn():
+    global player_current_hp
+    px, py = player_x, player_y
+    for enemy in list(enemies):
+        ex, ey = enemy['x'], enemy['y']
+        # If adjacent, attack
+        if abs(ex - px) <= 1 and abs(ey - py) <= 1:
+            player_take_damage(enemy['attack'], enemy_attacker=enemy)
+            add_message(f"The {enemy['color_code']}{enemy['name']}{ANSI_RESET} attacks you for {enemy['attack']} damage!")
+            continue
+        # Ranged enemy: attack if in range and line of sight
+        if enemy.get('ai') == 'ranged':
+            rng = enemy.get('range', 5)
+            dist = max(abs(ex - px), abs(ey - py))
+            if dist <= rng:
+                # Check line of sight
+                los = True
+                for lx, ly in get_line(ex, ey, px, py):
+                    if (lx, ly) == (ex, ey) or (lx, ly) == (px, py): continue
+                    if game_map[ly][lx] == WALL_CHAR:
+                        los = False
+                        break
+                if los:
+                    player_take_damage(enemy['attack'], enemy_attacker=enemy)
+                    add_message(f"The {enemy['color_code']}{enemy['name']}{ANSI_RESET} fires a ranged attack at you!")
+                    continue
+        # Move towards player if in FOV
+        if fov_map[ey][ex] == 2:
+            dx = 1 if px > ex else -1 if px < ex else 0
+            dy = 1 if py > ey else -1 if py < ey else 0
+            nx, ny = ex + dx, ey + dy
+            if not is_blocked(nx, ny, check_player=False) and (nx, ny) != (goal_x, goal_y):
+                enemy['x'], enemy['y'] = nx, ny
 
 # --- Main Game Loop (same) ---
 def game_loop():
