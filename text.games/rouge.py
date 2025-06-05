@@ -1,298 +1,411 @@
 import os
 import random
-import math # For FOV distance calculation
+import math
 
-# --- Game Settings ---
-MAP_WIDTH = 50  # Wider map
-MAP_HEIGHT = 25 # Taller map
-PLAYER_CHAR = "@"
+# --- Game Settings (mostly same) ---
+MAP_WIDTH = 50
+MAP_HEIGHT = 25
 FLOOR_CHAR = "."
 WALL_CHAR = "#"
 GOAL_CHAR = "G"
+DEAD_ENEMY_CHAR = "%"
+UNSEEN_CHAR = ' '
 
-# Room generation settings
 ROOM_MAX_SIZE = 10
 ROOM_MIN_SIZE = 6
 MAX_ROOMS = 20
+MAX_ENEMIES_PER_ROOM = 2
 
-# FOV settings
-FOV_RADIUS = 8
-UNSEEN_CHAR = ' ' # What to show for tiles not yet explored/visible
+BASE_FOV_RADIUS = 8 # Base FOV, can be modified by passives
 
-# --- Player ---
-player_x = 0
-player_y = 0
+# --- Player Class Definitions ---
+PLAYER_CLASSES = [
+    {"name": "Warrior", "char": "W", "hp": 30, "base_attack": 7, "color_code": "\033[94m",
+     "passives": {"name": "Improved Fortitude", "desc": "Takes 1 less damage from melee attacks."}},
+    {"name": "Rogue", "char": "R", "hp": 22, "base_attack": 5, "color_code": "\033[92m",
+     "passives": {"name": "Evasion", "desc": "15% chance to dodge melee attacks."}},
+    {"name": "Mage", "char": "M", "hp": 18, "base_attack": 4, "color_code": "\033[95m",
+     "passives": {"name": "Arcane Potency", "desc": "Deals +2 bonus damage with attacks."}},
+    {"name": "Cleric", "char": "C", "hp": 26, "base_attack": 5, "color_code": "\033[96m", # Cyan
+     "passives": {"name": "Minor Regeneration", "desc": "Heals 1 HP every 20 turns."}},
+    {"name": "Ranger", "char": "N", "hp": 24, "base_attack": 6, "color_code": "\033[32m", # Dark Green
+     "passives": {"name": "Keen Eyes", "desc": "Increased Field of View (+2 radius)."}},
+    {"name": "Barbarian", "char": "B", "hp": 35, "base_attack": 6, "color_code": "\033[91m",
+     "passives": {"name": "Rage", "desc": "+3 Attack when below 30% HP."}},
+    {"name": "Druid", "char": "D", "hp": 25, "base_attack": 5, "color_code": "\033[33m", # Orange/Yellow
+     "passives": {"name": "Thorns Aura", "desc": "Enemies take 1 damage when they hit you in melee."}},
+    {"name": "Monk", "char": "O", "hp": 22, "base_attack": 5, "color_code": "\033[93m", # Light Yellow
+     "passives": {"name": "Precise Strikes", "desc": "Attacks ignore 1 enemy defense."}}
+]
+ANSI_RESET = "\033[0m"
 
-# --- Goal ---
-goal_x = 0
-goal_y = 0
+# --- Enemy Definitions (can be expanded) ---
+ENEMY_TYPES = [
+    {"name": "Goblin", "char": "g", "hp": 7, "attack": 3, "defense": 1, "color_code": "\033[31m"},
+    {"name": "Orc", "char": "o", "hp": 15, "attack": 5, "defense": 2, "color_code": "\033[33m"},
+    {"name": "Skeleton", "char": "s", "hp": 10, "attack": 4, "defense": 1, "color_code": "\033[97m"},
+]
 
-# --- Game State ---
+# --- Player Stats (Global) ---
+player_x, player_y = 0, 0
+player_class_info = {} # Will store the chosen class dict
+player_char = "@"
+player_max_hp, player_current_hp = 0, 0
+# player_attack_power will be calculated dynamically
+player_fov_radius = BASE_FOV_RADIUS
+turns_since_regen = 0 # For Cleric
+
+# --- Goal, Enemies, Game State, Maps (mostly same) ---
+goal_x, goal_y = 0, 0
+enemies = []
 turns = 0
-game_message = "Explore the dungeon. Find the Goal (G)!"
-
-# --- Map ---
+game_message = ["Welcome! Explore and survive."]
 game_map = [[WALL_CHAR for _ in range(MAP_WIDTH)] for _ in range(MAP_HEIGHT)]
-# FOV map: 0 = unseen, 1 = explored (not visible), 2 = currently visible
 fov_map = [[0 for _ in range(MAP_WIDTH)] for _ in range(MAP_HEIGHT)]
 
-
-# --- Room Class (same as before) ---
+# --- Rect Class (same) ---
 class Rect:
-    def __init__(self, x, y, w, h):
-        self.x1 = x
-        self.y1 = y
-        self.x2 = x + w
-        self.y2 = y + h
+    def __init__(self, x, y, w, h): self.x1,self.y1,self.x2,self.y2 = x,y,x+w,y+h
+    def center(self): return ((self.x1+self.x2)//2, (self.y1+self.y2)//2)
+    def intersects(self, other): return (self.x1<=other.x2 and self.x2>=other.x1 and self.y1<=other.y2 and self.y2>=other.y1)
 
-    def center(self):
-        center_x = (self.x1 + self.x2) // 2
-        center_y = (self.y1 + self.y2) // 2
-        return (center_x, center_y)
+# --- Player Initialization ---
+def initialize_player():
+    global player_class_info, player_max_hp, player_current_hp, player_char, player_fov_radius, turns_since_regen
+    player_class_info = random.choice(PLAYER_CLASSES)
+    player_max_hp = player_class_info["hp"]
+    player_current_hp = player_max_hp
+    player_char = player_class_info["char"]
+    player_fov_radius = BASE_FOV_RADIUS # Reset before applying passive
+    turns_since_regen = 0
 
-    def intersects(self, other):
-        return (self.x1 <= other.x2 and self.x2 >= other.x1 and
-                self.y1 <= other.y2 and self.y2 >= other.y1)
+    # Apply Ranger's "Keen Eyes" passive for FOV
+    if player_class_info["passives"]["name"] == "Keen Eyes":
+        player_fov_radius += 2
+    
+    add_message(f"You are a {player_class_info['color_code']}{player_class_info['name']}{ANSI_RESET}!")
+    add_message(f"Passive: {player_class_info['passives']['name']} - {player_class_info['passives']['desc']}")
 
-# --- Map Generation (similar to before, minor adjustments for player/goal placement) ---
+
+def get_player_attack_power():
+    base_atk = player_class_info["base_attack"]
+    # Mage: Arcane Potency
+    if player_class_info["passives"]["name"] == "Arcane Potency":
+        base_atk += 2
+    # Barbarian: Rage
+    if player_class_info["passives"]["name"] == "Rage":
+        if player_current_hp <= math.floor(player_max_hp * 0.3):
+            base_atk += 3
+    return base_atk
+
+# --- Map Generation & Enemy Spawning (mostly same, ensure player_x,y are set before spawn_enemies) ---
 def create_room(room):
-    global game_map
     for x in range(room.x1 + 1, room.x2):
         for y in range(room.y1 + 1, room.y2):
-            if 0 <= x < MAP_WIDTH and 0 <= y < MAP_HEIGHT:
-                game_map[y][x] = FLOOR_CHAR
+            if 0 <= x < MAP_WIDTH and 0 <= y < MAP_HEIGHT: game_map[y][x] = FLOOR_CHAR
 
 def create_h_tunnel(x1, x2, y):
-    global game_map
     for x in range(min(x1, x2), max(x1, x2) + 1):
-        if 0 <= x < MAP_WIDTH and 0 <= y < MAP_HEIGHT:
-            game_map[y][x] = FLOOR_CHAR
+        if 0 <= x < MAP_WIDTH and 0 <= y < MAP_HEIGHT: game_map[y][x] = FLOOR_CHAR
 
 def create_v_tunnel(y1, y2, x):
-    global game_map
     for y in range(min(y1, y2), max(y1, y2) + 1):
-        if 0 <= x < MAP_WIDTH and 0 <= y < MAP_HEIGHT:
-            game_map[y][x] = FLOOR_CHAR
+        if 0 <= x < MAP_WIDTH and 0 <= y < MAP_HEIGHT: game_map[y][x] = FLOOR_CHAR
+
+def is_blocked(x, y, check_player=True): # Added check_player flag
+    if not (0 <= x < MAP_WIDTH and 0 <= y < MAP_HEIGHT): return True # Out of bounds is blocked
+    if game_map[y][x] == WALL_CHAR: return True
+    if check_player and x == player_x and y == player_y: return True
+    if x == goal_x and y == goal_y : return True
+    for enemy in enemies:
+        if enemy['x'] == x and enemy['y'] == y: return True
+    return False
+
+def spawn_enemies(room):
+    global enemies
+    num_spawn = random.randint(0, MAX_ENEMIES_PER_ROOM)
+    for _ in range(num_spawn):
+        # Try a few times to find an empty spot in the room
+        for _attempt in range(5): # Max 5 attempts to place an enemy in a room
+            x = random.randint(room.x1 + 1, room.x2 - 1)
+            y = random.randint(room.y1 + 1, room.y2 - 1)
+            if 0 <= x < MAP_WIDTH and 0 <= y < MAP_HEIGHT and \
+               game_map[y][x] == FLOOR_CHAR and not is_blocked(x, y, check_player=False): # Don't check player during initial spawn
+                enemy_type = random.choice(ENEMY_TYPES)
+                new_enemy = enemy_type.copy()
+                new_enemy['x'], new_enemy['y'] = x, y
+                new_enemy['current_hp'] = enemy_type['hp']
+                enemies.append(new_enemy)
+                break # Placed enemy, move to next spawn
 
 def generate_map():
-    global game_map, player_x, player_y, goal_x, goal_y, fov_map
+    global game_map, player_x, player_y, goal_x, goal_y, fov_map, enemies
     game_map = [[WALL_CHAR for _ in range(MAP_WIDTH)] for _ in range(MAP_HEIGHT)]
-    fov_map = [[0 for _ in range(MAP_WIDTH)] for _ in range(MAP_HEIGHT)] # Reset FOV map
+    fov_map = [[0 for _ in range(MAP_WIDTH)] for _ in range(MAP_HEIGHT)]
+    enemies = []
     rooms = []
-    num_rooms = 0
-
-    for r in range(MAX_ROOMS):
-        w = random.randint(ROOM_MIN_SIZE, ROOM_MAX_SIZE)
-        h = random.randint(ROOM_MIN_SIZE, ROOM_MAX_SIZE)
-        x = random.randint(1, MAP_WIDTH - w - 2) # Ensure rooms aren't at the very edge
-        y = random.randint(1, MAP_HEIGHT - h - 2)
-
-        new_room = Rect(x, y, w, h)
-        failed = False
-        for other_room in rooms:
-            if new_room.intersects(other_room):
-                failed = True
-                break
-        
-        if not failed:
-            create_room(new_room)
-            (new_x, new_y) = new_room.center()
-
-            if num_rooms == 0:
-                player_x = new_x
-                player_y = new_y
-            else:
-                (prev_x, prev_y) = rooms[num_rooms - 1].center()
-                if random.randint(0, 1) == 1:
-                    create_h_tunnel(prev_x, new_x, prev_y)
-                    create_v_tunnel(prev_y, new_y, new_x)
-                else:
-                    create_v_tunnel(prev_y, new_y, prev_x)
-                    create_h_tunnel(prev_x, new_x, new_y)
-            
-            rooms.append(new_room)
-            num_rooms += 1
-
-    if rooms:
-        # Ensure player is on a floor tile (center might rarely be a wall if room is 1 wide/tall)
-        if game_map[player_y][player_x] == WALL_CHAR:
-            for r_idx, room_obj in enumerate(rooms): # find first room with floor
-                px, py = room_obj.center()
-                if game_map[py][px] == FLOOR_CHAR:
-                    player_x, player_y = px, py
-                    break
-        
-        # Place goal in the center of the last room, ensuring it's on a floor tile
-        last_room = rooms[-1]
-        goal_x, goal_y = last_room.center()
-        if game_map[goal_y][goal_x] == WALL_CHAR: # If center is wall, find floor in room
-            found_goal_spot = False
-            for gx_offset in range(last_room.x1 + 1, last_room.x2):
-                for gy_offset in range(last_room.y1 + 1, last_room.y2):
-                    if game_map[gy_offset][gx_offset] == FLOOR_CHAR:
-                        goal_x, goal_y = gx_offset, gy_offset
-                        found_goal_spot = True
-                        break
-                if found_goal_spot: break
-        game_map[goal_y][goal_x] = GOAL_CHAR
-
-    else: # Fallback
-        game_map = [[FLOOR_CHAR for _ in range(MAP_WIDTH)] for _ in range(MAP_HEIGHT)]
-        player_x, player_y = MAP_WIDTH // 2, MAP_HEIGHT // 2
-        goal_x, goal_y = player_x + 2, player_y
-        if 0 <= goal_x < MAP_WIDTH and 0 <= goal_y < MAP_HEIGHT:
-             game_map[goal_y][goal_x] = GOAL_CHAR
-        else:
-            goal_x, goal_y = player_x, player_y
     
-    update_fov() # Initial FOV calculation
+    # Initial player placement to allow is_blocked to work before final placement
+    player_x_init, player_y_init = -1,-1
 
-# --- FOV Calculation ---
-def get_line(x1, y1, x2, y2):
-    """Bresenham's Line Algorithm: returns a list of (x,y) tuples from (x1,y1) to (x2,y2)"""
-    points = []
-    dx = abs(x2 - x1)
-    dy = abs(y2 - y1)
-    x, y = x1, y1
-    sx = -1 if x1 > x2 else 1
-    sy = -1 if y1 > y2 else 1
+    for r_idx in range(MAX_ROOMS):
+        w,h = random.randint(ROOM_MIN_SIZE, ROOM_MAX_SIZE), random.randint(ROOM_MIN_SIZE, ROOM_MAX_SIZE)
+        x,y = random.randint(1, MAP_WIDTH - w - 2), random.randint(1, MAP_HEIGHT - h - 2)
+        new_room = Rect(x, y, w, h)
+        if any(new_room.intersects(other_room) for other_room in rooms): continue
+        
+        create_room(new_room)
+        (new_cx, new_cy) = new_room.center()
+        if not rooms: # First room
+            player_x, player_y = new_cx, new_cy # Set actual player_x, player_y here
+        else:
+            (prev_cx, prev_cy) = rooms[-1].center()
+            if random.randint(0,1) == 1:
+                create_h_tunnel(prev_cx, new_cx, prev_cy); create_v_tunnel(prev_cy, new_cy, new_cx)
+            else:
+                create_v_tunnel(prev_cy, new_cy, prev_cx); create_h_tunnel(prev_cx, new_cx, new_cy)
+            spawn_enemies(new_room) # Spawn in subsequent rooms
+        rooms.append(new_room)
 
-    if dx > dy:
-        err = dx / 2.0
-        while x != x2:
-            points.append((x, y))
-            err -= dy
-            if err < 0:
-                y += sy
-                err += dx
-            x += sx
-    else:
-        err = dy / 2.0
-        while y != y2:
-            points.append((x, y))
-            err -= dx
-            if err < 0:
-                x += sx
-                err += dy
-            y += sy
-    points.append((x, y)) # Ensure the last point is added
-    return points
+    if not rooms: # Fallback
+        player_x, player_y = MAP_WIDTH//2, MAP_HEIGHT//2
+        game_map = [[FLOOR_CHAR for _ in range(MAP_WIDTH)] for _ in range(MAP_HEIGHT)]
+    
+    if len(rooms) > 1:
+        last_room = rooms[-1]
+        for _ in range(10): # Try to place goal
+            gx, gy = random.randint(last_room.x1 + 1, last_room.x2 - 1), random.randint(last_room.y1 + 1, last_room.y2 - 1)
+            if 0 <= gx < MAP_WIDTH and 0 <= gy < MAP_HEIGHT and game_map[gy][gx] == FLOOR_CHAR and not (gx == player_x and gy == player_y) :
+                goal_x, goal_y = gx,gy
+                game_map[goal_y][goal_x] = GOAL_CHAR
+                break
+        else: # Fallback if can't place goal in last room
+            if rooms[0].center() != (player_x,player_y):
+                goal_x,goal_y = rooms[0].center()
+                if game_map[goal_y][goal_x] == FLOOR_CHAR : game_map[goal_y][goal_x] = GOAL_CHAR
+    elif rooms: # Only one room
+        for _ in range(10):
+            gx,gy = random.randint(rooms[0].x1+1, rooms[0].x2-1), random.randint(rooms[0].y1+1, rooms[0].y2-1)
+            if game_map[gy][gx] == FLOOR_CHAR and not (gx == player_x and gy == player_y):
+                goal_x, goal_y = gx, gy; game_map[goal_y][goal_x] = GOAL_CHAR; break
 
-def update_fov():
+    update_fov()
+
+# --- FOV Calculation (uses player_fov_radius) ---
+def get_line(x1,y1,x2,y2): # (same)
+    p,dx,dy,x,y,sx,sy = [],abs(x2-x1),abs(y2-y1),x1,y1,-1 if x1>x2 else 1,-1 if y1>y2 else 1
+    if dx>dy: err=dx/2.0; شرط=lambda:x!=x2; op=lambda: (p.append((x,y)), setattr(locals(),'err',err-dy), (y:=y+sy, err:=err+dx) if err<0 else None, x:=x+sx)
+    else: err=dy/2.0; شرط=lambda:y!=y2; op=lambda: (p.append((x,y)), setattr(locals(),'err',err-dx), (x:=x+sx, err:=err+dy) if err<0 else None, y:=y+sy)
+    while شرط(): op()
+    p.append((x,y)); return p
+
+def update_fov(): # (same, but uses player_fov_radius)
     global fov_map
-    # Set all previously visible tiles to "explored"
     for y_ in range(MAP_HEIGHT):
         for x_ in range(MAP_WIDTH):
-            if fov_map[y_][x_] == 2: # Was visible
-                fov_map[y_][x_] = 1   # Now explored
-
-    # Cast rays to all tiles within FOV_RADIUS
-    # Iterate through a square area and then check distance for a circular FOV
-    for x_offset in range(-FOV_RADIUS, FOV_RADIUS + 1):
-        for y_offset in range(-FOV_RADIUS, FOV_RADIUS + 1):
-            # Optional: circular FOV
-            if x_offset * x_offset + y_offset * y_offset > FOV_RADIUS * FOV_RADIUS:
-                continue
-
-            target_x = player_x + x_offset
-            target_y = player_y + y_offset
-
-            # Ensure target is within map bounds
-            if not (0 <= target_x < MAP_WIDTH and 0 <= target_y < MAP_HEIGHT):
-                continue
-            
-            line_to_target = get_line(player_x, player_y, target_x, target_y)
-            
-            for i, (lx, ly) in enumerate(line_to_target):
-                if not (0 <= lx < MAP_WIDTH and 0 <= ly < MAP_HEIGHT): # Should not happen if target is in bounds and line algo is good
-                    break 
+            if fov_map[y_][x_] == 2: fov_map[y_][x_] = 1
+    for x_offset in range(-player_fov_radius, player_fov_radius + 1):
+        for y_offset in range(-player_fov_radius, player_fov_radius + 1):
+            if x_offset*x_offset + y_offset*y_offset > player_fov_radius*player_fov_radius: continue
+            target_x, target_y = player_x + x_offset, player_y + y_offset
+            if not (0 <= target_x < MAP_WIDTH and 0 <= target_y < MAP_HEIGHT): continue
+            for lx, ly in get_line(player_x, player_y, target_x, target_y):
+                if not (0 <= lx < MAP_WIDTH and 0 <= ly < MAP_HEIGHT): break
+                fov_map[ly][lx] = 2
+                if game_map[ly][lx] == WALL_CHAR: break
                 
-                fov_map[ly][lx] = 2 # Mark this tile as visible
-                if game_map[ly][lx] == WALL_CHAR:
-                    break # Light stops at walls
-                    
-# --- Drawing ---
+# --- Messaging (same) ---
+def add_message(msg):
+    global game_message
+    game_message.append(msg)
+    if len(game_message) > 5: game_message = game_message[-5:]
+
+# --- Combat & Player Taking Damage ---
+def player_attack_enemy(enemy_obj):
+    global enemies
+    current_player_atk = get_player_attack_power()
+    enemy_def = enemy_obj.get('defense', 0)
+
+    # Monk: Precise Strikes
+    if player_class_info["passives"]["name"] == "Precise Strikes":
+        enemy_def = max(0, enemy_def - 1)
+        # add_message("Your precise strike bypasses some defense!") # Optional flavor
+
+    damage = current_player_atk - enemy_def
+    damage = max(0, damage) 
+    
+    enemy_obj['current_hp'] -= damage
+    hit_msg = f"You attack the {enemy_obj['color_code']}{enemy_obj['name']}{ANSI_RESET} for {damage} damage."
+    
+    if enemy_obj['current_hp'] <= 0:
+        add_message(f"{hit_msg} It collapses!")
+        game_map[enemy_obj['y']][enemy_obj['x']] = DEAD_ENEMY_CHAR
+        enemies.remove(enemy_obj)
+    else:
+        add_message(f"{hit_msg} ({enemy_obj['current_hp']}/{enemy_obj['hp']} HP)")
+
+def player_take_damage(damage_amount, enemy_attacker=None): # enemy_attacker for Thorns
+    global player_current_hp
+    
+    # Warrior: Improved Fortitude
+    if player_class_info["passives"]["name"] == "Improved Fortitude":
+        damage_amount = max(1, damage_amount - 1)
+        # add_message("Your fortitude lessens the blow!") # Optional flavor
+
+    # Rogue: Evasion
+    if player_class_info["passives"]["name"] == "Evasion":
+        if random.random() < 0.15: # 15% chance
+            add_message(f"You deftly evade the attack from {enemy_attacker['name'] if enemy_attacker else 'an enemy'}!")
+            return # No damage taken
+
+    player_current_hp -= damage_amount
+    add_message(f"You take {damage_amount} damage!")
+
+    # Druid: Thorns Aura (if enemy attacker is provided)
+    if player_class_info["passives"]["name"] == "Thorns Aura" and enemy_attacker:
+        if enemy_attacker in enemies: # Check if enemy is still alive and in list
+            enemy_attacker['current_hp'] -= 1
+            thorns_msg = f"Your thorns prick the {enemy_attacker['color_code']}{enemy_attacker['name']}{ANSI_RESET} for 1 damage."
+            if enemy_attacker['current_hp'] <= 0:
+                add_message(f"{thorns_msg} It succumbs to the thorns!")
+                game_map[enemy_attacker['y']][enemy_attacker['x']] = DEAD_ENEMY_CHAR
+                enemies.remove(enemy_attacker)
+            else:
+                add_message(thorns_msg)
+
+    if player_current_hp < 0: player_current_hp = 0
+
+
+# --- Drawing (updated for passives in UI) ---
 def clear_screen():
     if os.name == 'nt': _ = os.system('cls')
     else: _ = os.system('clear')
 
-def draw_game():
-    clear_screen()
-    display_map_chars = []
+def get_char_at(x, y): # (same)
+    if x == player_x and y == player_y: return f"{player_class_info['color_code']}{player_char}{ANSI_RESET}"
+    for enemy in enemies:
+        if enemy['x'] == x and enemy['y'] == y: return f"{enemy['color_code']}{enemy['char']}{ANSI_RESET}"
+    return game_map[y][x]
 
+def draw_game(): # (Updated UI Panel)
+    clear_screen()
     for y_disp in range(MAP_HEIGHT):
-        row_chars = []
-        for x_disp in range(MAP_WIDTH):
-            if fov_map[y_disp][x_disp] == 2: # Currently visible
-                if y_disp == player_y and x_disp == player_x:
-                    row_chars.append(PLAYER_CHAR)
-                else:
-                    row_chars.append(game_map[y_disp][x_disp])
-            elif fov_map[y_disp][x_disp] == 1: # Explored but not visible
-                row_chars.append(game_map[y_disp][x_disp]) # Could make this dimmer later
-            else: # Unseen
-                row_chars.append(UNSEEN_CHAR)
-        display_map_chars.append("".join(row_chars))
-    
-    for row_str in display_map_chars:
+        row_str = "".join(
+            get_char_at(x_disp, y_disp) if fov_map[y_disp][x_disp] == 2 else
+            (game_map[y_disp][x_disp] if fov_map[y_disp][x_disp] == 1 and game_map[y_disp][x_disp] != WALL_CHAR else
+             (WALL_CHAR if fov_map[y_disp][x_disp] == 1 and game_map[y_disp][x_disp] == WALL_CHAR else UNSEEN_CHAR))
+            for x_disp in range(MAP_WIDTH)
+        )
         print(row_str)
     
-    print(f"\nTurns: {turns}")
-    # print(f"Player: ({player_x},{player_y}) Goal: ({goal_x},{goal_y})") # Optional: for debugging
-    print(game_message)
-    print("Move with W, A, S, D. Press Q to quit.")
+    print("-" * MAP_WIDTH)
+    class_display = f"Class: {player_class_info['color_code']}{player_class_info['name']}{ANSI_RESET}"
+    hp_display = f"HP: {player_class_info['color_code']}{player_current_hp}/{player_max_hp}{ANSI_RESET}"
+    
+    current_attack = get_player_attack_power()
+    attack_display = f"Atk: {current_attack}"
+    if player_class_info["passives"]["name"] == "Rage" and player_current_hp <= math.floor(player_max_hp * 0.3):
+        attack_display += " (Raging!)"
 
-# --- Game Logic ---
+    turns_display = f"Turns: {turns}"
+    print(f"{class_display:<25} {hp_display:<20} {attack_display:<20} {turns_display:<10}")
+    passive_display = f"Passive: {player_class_info['passives']['name']}"
+    print(f"{passive_display:<50} FOV: {player_fov_radius}")
+    print("-" * MAP_WIDTH)
+    for msg in game_message: print(msg)
+    print("Move:W,A,S,D | Q:Quit")
+
+
+# --- Game Logic (Handle Cleric Regen, Barbarian Rage message) ---
 def handle_input():
-    global player_x, player_y, turns, game_message
+    global player_x, player_y, turns, game_message, player_current_hp, turns_since_regen
     
     action = input("> ").lower()
-    
-    # Don't increment turns for invalid commands or quit
+    old_px, old_py = player_x, player_y
     moved = False
-    new_x, new_y = player_x, player_y
 
-    if action == 'w': new_y -= 1; moved = True
-    elif action == 's': new_y += 1; moved = True
-    elif action == 'a': new_x -= 1; moved = True
-    elif action == 'd': new_x += 1; moved = True
+    if len(game_message) > 0 and not any(kw in game_message[-1] for kw in ["Ouch!", "Invalid", "You are", "Passive:"]):
+         game_message = [] # Clear general action messages, keep initial/important ones
+
+    if action == 'w': player_y -= 1; moved = True
+    elif action == 's': player_y += 1; moved = True
+    elif action == 'a': player_x -= 1; moved = True
+    elif action == 'd': player_x += 1; moved = True
     elif action == 'q': return "quit"
-    else:
-        game_message = "Invalid command. Use W, A, S, D or Q."
-        return "playing" # No turn taken for invalid command
+    else: add_message("Invalid command."); return "playing"
 
-    turns += 1 # Increment turns only if a move key was pressed
-    game_message = "" 
+    turns += 1
+    turns_since_regen += 1
 
-    if (0 <= new_x < MAP_WIDTH and 0 <= new_y < MAP_HEIGHT):
-        if game_map[new_y][new_x] != WALL_CHAR:
-            player_x, player_y = new_x, new_y
-            update_fov() # Update FOV after moving
-            if player_x == goal_x and player_y == goal_y:
-                return "won"
-        else:
-            game_message = "Ouch! You bumped into a wall."
-    else:
-        game_message = "You can't move outside the map."
-        
+    # Cleric: Minor Regeneration
+    if player_class_info["passives"]["name"] == "Minor Regeneration":
+        if turns_since_regen >= 20:
+            if player_current_hp < player_max_hp:
+                player_current_hp += 1
+                add_message("You feel a divine warmth, regenerating 1 HP.")
+            turns_since_regen = 0
+            
+    # Collision & Movement
+    if not (0 <= player_x < MAP_WIDTH and 0 <= player_y < MAP_HEIGHT) or \
+       game_map[player_y][player_x] == WALL_CHAR:
+        add_message("Ouch! A wall.")
+        player_x, player_y = old_px, old_py
+        moved = False
+    
+    if moved:
+        update_fov()
+        if player_x == goal_x and player_y == goal_y: return "won"
+
+        # Barbarian Rage Message (if activated by moving and taking damage, or just state change)
+        # This is more of a status effect display rather than turn-based trigger
+        if player_class_info["passives"]["name"] == "Rage":
+            is_raging = player_current_hp <= math.floor(player_max_hp * 0.3)
+            # Check if rage state *just changed* to message it, or rely on Atk display
+            # For now, the attack display handles "Raging!" status
+
+        # Auto-attack (same logic as before, but uses get_player_attack_power())
+        attacked_this_turn = False
+        for dx_check in range(-1, 2):
+            for dy_check in range(-1, 2):
+                if dx_check == 0 and dy_check == 0: continue
+                target_x, target_y = player_x + dx_check, player_y + dy_check
+                if not (0 <= target_x < MAP_WIDTH and 0 <= target_y < MAP_HEIGHT): continue
+                if fov_map[target_y][target_x] == 2:
+                    for enemy in list(enemies):
+                        if enemy['x'] == target_x and enemy['y'] == target_y:
+                            player_attack_enemy(enemy)
+                            attacked_this_turn = True; break
+            if attacked_this_turn: break
+            
+    # Placeholder for enemy turn / attacks (where player_take_damage would be called by enemies)
+    # for enemy in list(enemies):
+    #     if enemy_can_attack_player(enemy): # hypothetical function
+    #         damage = enemy['attack']
+    #         player_take_damage(damage, enemy_attacker=enemy) 
+    #         if player_current_hp <= 0: break
+
+
+    if player_current_hp <= 0: return "lost"
     return "playing"
 
-# --- Main Game Loop ---
+# --- Main Game Loop (same) ---
 def game_loop():
-    global game_message
+    global game_message, turns, player_current_hp, player_class_info
+    initialize_player()
+    generate_map()
     game_state = "playing"
-    generate_map() # This now calls update_fov() internally for the first view
-
     while game_state == "playing":
         draw_game()
         game_state = handle_input()
 
     draw_game() 
-    if game_state == "won":
-        print(f"\nCongratulations! You reached the goal ('{GOAL_CHAR}') in {turns} turns!")
-    elif game_state == "quit":
-        print(f"\nYou quit after {turns} turns. Thanks for playing!")
+    end_color = player_class_info.get('color_code', ANSI_RESET)
+    end_name = player_class_info.get('name', 'Adventurer')
+    if game_state == "won": add_message(f"VICTORY! Goal reached in {turns} turns as a {end_color}{end_name}{ANSI_RESET}!")
+    elif game_state == "lost": add_message(f"DEFEAT! Died after {turns} turns as a {end_color}{end_name}{ANSI_RESET}. Game Over.")
+    elif game_state == "quit": add_message(f"You quit after {turns} turns. Farewell, {end_color}{end_name}{ANSI_RESET}!")
+    print("-" * MAP_WIDTH); [print(msg) for msg in game_message]; print(ANSI_RESET)
 
 if __name__ == "__main__":
-    game_loop()
-
+    try: game_loop()
+    finally: print(ANSI_RESET) # Ensure color reset
