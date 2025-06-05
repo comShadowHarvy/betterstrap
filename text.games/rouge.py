@@ -192,12 +192,35 @@ def generate_map():
     update_fov()
 
 # --- FOV Calculation (uses player_fov_radius) ---
-def get_line(x1,y1,x2,y2): # (same)
-    p,dx,dy,x,y,sx,sy = [],abs(x2-x1),abs(y2-y1),x1,y1,-1 if x1>x2 else 1,-1 if y1>y2 else 1
-    if dx>dy: err=dx/2.0; شرط=lambda:x!=x2; op=lambda: (p.append((x,y)), setattr(locals(),'err',err-dy), (y:=y+sy, err:=err+dx) if err<0 else None, x:=x+sx)
-    else: err=dy/2.0; شرط=lambda:y!=y2; op=lambda: (p.append((x,y)), setattr(locals(),'err',err-dx), (x:=x+sx, err:=err+dy) if err<0 else None, y:=y+sy)
-    while شرط(): op()
-    p.append((x,y)); return p
+def get_line(x1,y1,x2,y2):
+    """Bresenham's Line Algorithm: returns list of (x, y) from (x1, y1) to (x2, y2)"""
+    points = []
+    dx = abs(x2 - x1)
+    dy = abs(y2 - y1)
+    x, y = x1, y1
+    sx = 1 if x2 > x1 else -1
+    sy = 1 if y2 > y1 else -1
+
+    if dx > dy:
+        err = dx // 2
+        while x != x2:
+            points.append((x, y))
+            err -= dy
+            if err < 0:
+                y += sy
+                err += dx
+            x += sx
+    else:
+        err = dy // 2
+        while y != y2:
+            points.append((x, y))
+            err -= dx
+            if err < 0:
+                x += sx
+                err += dy
+            y += sy
+    points.append((x2, y2))
+    return points
 
 def update_fov(): # (same, but uses player_fov_radius)
     global fov_map
