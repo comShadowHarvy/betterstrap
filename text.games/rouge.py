@@ -21,25 +21,25 @@ BASE_FOV_RADIUS = 8 # Base FOV, can be modified by passives
 # --- Player Class Definitions ---
 PLAYER_CLASSES = [
     {"name": "Warrior", "char": "W", "hp": 30, "base_attack": 7, "color_code": "\033[94m",
-     "passives": {"name": "Improved Fortitude", "desc": "Takes 1 less damage from melee attacks."}},
+     "passives": {"name": "Improved Fortitude", "desc": "Takes 1 less damage from melee attacks and regenerates 1 HP every 30 turns"}},
     {"name": "Rogue", "char": "R", "hp": 22, "base_attack": 5, "color_code": "\033[92m",
-     "passives": {"name": "Evasion", "desc": "15% chance to dodge melee attacks."}},
+     "passives": {"name": "Evasion Master", "desc": "15% dodge chance and deals +2 damage to enemies below 50% HP"}},
     {"name": "Mage", "char": "M", "hp": 18, "base_attack": 4, "color_code": "\033[95m",
-     "passives": {"name": "Arcane Potency", "desc": "Deals +2 bonus damage with attacks."}},
-    {"name": "Cleric", "char": "C", "hp": 26, "base_attack": 5, "color_code": "\033[96m", # Cyan
-     "passives": {"name": "Minor Regeneration", "desc": "Heals 1 HP every 20 turns."}},
-    {"name": "Ranger", "char": "N", "hp": 24, "base_attack": 6, "color_code": "\033[32m", # Dark Green
-     "passives": {"name": "Keen Eyes", "desc": "Increased Field of View (+2 radius)."}},
+     "passives": {"name": "Arcane Mastery", "desc": "Deals +2 damage and has 20% chance to deal 2 bonus damage"}, "range": 4},
+    {"name": "Cleric", "char": "C", "hp": 26, "base_attack": 5, "color_code": "\033[96m",
+     "passives": {"name": "Divine Blessing", "desc": "Heals 1 HP every 20 turns and deals +1 damage to undead"}},
+    {"name": "Ranger", "char": "N", "hp": 24, "base_attack": 6, "color_code": "\033[32m",
+     "passives": {"name": "Hunter's Precision", "desc": "Increased FOV (+2) and deals +1 damage at range 3+"}, "range": 5},
     {"name": "Barbarian", "char": "B", "hp": 35, "base_attack": 6, "color_code": "\033[91m",
-     "passives": {"name": "Rage", "desc": "+3 Attack when below 30% HP."}},
-    {"name": "Druid", "char": "D", "hp": 25, "base_attack": 5, "color_code": "\033[33m", # Orange/Yellow
-     "passives": {"name": "Thorns Aura", "desc": "Enemies take 1 damage when they hit you in melee."}},
-    {"name": "Monk", "char": "O", "hp": 22, "base_attack": 5, "color_code": "\033[93m", # Light Yellow
-     "passives": {"name": "Precise Strikes", "desc": "Attacks ignore 1 enemy defense."}},
+     "passives": {"name": "Berserker", "desc": "+3 Attack when below 30% HP and 10% lifesteal on hits"}},
+    {"name": "Druid", "char": "D", "hp": 25, "base_attack": 5, "color_code": "\033[33m",
+     "passives": {"name": "Nature's Wrath", "desc": "Enemies take 1-2 damage on hit and heal 1 HP every 40 turns"}},
+    {"name": "Monk", "char": "O", "hp": 22, "base_attack": 5, "color_code": "\033[93m",
+     "passives": {"name": "Ki Master", "desc": "Ignores 1 defense and has 15% chance to strike twice"}},
     {"name": "Archer", "char": "A", "hp": 20, "base_attack": 5, "color_code": "\033[92m",
-     "passives": {"name": "Sharpshooter", "desc": "Can attack enemies up to 5 tiles away."}, "range": 5},
+     "passives": {"name": "Deadly Aim", "desc": "Can attack at range 5 and deals +2 damage to unaware enemies"}, "range": 5},
     {"name": "Sorcerer", "char": "S", "hp": 16, "base_attack": 6, "color_code": "\033[35m",
-     "passives": {"name": "Spellbolt", "desc": "Can attack enemies up to 6 tiles away."}, "range": 6},
+     "passives": {"name": "Spell Mastery", "desc": "Range 6 attacks and 25% chance to hit all adjacent enemies"}, "range": 6},
 ]
 ANSI_RESET = "\033[0m"
 
@@ -60,6 +60,8 @@ player_max_hp, player_current_hp = 0, 0
 # player_attack_power will be calculated dynamically
 player_fov_radius = BASE_FOV_RADIUS
 turns_since_regen = 0 # For Cleric
+seen_enemy_ids = set()  # Track enemy IDs instead of enemy dicts
+enemy_id_counter = 0  # For generating unique enemy IDs
 
 # --- Goal, Enemies, Game State, Maps (mostly same) ---
 goal_x, goal_y = 0, 0
@@ -128,28 +130,32 @@ def is_blocked(x, y, check_player=True): # Added check_player flag
     return False
 
 def spawn_enemies(room):
-    global enemies
+    global enemies, enemy_id_counter
     num_spawn = random.randint(0, MAX_ENEMIES_PER_ROOM)
     for _ in range(num_spawn):
         # Try a few times to find an empty spot in the room
-        for _attempt in range(5): # Max 5 attempts to place an enemy in a room
+        for _attempt in range(5):
             x = random.randint(room.x1 + 1, room.x2 - 1)
             y = random.randint(room.y1 + 1, room.y2 - 1)
             if 0 <= x < MAP_WIDTH and 0 <= y < MAP_HEIGHT and \
-               game_map[y][x] == FLOOR_CHAR and not is_blocked(x, y, check_player=False): # Don't check player during initial spawn
+               game_map[y][x] == FLOOR_CHAR and not is_blocked(x, y, check_player=False):
                 enemy_type = random.choice(ENEMY_TYPES)
                 new_enemy = enemy_type.copy()
                 new_enemy['x'], new_enemy['y'] = x, y
                 new_enemy['current_hp'] = enemy_type['hp']
+                new_enemy['id'] = enemy_id_counter  # Add unique ID
+                enemy_id_counter += 1
                 enemies.append(new_enemy)
-                break # Placed enemy, move to next spawn
+                break
 
 def generate_map():
-    global game_map, player_x, player_y, goal_x, goal_y, fov_map, enemies
+    global game_map, player_x, player_y, goal_x, goal_y, fov_map, enemies, seen_enemy_ids, enemy_id_counter
     game_map = [[WALL_CHAR for _ in range(MAP_WIDTH)] for _ in range(MAP_HEIGHT)]
     fov_map = [[0 for _ in range(MAP_WIDTH)] for _ in range(MAP_HEIGHT)]
     enemies = []
     rooms = []
+    seen_enemy_ids = set()  # Reset seen enemies for new map
+    enemy_id_counter = 0  # Reset ID counter
     
     # Initial player placement to allow is_blocked to work before final placement
     player_x_init, player_y_init = -1,-1
@@ -251,27 +257,70 @@ def add_message(msg):
 
 # --- Combat & Player Taking Damage ---
 def player_attack_enemy(enemy_obj):
-    global enemies
+    global enemies, player_current_hp
     current_player_atk = get_player_attack_power()
     enemy_def = enemy_obj.get('defense', 0)
 
-    # Monk: Precise Strikes
-    if player_class_info["passives"]["name"] == "Precise Strikes":
+    # Get distance for ranger bonus
+    dist = max(abs(enemy_obj['x'] - player_x), abs(enemy_obj['y'] - player_y))
+    
+    # Apply class-specific effects
+    if player_class_info["passives"]["name"] == "Ki Master":
         enemy_def = max(0, enemy_def - 1)
-        # add_message("Your precise strike bypasses some defense!") # Optional flavor
+    
+    # Change Deadly Aim check to use ID
+    if player_class_info["passives"]["name"] == "Deadly Aim" and enemy_obj['id'] not in seen_enemy_ids:
+        current_player_atk += 2
+    
+    if player_class_info["passives"]["name"] == "Hunter's Precision" and dist >= 3:
+        current_player_atk += 1
 
-    damage = current_player_atk - enemy_def
-    damage = max(0, damage) 
+    if player_class_info["passives"]["name"] == "Evasion Master" and \
+       enemy_obj['current_hp'] < enemy_obj['hp'] / 2:
+        current_player_atk += 2
+
+    damage = max(0, current_player_atk - enemy_def)
     
+    # Mage bonus damage chance
+    if player_class_info["passives"]["name"] == "Arcane Mastery" and random.random() < 0.20:
+        damage += 2
+        add_message("Your spell crackles with extra power!")
+
+    # Apply damage and effects
     enemy_obj['current_hp'] -= damage
-    hit_msg = f"You attack the {enemy_obj['color_code']}{enemy_obj['name']}{ANSI_RESET} for {damage} damage."
     
+    # Barbarian lifesteal
+    if player_class_info["passives"]["name"] == "Berserker":
+        heal = math.floor(damage * 0.1)
+        if heal > 0 and player_current_hp < player_max_hp:
+            player_current_hp = min(player_max_hp, player_current_hp + heal)
+            add_message(f"You drain {heal} life!")
+
+    # Monk double strike
+    if player_class_info["passives"]["name"] == "Ki Master" and random.random() < 0.15:
+        enemy_obj['current_hp'] -= damage
+        add_message("Your ki flows into a second strike!")
+
+    # Sorcerer AOE chance
+    if player_class_info["passives"]["name"] == "Spell Mastery" and random.random() < 0.25:
+        for dx in [-1, 0, 1]:
+            for dy in [-1, 0, 1]:
+                if dx == 0 and dy == 0: continue
+                for other_enemy in list(enemies):
+                    if other_enemy['x'] == enemy_obj['x'] + dx and \
+                       other_enemy['y'] == enemy_obj['y'] + dy:
+                        other_enemy['current_hp'] -= damage // 2
+                        if other_enemy['current_hp'] <= 0:
+                            add_message(f"Your spell chains to another enemy!")
+                            game_map[other_enemy['y']][other_enemy['x']] = DEAD_ENEMY_CHAR
+                            enemies.remove(other_enemy)
+
     if enemy_obj['current_hp'] <= 0:
-        add_message(f"{hit_msg} It collapses!")
+        add_message(f"You defeated the {enemy_obj['color_code']}{enemy_obj['name']}{ANSI_RESET}!")
         game_map[enemy_obj['y']][enemy_obj['x']] = DEAD_ENEMY_CHAR
         enemies.remove(enemy_obj)
     else:
-        add_message(f"{hit_msg} ({enemy_obj['current_hp']}/{enemy_obj['hp']} HP)")
+        add_message(f"You attack the {enemy_obj['color_code']}{enemy_obj['name']}{ANSI_RESET} for {damage} damage. ({enemy_obj['current_hp']}/{enemy_obj['hp']} HP)")
 
 def player_take_damage(damage_amount, enemy_attacker=None): # enemy_attacker for Thorns
     global player_current_hp
@@ -343,6 +392,36 @@ def draw_game(): # (Updated UI Panel)
     for msg in game_message: print(msg)
     print("Move:W,A,S,D | F:Ranged Attack | Q:Quit")
 
+
+# --- Ranged Attack Helper Functions ---
+def player_can_ranged_attack():
+    """Returns True if the player's class has a ranged attack."""
+    return "range" in player_class_info
+
+def player_ranged_range():
+    """Returns the range value for the player's class, or 1 if not ranged."""
+    return player_class_info.get("range", 1)
+
+def player_ranged_attack():
+    """Attempt to attack the first enemy in range and line of sight."""
+    px, py = player_x, player_y
+    rng = player_ranged_range()
+    
+    # Check each enemy within range
+    for enemy in enemies:
+        ex, ey = enemy['x'], enemy['y']
+        dist = max(abs(ex - px), abs(ey - py))
+        if dist <= rng:
+            # Check line of sight using existing get_line function
+            los = True
+            for lx, ly in get_line(px, py, ex, ey)[1:-1]:  # Skip start and end points
+                if game_map[ly][lx] == WALL_CHAR:
+                    los = False
+                    break
+            if los:
+                player_attack_enemy(enemy)
+                return True
+    return False
 
 # --- Game Logic (Handle Cleric Regen, Barbarian Rage message) ---
 def handle_input():
@@ -416,6 +495,15 @@ def handle_input():
                             attacked_this_turn = True; break
             if attacked_this_turn: break
         enemy_turn()
+        # Handle auto-ranged attack
+        if player_can_ranged_attack():
+            player_ranged_attack()  # Try ranged attack automatically
+        
+        # Update seen enemies using IDs
+        for enemy in enemies:
+            if fov_map[enemy['y']][enemy['x']] == 2:
+                seen_enemy_ids.add(enemy['id'])
+    
     # Placeholder for enemy turn / attacks (where player_take_damage would be called by enemies)
     # for enemy in list(enemies):
     #     if enemy_can_attack_player(enemy): # hypothetical function
