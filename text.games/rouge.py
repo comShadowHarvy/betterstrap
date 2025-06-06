@@ -11,6 +11,20 @@ GOAL_CHAR = "G"
 DEAD_ENEMY_CHAR = "%"
 UNSEEN_CHAR = ' '
 
+# Combat Effects
+EFFECT_NONE = 0
+EFFECT_ATTACK = 1
+EFFECT_CRIT = 2
+EFFECT_HEAL = 3
+combat_effects = []  # List of (x, y, effect_type, duration) tuples
+
+# Effect Characters
+EFFECT_CHARS = {
+    EFFECT_ATTACK: "*",
+    EFFECT_CRIT: "⚔",
+    EFFECT_HEAL: "+"
+}
+
 ROOM_MAX_SIZE = 10
 ROOM_MIN_SIZE = 6
 MAX_ROOMS = 20
@@ -261,6 +275,9 @@ def player_attack_enemy(enemy_obj):
     current_player_atk = get_player_attack_power()
     enemy_def = enemy_obj.get('defense', 0)
 
+    # Add basic attack effect
+    add_combat_effect(enemy_obj['x'], enemy_obj['y'], EFFECT_ATTACK)
+
     # Get distance for ranger bonus
     dist = max(abs(enemy_obj['x'] - player_x), abs(enemy_obj['y'] - player_y))
     
@@ -271,9 +288,11 @@ def player_attack_enemy(enemy_obj):
     # Change Deadly Aim check to use ID
     if player_class_info["passives"]["name"] == "Deadly Aim" and enemy_obj['id'] not in seen_enemy_ids:
         current_player_atk += 2
+        add_combat_effect(enemy_obj['x'], enemy_obj['y'], EFFECT_CRIT)  # Critical hit effect
     
     if player_class_info["passives"]["name"] == "Hunter's Precision" and dist >= 3:
         current_player_atk += 1
+        add_combat_effect(enemy_obj['x'], enemy_obj['y'], EFFECT_CRIT)  # Range bonus effect
 
     if player_class_info["passives"]["name"] == "Evasion Master" and \
        enemy_obj['current_hp'] < enemy_obj['hp'] / 2:
@@ -284,6 +303,7 @@ def player_attack_enemy(enemy_obj):
     # Mage bonus damage chance
     if player_class_info["passives"]["name"] == "Arcane Mastery" and random.random() < 0.20:
         damage += 2
+        add_combat_effect(enemy_obj['x'], enemy_obj['y'], EFFECT_CRIT)
         add_message("Your spell crackles with extra power!")
 
     # Apply damage and effects
@@ -294,11 +314,13 @@ def player_attack_enemy(enemy_obj):
         heal = math.floor(damage * 0.1)
         if heal > 0 and player_current_hp < player_max_hp:
             player_current_hp = min(player_max_hp, player_current_hp + heal)
+            add_combat_effect(player_x, player_y, EFFECT_HEAL)
             add_message(f"You drain {heal} life!")
 
     # Monk double strike
     if player_class_info["passives"]["name"] == "Ki Master" and random.random() < 0.15:
         enemy_obj['current_hp'] -= damage
+        add_combat_effect(enemy_obj['x'], enemy_obj['y'], EFFECT_CRIT)
         add_message("Your ki flows into a second strike!")
 
     # Sorcerer AOE chance
@@ -324,6 +346,9 @@ def player_attack_enemy(enemy_obj):
 
 def player_take_damage(damage_amount, enemy_attacker=None): # enemy_attacker for Thorns
     global player_current_hp
+    
+    # Add damage effect at player position
+    add_combat_effect(player_x, player_y, EFFECT_ATTACK)
     
     # Warrior: Improved Fortitude
     if player_class_info["passives"]["name"] == "Improved Fortitude":
@@ -359,14 +384,34 @@ def clear_screen():
     if os.name == 'nt': _ = os.system('cls')
     else: _ = os.system('clear')
 
-def get_char_at(x, y): # (same)
-    if x == player_x and y == player_y: return f"{player_class_info['color_code']}{player_char}{ANSI_RESET}"
+def add_combat_effect(x, y, effect_type, duration=2):
+    """Add a combat effect at the given position"""
+    global combat_effects
+    combat_effects.append((x, y, effect_type, duration))
+
+def update_combat_effects():
+    """Update and remove expired combat effects"""
+    global combat_effects
+    combat_effects = [(x, y, effect, dur-1) for x, y, effect, dur in combat_effects if dur > 1]
+
+def get_char_at(x, y):
+    # Check for combat effects first
+    for effect_x, effect_y, effect_type, _ in combat_effects:
+        if effect_x == x and effect_y == y and effect_type in EFFECT_CHARS:
+            return f"\033[1;33m{EFFECT_CHARS[effect_type]}\033[0m"  # Yellow effects
+    
+    if x == player_x and y == player_y:
+        return f"{player_class_info['color_code']}{player_char}{ANSI_RESET}"
     for enemy in enemies:
-        if enemy['x'] == x and enemy['y'] == y: return f"{enemy['color_code']}{enemy['char']}{ANSI_RESET}"
+        if enemy['x'] == x and enemy['y'] == y:
+            return f"{enemy['color_code']}{enemy['char']}{ANSI_RESET}"
     return game_map[y][x]
 
 def draw_game(): # (Updated UI Panel)
     clear_screen()
+    # Update combat effects at start of each draw
+    update_combat_effects()
+    
     for y_disp in range(MAP_HEIGHT):
         row_str = "".join(
             get_char_at(x_disp, y_disp) if fov_map[y_disp][x_disp] == 2 else
