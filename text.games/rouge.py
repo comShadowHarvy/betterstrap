@@ -223,7 +223,7 @@ def get_line(x1, y1, x2, y2):
     if dx > dy:
         err = dx / 2.0
         while True:
-            points.append((x, y));
+            points.append((x, y))
             if x == x2: break
             err -= dy
             if err < 0: y += sy; err += dx
@@ -231,7 +231,7 @@ def get_line(x1, y1, x2, y2):
     else:
         err = dy / 2.0
         while True:
-            points.append((x, y));
+            points.append((x, y))
             if y == y2: break
             err -= dx
             if err < 0: x += sx; err += dy
@@ -273,14 +273,14 @@ def get_char_at(x, y):
 
 # --- Combat System ---
 def player_attack_enemy(enemy_obj, attack_type):
-    global enemies, player_current_hp
-    current_player_atk = get_player_attack_power(attack_type)
+    global enemies, player_current_hp; current_player_atk = get_player_attack_power(attack_type)
     enemy_def = enemy_obj.get('defense', 0); damage = max(0, current_player_atk - enemy_def)
     add_combat_effect(enemy_obj['x'], enemy_obj['y'], EFFECT_ATTACK)
     enemy_obj['current_hp'] -= damage
     if enemy_obj['current_hp'] <= 0:
         add_message(f"{Colors.BRIGHT_GREEN}You defeated the {enemy_obj['color_code']}{enemy_obj['name']}{Colors.RESET}!{Colors.RESET}")
-        game_map[enemy_obj['y']][enemy_obj['x']] = DEAD_ENEMY_CHAR
+        if game_map[enemy_obj['y']][enemy_obj['x']] == FLOOR_CHAR:
+            game_map[enemy_obj['y']][enemy_obj['x']] = DEAD_ENEMY_CHAR
         gain_xp(enemy_obj.get('xp_value', 0))
         if enemy_obj['name'] == 'The Balrog': return "won"
         enemies[:] = [e for e in enemies if e != enemy_obj]
@@ -339,13 +339,14 @@ def draw_game():
         for x in range(MAP_WIDTH):
             if fov_map[y][x] == 2: row_str += get_char_at(x,y)
             elif fov_map[y][x] == 1:
-                char = game_map[y][x];
-                if char == WALL_CHAR: row_str += f"{Colors.DIM}{WALL_COLOR}{char}{Colors.RESET}"
-                else: row_str += f"{Colors.DIM}{FLOOR_COLOR}{char}{Colors.RESET}"
+                char_at_pos = get_char_at(x,y) # Get the char with color
+                # Dim the entire colored string
+                row_str += f"{Colors.DIM}{char_at_pos}{Colors.RESET}"
             else: row_str += f"{UNSEEN_COLOR}{UNSEEN_CHAR}{Colors.RESET}"
         row_str += f"{Colors.BOLD}{Colors.BRIGHT_CYAN}║{Colors.RESET}"; print(row_str)
     print(f"{Colors.BOLD}{Colors.BRIGHT_CYAN}{border}{Colors.RESET}")
     
+    # UI Panel
     hp_perc = player_current_hp / player_max_hp if player_max_hp > 0 else 0
     hp_color = Colors.BRIGHT_GREEN if hp_perc > 0.7 else Colors.BRIGHT_YELLOW if hp_perc > 0.3 else Colors.BRIGHT_RED
     hp_display = f"{Colors.BOLD}HP:{Colors.RESET} {hp_color}{player_current_hp}/{player_max_hp}{Colors.RESET}"
@@ -392,7 +393,6 @@ def auto_use_potion():
             inventory.remove(potion_to_use)
 
 def auto_combat_action():
-    # Priority 1: Melee attack adjacent enemies
     for dx, dy in [(0, -1), (0, 1), (-1, 0), (1, 0), (-1,-1), (-1,1), (1,-1), (1,1)]:
         check_x, check_y = player_x + dx, player_y + dy
         if 0 <= check_x < MAP_WIDTH and 0 <= check_y < MAP_HEIGHT and fov_map[check_y][check_x] == 2:
@@ -401,14 +401,13 @@ def auto_combat_action():
                 player_attack_enemy(target_enemy, 'melee')
                 return True
 
-    # Priority 2: Ranged attack
     if equipped_ranged:
-        visible_enemies = [e for e in enemies if fov_map[e['y']][e['x']] == 2]
+        visible_enemies = [e for e in enemies if fov_map[e['y']][e['x']] == 2 and max(abs(e['x']-player_x), abs(e['y']-player_y)) > 1]
         if visible_enemies:
             target = min(visible_enemies, key=lambda e: max(abs(e['x'] - player_x), abs(e['y'] - player_y)))
-            player_attack_enemy(target, 'ranged')
-            return True
-            
+            if max(abs(target['x'] - player_x), abs(target['y'] - player_y)) <= player_class_info.get("range", 0):
+                 player_attack_enemy(target, 'ranged')
+                 return True
     return False
 
 def handle_input():
@@ -423,7 +422,7 @@ def handle_input():
     elif action == 'a': target_x -= 1; moved = True
     elif action == 'd': target_x += 1; moved = True
     elif action == 'q': return "quit"
-    else: return "playing" # Ignore invalid keys
+    else: return "playing"
 
     turns += 1
     
