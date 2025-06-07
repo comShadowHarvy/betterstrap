@@ -50,7 +50,10 @@ BASE_FOV_RADIUS = 8
 class Item:
     def __init__(self, name, char='!'): self.name, self.char = name, char
 class Weapon(Item):
-    def __init__(self, name, damage_bonus, char='/'): super().__init__(name, char); self.damage_bonus = damage_bonus
+    def __init__(self, name, damage_bonus, weapon_type, char='/'):
+        super().__init__(name, char)
+        self.damage_bonus = damage_bonus
+        self.weapon_type = weapon_type # 'melee' or 'ranged'
 class Potion(Item):
     def __init__(self, name, heal_amount, char='!'): super().__init__(name, char); self.heal_amount = heal_amount
 class Scroll(Item):
@@ -58,17 +61,17 @@ class Scroll(Item):
 
 # --- Item/Weapon Definitions ---
 POTION_TYPES = [Potion("Healing Potion", 15), Potion("Greater Healing Potion", 30)]
-WEAPON_TYPES = [Weapon("Dagger", 2), Weapon("Shortsword", 4), Weapon("Longsword", 6), Weapon("Greatsword", 8)]
-SCROLL_TYPES = [Scroll("Scroll of Fireball", "fireball", 20)]
-CHEST_LOOT_TABLE = POTION_TYPES + WEAPON_TYPES + SCROLL_TYPES
+MELEE_WEAPON_TYPES = [Weapon("Dagger", 2, 'melee'), Weapon("Shortsword", 4, 'melee'), Weapon("Longsword", 6, 'melee')]
+RANGED_WEAPON_TYPES = [Weapon("Sling", 2, 'ranged'), Weapon("Shortbow", 4, 'ranged'), Weapon("Longbow", 6, 'ranged')]
+CHEST_LOOT_TABLE = POTION_TYPES + MELEE_WEAPON_TYPES + RANGED_WEAPON_TYPES
 
 # --- Player Class Definitions ---
 PLAYER_CLASSES = [
     {"name": "Warrior", "char": "W", "hp": 30, "base_attack": 7, "color_code": Colors.BOLD + Colors.BRIGHT_BLUE, "passives": {"name": "Improved Fortitude", "desc": "Takes 1 less damage from melee attacks and regenerates 1 HP every 30 turns"}},
     {"name": "Rogue", "char": "R", "hp": 22, "base_attack": 5, "color_code": Colors.BOLD + Colors.GREEN, "passives": {"name": "Evasion Master", "desc": "15% dodge chance and deals +2 damage to enemies below 50% HP"}},
-    {"name": "Mage", "char": "M", "hp": 18, "base_attack": 4, "color_code": Colors.BOLD + Colors.BRIGHT_MAGENTA, "passives": {"name": "Arcane Mastery", "desc": "Deals +2 damage and has 20% chance to deal 2 bonus damage"}, "range": 4},
+    {"name": "Mage", "char": "M", "hp": 18, "base_attack": 4, "color_code": Colors.BOLD + Colors.BRIGHT_MAGENTA, "passives": {"name": "Arcane Mastery", "desc": "Deals +2 damage and has 20% chance to deal 2 bonus damage"}, "range": 5},
     {"name": "Cleric", "char": "C", "hp": 26, "base_attack": 5, "color_code": Colors.BOLD + Colors.BRIGHT_CYAN, "passives": {"name": "Divine Blessing", "desc": "Heals 1 HP every 20 turns and deals +1 damage to undead"}},
-    {"name": "Ranger", "char": "N", "hp": 24, "base_attack": 6, "color_code": Colors.BOLD + Colors.BRIGHT_GREEN, "passives": {"name": "Keen Eyes", "desc": "Increased Field of View (+2 radius)"}},
+    {"name": "Ranger", "char": "N", "hp": 24, "base_attack": 6, "color_code": Colors.BOLD + Colors.BRIGHT_GREEN, "passives": {"name": "Keen Eyes", "desc": "Increased Field of View (+2 radius)"}, "range": 6},
     {"name": "Barbarian", "char": "B", "hp": 35, "base_attack": 6, "color_code": Colors.BOLD + Colors.BRIGHT_RED, "passives": {"name": "Berserker", "desc": "+3 Attack when below 30% HP and 10% lifesteal on hits"}},
     {"name": "Druid", "char": "D", "hp": 25, "base_attack": 5, "color_code": Colors.BOLD + Colors.YELLOW, "passives": {"name": "Nature's Wrath", "desc": "Enemies take 1-2 damage on hit and heal 1 HP every 40 turns"}},
     {"name": "Monk", "char": "O", "hp": 22, "base_attack": 5, "color_code": Colors.BOLD + Colors.BRIGHT_YELLOW, "passives": {"name": "Ki Master", "desc": "Ignores 1 defense and has 15% chance to strike twice"}},
@@ -90,7 +93,7 @@ player_class_info = {}
 player_char = "@"; player_max_hp, player_current_hp = 0, 0
 player_fov_radius = BASE_FOV_RADIUS
 turns = 0; dungeon_level = 1
-enemies = []; chests = []; inventory = []; equipped_weapon = None
+enemies = []; chests = []; inventory = []; equipped_melee = None; equipped_ranged = None
 game_message = ["Welcome! Explore and survive."];
 game_map = [[WALL_CHAR for _ in range(MAP_WIDTH)] for _ in range(MAP_HEIGHT)]
 fov_map = [[0 for _ in range(MAP_WIDTH)] for _ in range(MAP_HEIGHT)]
@@ -107,7 +110,7 @@ def clear_screen(): os.system('cls' if os.name == 'nt' else 'clear')
 # --- Initialization ---
 def initialize_player():
     global player_class_info, player_max_hp, player_current_hp, player_char, player_fov_radius
-    global player_level, player_xp, xp_to_next_level, equipped_weapon, inventory
+    global player_level, player_xp, xp_to_next_level, equipped_melee, equipped_ranged, inventory
 
     player_class_info = random.choice(PLAYER_CLASSES)
     player_max_hp = player_class_info["hp"]
@@ -115,14 +118,23 @@ def initialize_player():
     player_char = player_class_info["char"]
     player_fov_radius = BASE_FOV_RADIUS
     player_level, player_xp, xp_to_next_level = 1, 0, 50
-    equipped_weapon = Weapon("Fists", 1); inventory = []
+    inventory = []
+    
+    equipped_melee = Weapon("Fists", 1, 'melee')
+    if "range" in player_class_info:
+        if player_class_info["name"] == "Mage": equipped_ranged = Weapon("Magic Bolt", 3, 'ranged')
+        else: equipped_ranged = Weapon("Sling", 2, 'ranged')
+    else: equipped_ranged = None
+        
     if player_class_info["passives"]["name"] == "Keen Eyes": player_fov_radius += 2
+
     add_message(f"You are a {player_class_info['color_code']}{player_class_info['name']}{Colors.RESET}!")
     add_message(f"{Colors.BRIGHT_CYAN}Passive:{Colors.RESET} {player_class_info['passives']['name']}{Colors.RESET} - {player_class_info['passives']['desc']}")
 
-def get_player_attack_power():
+def get_player_attack_power(attack_type='melee'):
     base_atk = player_class_info["base_attack"]
-    weapon_bonus = equipped_weapon.damage_bonus if equipped_weapon else 0
+    weapon = equipped_melee if attack_type == 'melee' else equipped_ranged
+    weapon_bonus = weapon.damage_bonus if weapon else 0
     passive = player_class_info["passives"]["name"]
     if passive == "Arcane Mastery": base_atk += 2
     elif passive == "Berserker" and player_current_hp <= math.floor(player_max_hp * 0.3): base_atk += 3
@@ -155,7 +167,7 @@ def spawn_entities(room):
     num_enemies = random.randint(0, MAX_ENEMIES_PER_ROOM + dungeon_level // 3)
     for _ in range(num_enemies):
         for _attempt in range(10):
-            x, y = random.randint(room.x1 + 1, room.x2 - 1), random.randint(room.y1 + 1, room.y2 - 1)
+            x = random.randint(room.x1 + 1, room.x2 - 1); y = random.randint(room.y1 + 1, room.y2 - 1)
             if 0 <= x < MAP_WIDTH and 0 <= y < MAP_HEIGHT and not is_blocked(x, y):
                 enemy_type = random.choice(eligible_enemies); new_enemy = enemy_type.copy()
                 new_enemy.update({'x': x, 'y': y, 'current_hp': enemy_type['hp']}); enemies.append(new_enemy); break
@@ -205,33 +217,24 @@ def generate_map():
 # --- FOV, Messaging, Effects, Drawing ---
 def get_line(x1, y1, x2, y2):
     points = []
-    dx = abs(x2 - x1)
-    dy = abs(y2 - y1)
+    dx = abs(x2 - x1); dy = abs(y2 - y1)
     x, y = x1, y1
-    sx = 1 if x1 < x2 else -1
-    sy = 1 if y1 < y2 else -1
-
+    sx = 1 if x1 < x2 else -1; sy = 1 if y1 < y2 else -1
     if dx > dy:
         err = dx / 2.0
         while True:
-            points.append((x, y))
-            if x == x2:
-                break
+            points.append((x, y));
+            if x == x2: break
             err -= dy
-            if err < 0:
-                y += sy
-                err += dx
+            if err < 0: y += sy; err += dx
             x += sx
     else:
         err = dy / 2.0
         while True:
-            points.append((x, y))
-            if y == y2:
-                break
+            points.append((x, y));
+            if y == y2: break
             err -= dx
-            if err < 0:
-                x += sx
-                err += dy
+            if err < 0: x += sx; err += dy
             y += sy
     return points
 
@@ -269,8 +272,9 @@ def get_char_at(x, y):
     return f"{color_map.get(char, Colors.WHITE)}{char}{Colors.RESET}"
 
 # --- Combat System ---
-def player_attack_enemy(enemy_obj):
-    global enemies, player_current_hp; current_player_atk = get_player_attack_power()
+def player_attack_enemy(enemy_obj, attack_type):
+    global enemies, player_current_hp
+    current_player_atk = get_player_attack_power(attack_type)
     enemy_def = enemy_obj.get('defense', 0); damage = max(0, current_player_atk - enemy_def)
     add_combat_effect(enemy_obj['x'], enemy_obj['y'], EFFECT_ATTACK)
     enemy_obj['current_hp'] -= damage
@@ -342,17 +346,18 @@ def draw_game():
         row_str += f"{Colors.BOLD}{Colors.BRIGHT_CYAN}║{Colors.RESET}"; print(row_str)
     print(f"{Colors.BOLD}{Colors.BRIGHT_CYAN}{border}{Colors.RESET}")
     
-    # UI Panel
     hp_perc = player_current_hp / player_max_hp if player_max_hp > 0 else 0
     hp_color = Colors.BRIGHT_GREEN if hp_perc > 0.7 else Colors.BRIGHT_YELLOW if hp_perc > 0.3 else Colors.BRIGHT_RED
     hp_display = f"{Colors.BOLD}HP:{Colors.RESET} {hp_color}{player_current_hp}/{player_max_hp}{Colors.RESET}"
-    attack_display = f"{Colors.BOLD}Atk:{Colors.RESET} {Colors.BRIGHT_RED}{get_player_attack_power()}{Colors.RESET}"
+    attack_display = f"{Colors.BOLD}Atk:{Colors.RESET} {Colors.BRIGHT_RED}{get_player_attack_power('melee')}{Colors.RESET}"
     level_display = f"{Colors.BOLD}Lvl:{Colors.RESET} {Colors.BRIGHT_YELLOW}{player_level}{Colors.RESET} ({player_xp}/{xp_to_next_level} XP)"
-    weapon_display = f"{Colors.BOLD}Weapon:{Colors.RESET} {equipped_weapon.name if equipped_weapon else 'None'}"
+    melee_weapon_display = f"{Colors.BOLD}Melee:{Colors.RESET} {equipped_melee.name if equipped_melee else 'None'}"
+    ranged_weapon_display = f"{Colors.BOLD}Ranged:{Colors.RESET} {equipped_ranged.name if equipped_ranged else 'None'}"
     dungeon_display = f"{Colors.BOLD}Dungeon:{Colors.RESET} {Colors.BRIGHT_MAGENTA}{dungeon_level}{Colors.RESET}"
     
     print(f"{Colors.BOLD}Class:{Colors.RESET} {player_class_info['color_code']}{player_class_info['name']}{Colors.RESET} | {hp_display} | {attack_display}")
-    print(f"{level_display} | {dungeon_display} | {weapon_display}")
+    print(f"{level_display} | {dungeon_display}")
+    print(f"{melee_weapon_display} | {ranged_weapon_display}")
     
     print(f"{Colors.BOLD}{Colors.BRIGHT_CYAN}{'─' * (MAP_WIDTH + 2)}{Colors.RESET}")
     for msg in game_message: print(msg)
@@ -360,14 +365,20 @@ def draw_game():
 
 # --- Main Game Logic ---
 def open_chest(chest_pos):
-    global chests, equipped_weapon, inventory
+    global chests, equipped_melee, equipped_ranged, inventory
     loot = random.choice(CHEST_LOOT_TABLE)
     add_message(f"You open the chest and find a {loot.name}!")
     if isinstance(loot, Weapon):
-        if not equipped_weapon or loot.damage_bonus > equipped_weapon.damage_bonus:
-            add_message(f"You equip the {loot.name}.")
-            equipped_weapon = loot
-        else: add_message(f"You stash the {loot.name} in your pack."); inventory.append(loot)
+        if loot.weapon_type == 'melee':
+            if not equipped_melee or loot.damage_bonus > equipped_melee.damage_bonus:
+                add_message(f"You equip the {loot.name}."); equipped_melee = loot
+            else: add_message(f"You stash the {loot.name}."); inventory.append(loot)
+        elif loot.weapon_type == 'ranged':
+            if "range" in player_class_info:
+                if not equipped_ranged or loot.damage_bonus > equipped_ranged.damage_bonus:
+                    add_message(f"You equip the {loot.name}."); equipped_ranged = loot
+                else: add_message(f"You stash the {loot.name}."); inventory.append(loot)
+            else: add_message("You can't use this ranged weapon.")
     else: inventory.append(loot); add_message(f"You add the {loot.name} to your inventory.")
     chests.remove(chest_pos)
 
@@ -381,13 +392,23 @@ def auto_use_potion():
             inventory.remove(potion_to_use)
 
 def auto_combat_action():
-    for dx in range(-1, 2):
-        for dy in range(-1, 2):
-            if dx == 0 and dy == 0: continue
-            check_x, check_y = player_x + dx, player_y + dy
+    # Priority 1: Melee attack adjacent enemies
+    for dx, dy in [(0, -1), (0, 1), (-1, 0), (1, 0), (-1,-1), (-1,1), (1,-1), (1,1)]:
+        check_x, check_y = player_x + dx, player_y + dy
+        if 0 <= check_x < MAP_WIDTH and 0 <= check_y < MAP_HEIGHT and fov_map[check_y][check_x] == 2:
             target_enemy = next((e for e in enemies if e['x'] == check_x and e['y'] == check_y), None)
-            if target_enemy and fov_map[check_y][check_x] == 2:
-                player_attack_enemy(target_enemy); return True
+            if target_enemy:
+                player_attack_enemy(target_enemy, 'melee')
+                return True
+
+    # Priority 2: Ranged attack
+    if equipped_ranged:
+        visible_enemies = [e for e in enemies if fov_map[e['y']][e['x']] == 2]
+        if visible_enemies:
+            target = min(visible_enemies, key=lambda e: max(abs(e['x'] - player_x), abs(e['y'] - player_y)))
+            player_attack_enemy(target, 'ranged')
+            return True
+            
     return False
 
 def handle_input():
@@ -413,7 +434,7 @@ def handle_input():
         if chest_pos:
             open_chest(chest_pos)
         elif bumped_enemy:
-            game_state = player_attack_enemy(bumped_enemy)
+            game_state = player_attack_enemy(bumped_enemy, 'melee')
             if game_state == "won": return "won"
         elif not is_blocked(target_x, target_y):
             player_x, player_y = target_x, target_y
