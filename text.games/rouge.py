@@ -208,15 +208,17 @@ def clear_screen():
 def show_title_screen():
     clear_screen()
     # Corrected alignment for title art
-    title_art = f"""
+    title_art = rf"""
 {Colors.BOLD}{Colors.BRIGHT_CYAN}╔══════════════════════════════════════════════════════════════════════════════╗
 ║                                                                              ║
-║      {Colors.BRIGHT_RED}███████{Colors.BRIGHT_YELLOW}╗ {Colors.BRIGHT_GREEN}██████{Colors.BRIGHT_BLUE}╗ {Colors.BRIGHT_MAGENTA}██{Colors.BRIGHT_CYAN}╗  {Colors.BRIGHT_RED}██{Colors.BRIGHT_YELLOW}╗ {Colors.BRIGHT_GREEN}███████{Colors.BRIGHT_BLUE}╗{Colors.BRIGHT_MAGENTA}███████{Colors.BRIGHT_CYAN}╗      ║
-║      {Colors.BRIGHT_RED}██{Colors.BRIGHT_YELLOW}╔════╝{Colors.BRIGHT_GREEN}██{Colors.BRIGHT_BLUE}╔══{Colors.BRIGHT_MAGENTA}██{Colors.BRIGHT_CYAN}╗{Colors.BRIGHT_RED}██{Colors.BRIGHT_YELLOW}║  {Colors.BRIGHT_GREEN}██{Colors.BRIGHT_BLUE}║ {Colors.BRIGHT_MAGENTA}██{Colors.BRIGHT_CYAN}╔════╝{Colors.BRIGHT_RED}██{Colors.BRIGHT_YELLOW}╔════╝      ║
-║      {Colors.BRIGHT_YELLOW}███████{Colors.BRIGHT_GREEN}╗{Colors.BRIGHT_BLUE}██{Colors.BRIGHT_MAGENTA}║  {Colors.BRIGHT_CYAN}██{Colors.BRIGHT_RED}║{Colors.BRIGHT_YELLOW}╚█████{Colors.BRIGHT_GREEN}╔╝ {Colors.BRIGHT_BLUE}███████{Colors.BRIGHT_MAGENTA}╗{Colors.BRIGHT_CYAN}█████{Colors.BRIGHT_RED}╗        ║
-║      {Colors.BRIGHT_GREEN}╚════{Colors.BRIGHT_BLUE}██{Colors.BRIGHT_MAGENTA}║{Colors.BRIGHT_CYAN}██{Colors.BRIGHT_RED}║  {Colors.BRIGHT_YELLOW}██{Colors.BRIGHT_GREEN}║ {Colors.BRIGHT_BLUE}██{Colors.BRIGHT_MAGENTA}╔══██{Colors.BRIGHT_CYAN}╗ {Colors.BRIGHT_RED}██{Colors.BRIGHT_YELLOW}╔══╝ {Colors.BRIGHT_GREEN}██{Colors.BRIGHT_BLUE}╔══╝        ║
-║      {Colors.BRIGHT_BLUE}███████{Colors.BRIGHT_MAGENTA}╔╝{Colors.BRIGHT_CYAN}╚██████{Colors.BRIGHT_RED}╔╝ {Colors.BRIGHT_YELLOW}██{Colors.BRIGHT_GREEN}║  {Colors.BRIGHT_BLUE}██{Colors.BRIGHT_MAGENTA}║ {Colors.BRIGHT_CYAN}███████{Colors.BRIGHT_RED}╗{Colors.BRIGHT_YELLOW}███████{Colors.BRIGHT_GREEN}╗      ║
-║      {Colors.BRIGHT_MAGENTA}╚══════╝  ╚═════╝  ╚═╝  ╚═╝ ╚══════╝╚══════╝      ║
+║                 {Colors.BRIGHT_RED}(`-'){Colors.BRIGHT_YELLOW}                                  {Colors.BRIGHT_GREEN}(`-'){Colors.BRIGHT_BLUE}  _{Colors.BRIGHT_CYAN}                 ║
+║            {Colors.BRIGHT_RED}<-.(OO ){Colors.BRIGHT_YELLOW}      .->        .->       .->    {Colors.BRIGHT_GREEN}( OO).-{Colors.BRIGHT_BLUE}/{Colors.BRIGHT_CYAN}             ║
+║         {Colors.BRIGHT_RED},------,){Colors.BRIGHT_YELLOW}(`-')----. {Colors.BRIGHT_GREEN},--.(,--.{Colors.BRIGHT_BLUE}   ,---(`-'){Colors.BRIGHT_MAGENTA}(,------.{Colors.BRIGHT_CYAN}        ║
+║         {Colors.BRIGHT_RED}|   /`. '{Colors.BRIGHT_YELLOW}( OO).-.  '{Colors.BRIGHT_GREEN}|  | |(`-'){Colors.BRIGHT_BLUE}'  .-(OO ){Colors.BRIGHT_MAGENTA} |  .---'{Colors.BRIGHT_CYAN}          ║
+║         {Colors.BRIGHT_YELLOW}|  |_.' {Colors.BRIGHT_GREEN}|( _) | |  |{Colors.BRIGHT_BLUE}|  | |(OO ){Colors.BRIGHT_MAGENTA}|  | .-, \{Colors.BRIGHT_CYAN}(|  '--.{Colors.BRIGHT_RED}           ║
+║         {Colors.BRIGHT_GREEN}|  .   .'{Colors.BRIGHT_BLUE} \|  |)|  |{Colors.BRIGHT_MAGENTA}|  | | |  |{Colors.BRIGHT_CYAN}\|  | '.(_/ {Colors.BRIGHT_RED}|  .--'{Colors.BRIGHT_YELLOW}           ║
+║         {Colors.BRIGHT_BLUE}|  |\  \  {Colors.BRIGHT_MAGENTA} '  '-'  '{Colors.BRIGHT_CYAN}\  '-'(_ .'{Colors.BRIGHT_RED}|  '-'  |  {Colors.BRIGHT_YELLOW}|  `---.{Colors.BRIGHT_GREEN}          ║
+║         {Colors.BRIGHT_MAGENTA}`--' '--'  {Colors.BRIGHT_CYAN} `-----'  {Colors.BRIGHT_RED}`-----'   {Colors.BRIGHT_YELLOW} `-----'   {Colors.BRIGHT_GREEN}`------'{Colors.BRIGHT_BLUE}          ║
 ║                                                                              ║
 ║           {Colors.BOLD}{Colors.BRIGHT_YELLOW}🎲 A Pathfinder-Inspired Terminal Adventure 🎲{Colors.BRIGHT_CYAN}           ║
 ║                                                                              ║
