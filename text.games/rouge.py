@@ -11,7 +11,7 @@ STAIRS_DOWN_CHAR = ">"
 DEAD_ENEMY_CHAR = "%"
 UNSEEN_CHAR = ' '
 CHEST_CHAR = "C"
-BOSS_FLOOR = 5
+BOSS_FLOOR = 20
 
 # --- Color Definitions ---
 class Colors:
@@ -53,12 +53,12 @@ class Weapon(Item):
 class Potion(Item):
     def __init__(self, name, heal_amount, char='!'): super().__init__(name, char); self.heal_amount = heal_amount
 class Scroll(Item):
-     def __init__(self, name, effect, char='?'): super().__init__(name, char); self.effect = effect
+     def __init__(self, name, effect, damage, char='?'): super().__init__(name, char); self.effect, self.damage = effect, damage
 
 # --- Item/Weapon Definitions ---
 POTION_TYPES = [Potion("Healing Potion", 15), Potion("Greater Healing Potion", 30)]
 WEAPON_TYPES = [Weapon("Dagger", 2), Weapon("Shortsword", 4), Weapon("Longsword", 6), Weapon("Greatsword", 8)]
-SCROLL_TYPES = [Scroll("Scroll of Fireball", "fireball")]
+SCROLL_TYPES = [Scroll("Scroll of Fireball", "fireball", 20)]
 CHEST_LOOT_TABLE = POTION_TYPES + WEAPON_TYPES + SCROLL_TYPES
 
 # --- Player Class Definitions ---
@@ -78,27 +78,22 @@ ENEMY_TYPES = [
     {"name": "Goblin", "char": "g", "hp": 7, "attack": 3, "defense": 1, "xp_value": 10, "color_code": Colors.BOLD + Colors.RED, "spawn_level": 1},
     {"name": "Orc", "char": "o", "hp": 15, "attack": 5, "defense": 2, "xp_value": 25, "color_code": Colors.BOLD + Colors.YELLOW, "spawn_level": 2},
     {"name": "Skeleton", "char": "s", "hp": 10, "attack": 4, "defense": 1, "xp_value": 15, "color_code": Colors.BOLD + Colors.WHITE, "spawn_level": 1},
+    {"name": "Troll", "char": "T", "hp": 30, "attack": 7, "defense": 3, "xp_value": 50, "color_code": Colors.BOLD + Colors.GREEN, "spawn_level": 5},
+    {"name": "Ogre", "char": "O", "hp": 40, "attack": 8, "defense": 4, "xp_value": 75, "color_code": Colors.BOLD + Colors.BLUE, "spawn_level": 10},
     {"name": "The Balrog", "char": "B", "hp": 150, "attack": 12, "defense": 5, "xp_value": 500, "color_code": Colors.BOLD + Colors.BRIGHT_RED, "spawn_level": BOSS_FLOOR},
 ]
 
 # --- Global Player and Game State Variables ---
 player_x, player_y = 0, 0
 player_class_info = {}
-player_char = "@"
-player_max_hp, player_current_hp = 0, 0
+player_char = "@"; player_max_hp, player_current_hp = 0, 0
 player_fov_radius = BASE_FOV_RADIUS
-turns = 0
-dungeon_level = 1
-enemies = []
-chests = []
-inventory = []
-equipped_weapon = None
-game_message = ["Welcome! Explore and survive."]
+turns = 0; dungeon_level = 1
+enemies = []; chests = []; inventory = []; equipped_weapon = None
+game_message = ["Welcome! Explore and survive."];
 game_map = [[WALL_CHAR for _ in range(MAP_WIDTH)] for _ in range(MAP_HEIGHT)]
 fov_map = [[0 for _ in range(MAP_WIDTH)] for _ in range(MAP_HEIGHT)]
-player_level = 1
-player_xp = 0
-xp_to_next_level = 50
+player_level = 1; player_xp = 0; xp_to_next_level = 50
 
 # --- Rect Class for Map Generation ---
 class Rect:
@@ -106,7 +101,6 @@ class Rect:
     def center(self): return ((self.x1+self.x2)//2, (self.y1+self.y2)//2)
     def intersects(self, other): return (self.x1<=other.x2 and self.x2>=other.x1 and self.y1<=other.y2 and self.y2>=other.y1)
 
-# --- General Functions ---
 def clear_screen(): os.system('cls' if os.name == 'nt' else 'clear')
 
 # --- Initialization ---
@@ -120,11 +114,8 @@ def initialize_player():
     player_char = player_class_info["char"]
     player_fov_radius = BASE_FOV_RADIUS
     player_level, player_xp, xp_to_next_level = 1, 0, 50
-    equipped_weapon = Weapon("Fists", 1)
-    inventory = []
-
+    equipped_weapon = Weapon("Fists", 1); inventory = []
     if player_class_info["passives"]["name"] == "Keen Eyes": player_fov_radius += 2
-
     add_message(f"You are a {player_class_info['color_code']}{player_class_info['name']}{Colors.RESET}!")
     add_message(f"{Colors.BRIGHT_CYAN}Passive:{Colors.RESET} {player_class_info['passives']['name']}{Colors.RESET} - {player_class_info['passives']['desc']}")
 
@@ -160,10 +151,10 @@ def spawn_entities(room):
     eligible_enemies = [e for e in ENEMY_TYPES if e['spawn_level'] <= dungeon_level and e['name'] != 'The Balrog']
     if not eligible_enemies: return
 
-    num_enemies = random.randint(0, MAX_ENEMIES_PER_ROOM + dungeon_level // 2)
+    num_enemies = random.randint(0, MAX_ENEMIES_PER_ROOM + dungeon_level // 3)
     for _ in range(num_enemies):
         for _attempt in range(10):
-            x = random.randint(room.x1 + 1, room.x2 - 1); y = random.randint(room.y1 + 1, room.y2 - 1)
+            x, y = random.randint(room.x1 + 1, room.x2 - 1), random.randint(room.y1 + 1, room.y2 - 1)
             if 0 <= x < MAP_WIDTH and 0 <= y < MAP_HEIGHT and not is_blocked(x, y):
                 enemy_type = random.choice(eligible_enemies); new_enemy = enemy_type.copy()
                 new_enemy.update({'x': x, 'y': y, 'current_hp': enemy_type['hp']}); enemies.append(new_enemy); break
@@ -210,7 +201,7 @@ def generate_map():
             game_map[final_room_center[1]][final_room_center[0]] = STAIRS_DOWN_CHAR
     update_fov()
 
-# --- FOV Calculation, Messaging, Effects, Drawing ---
+# --- FOV, Messaging, Effects, Drawing ---
 def get_line(x1, y1, x2, y2):
     points = []
     dx = abs(x2 - x1)
@@ -223,7 +214,8 @@ def get_line(x1, y1, x2, y2):
         err = dx / 2.0
         while True:
             points.append((x, y))
-            if x == x2: break
+            if x == x2:
+                break
             err -= dy
             if err < 0:
                 y += sy
@@ -233,7 +225,8 @@ def get_line(x1, y1, x2, y2):
         err = dy / 2.0
         while True:
             points.append((x, y))
-            if y == y2: break
+            if y == y2:
+                break
             err -= dx
             if err < 0:
                 x += sx
@@ -297,6 +290,7 @@ def player_take_damage(damage_amount):
     if random.random() < 0.15 and passive == "Evasion Master": add_message(f"{Colors.BRIGHT_CYAN}You deftly evade the attack!{Colors.RESET}"); return
     player_current_hp -= damage_amount; add_message(f"{Colors.BRIGHT_RED}You take {damage_amount} damage!{Colors.RESET}")
     if player_current_hp < 0: player_current_hp = 0
+    auto_use_potion() # Check if we need to auto-heal
 
 # --- XP and Leveling Up ---
 def level_up_bonus():
@@ -372,13 +366,46 @@ def open_chest(chest_pos):
         if not equipped_weapon or loot.damage_bonus > equipped_weapon.damage_bonus:
             add_message(f"You equip the {loot.name}.")
             equipped_weapon = loot
-        else:
-            add_message(f"You stash the {loot.name} in your pack.")
-            inventory.append(loot)
-    else:
-        inventory.append(loot)
-        add_message(f"You add the {loot.name} to your inventory.")
+        else: add_message(f"You stash the {loot.name} in your pack."); inventory.append(loot)
+    else: inventory.append(loot); add_message(f"You add the {loot.name} to your inventory.")
     chests.remove(chest_pos)
+
+def auto_use_potion():
+    global player_current_hp, inventory
+    if player_current_hp / player_max_hp < 0.25:
+        potion_to_use = next((item for item in inventory if isinstance(item, Potion)), None)
+        if potion_to_use:
+            add_message(f"{Colors.BRIGHT_YELLOW}Health critical! Auto-using {potion_to_use.name}.{Colors.RESET}")
+            player_current_hp = min(player_max_hp, player_current_hp + potion_to_use.heal_amount)
+            inventory.remove(potion_to_use)
+
+def auto_combat_action():
+    # Priority 1: Melee attack
+    for dx in range(-1, 2):
+        for dy in range(-1, 2):
+            if dx == 0 and dy == 0: continue
+            check_x, check_y = player_x + dx, player_y + dy
+            target_enemy = next((e for e in enemies if e['x'] == check_x and e['y'] == check_y), None)
+            if target_enemy and fov_map[check_y][check_x] == 2:
+                player_attack_enemy(target_enemy)
+                return True
+
+    # Priority 2: Ranged scroll
+    scroll_to_use = next((item for item in inventory if isinstance(item, Scroll)), None)
+    if scroll_to_use:
+        visible_enemies = [e for e in enemies if fov_map[e['y']][e['x']] == 2 and max(abs(e['x'] - player_x), abs(e['y'] - player_y)) > 1]
+        if visible_enemies:
+            target = random.choice(visible_enemies)
+            add_message(f"You automatically use {scroll_to_use.name} on the {target['name']}!")
+            if scroll_to_use.effect == "fireball": # Simple effect handling
+                target['current_hp'] -= scroll_to_use.damage
+                if target['current_hp'] <= 0:
+                    game_map[target['y']][target['x']] = DEAD_ENEMY_CHAR
+                    gain_xp(target.get('xp_value', 0))
+                    enemies[:] = [e for e in enemies if e != target]
+            inventory.remove(scroll_to_use)
+            return True
+    return False
 
 def handle_input():
     global player_x, player_y, turns, dungeon_level
@@ -398,17 +425,18 @@ def handle_input():
     
     if moved:
         chest_pos = next((c for c in chests if c[0] == target_x and c[1] == target_y), None)
+        bumped_enemy = next((e for e in enemies if e['x'] == target_x and e['y'] == target_y), None)
+
         if chest_pos:
             open_chest(chest_pos)
+        elif bumped_enemy:
+            game_state = player_attack_enemy(bumped_enemy)
+            if game_state == "won": return "won"
         elif not is_blocked(target_x, target_y):
             player_x, player_y = target_x, target_y
             update_fov()
-        else:
-            bumped_enemy = next((e for e in enemies if e['x'] == target_x and e['y'] == target_y), None)
-            if bumped_enemy:
-                game_state = player_attack_enemy(bumped_enemy)
-                if game_state == "won": return "won"
-            else: add_message(f"{Colors.BRIGHT_RED}Ouch! A wall.{Colors.RESET}")
+            auto_combat_action() # Try auto combat after moving
+        else: add_message(f"{Colors.BRIGHT_RED}Ouch! A wall.{Colors.RESET}")
     
     if game_map[player_y][player_x] == STAIRS_DOWN_CHAR:
         dungeon_level += 1
