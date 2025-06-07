@@ -10,6 +10,7 @@ WALL_CHAR = "#"
 GOAL_CHAR = "G"
 DEAD_ENEMY_CHAR = "%"
 UNSEEN_CHAR = ' '
+CHEST_CHAR = "C"
 
 # --- Color Definitions ---
 class Colors:
@@ -52,6 +53,7 @@ WALL_COLOR = Colors.WHITE
 GOAL_COLOR = Colors.BOLD + Colors.BRIGHT_YELLOW + Colors.BG_BLUE
 DEAD_ENEMY_COLOR = Colors.DIM + Colors.RED
 UNSEEN_COLOR = Colors.BLACK
+CHEST_COLOR = Colors.BOLD + Colors.YELLOW
 
 # --- Combat Effects ---
 EFFECT_ATTACK = 1
@@ -68,7 +70,32 @@ ROOM_MAX_SIZE = 12
 ROOM_MIN_SIZE = 6
 MAX_ROOMS = 25
 MAX_ENEMIES_PER_ROOM = 3
+MAX_CHESTS_PER_ROOM = 1
 BASE_FOV_RADIUS = 8
+
+# --- Item & Weapon System ---
+class Item:
+    def __init__(self, name, char='!'):
+        self.name = name
+        self.char = char
+class Weapon(Item):
+    def __init__(self, name, damage_bonus, char='/'):
+        super().__init__(name, char)
+        self.damage_bonus = damage_bonus
+class Potion(Item):
+    def __init__(self, name, heal_amount, char='!'):
+        super().__init__(name, char)
+        self.heal_amount = heal_amount
+class Scroll(Item):
+     def __init__(self, name, effect, char='?'):
+        super().__init__(name, char)
+        self.effect = effect
+
+# --- Item/Weapon Definitions ---
+POTION_TYPES = [Potion("Healing Potion", 15), Potion("Greater Healing Potion", 30)]
+WEAPON_TYPES = [Weapon("Dagger", 2), Weapon("Shortsword", 4), Weapon("Longsword", 6), Weapon("Greatsword", 8)]
+SCROLL_TYPES = [Scroll("Scroll of Fireball", "fireball")]
+CHEST_LOOT_TABLE = POTION_TYPES + WEAPON_TYPES + SCROLL_TYPES
 
 # --- Player Class Definitions ---
 PLAYER_CLASSES = [
@@ -108,6 +135,9 @@ warrior_regen_timer = 0
 druid_regen_timer = 0
 goal_x, goal_y = 0, 0
 enemies = []
+chests = []
+inventory = []
+equipped_weapon = None
 turns = 0
 game_message = ["Welcome! Explore and survive."]
 game_map = [[WALL_CHAR for _ in range(MAP_WIDTH)] for _ in range(MAP_HEIGHT)]
@@ -115,7 +145,7 @@ fov_map = [[0 for _ in range(MAP_WIDTH)] for _ in range(MAP_HEIGHT)]
 # XP and Leveling System
 player_level = 1
 player_xp = 0
-xp_to_next_level = 100
+xp_to_next_level = 50 # Reduced from 100
 
 # --- Rect Class for Map Generation ---
 class Rect:
@@ -134,7 +164,7 @@ def clear_screen():
 def initialize_player():
     global player_class_info, player_max_hp, player_current_hp, player_char, player_fov_radius
     global turns_since_regen, warrior_regen_timer, druid_regen_timer
-    global player_level, player_xp, xp_to_next_level
+    global player_level, player_xp, xp_to_next_level, equipped_weapon
 
     player_class_info = random.choice(PLAYER_CLASSES)
     player_max_hp = player_class_info["hp"]
@@ -142,7 +172,8 @@ def initialize_player():
     player_char = player_class_info["char"]
     player_fov_radius = BASE_FOV_RADIUS
     turns_since_regen, warrior_regen_timer, druid_regen_timer = 0, 0, 0
-    player_level, player_xp, xp_to_next_level = 1, 0, 100
+    player_level, player_xp, xp_to_next_level = 1, 50, 100
+    equipped_weapon = Weapon("Fists", 1) # Start with fists
 
     if player_class_info["passives"]["name"] == "Keen Eyes":
         player_fov_radius += 2
@@ -152,10 +183,11 @@ def initialize_player():
 
 def get_player_attack_power():
     base_atk = player_class_info["base_attack"]
+    weapon_bonus = equipped_weapon.damage_bonus if equipped_weapon else 0
     passive = player_class_info["passives"]["name"]
     if passive == "Arcane Mastery": base_atk += 2
     elif passive == "Berserker" and player_current_hp <= math.floor(player_max_hp * 0.3): base_atk += 3
-    return base_atk
+    return base_atk + weapon_bonus
 
 # --- Map Generation ---
 def create_room(room):
@@ -174,12 +206,14 @@ def create_v_tunnel(y1, y2, x):
 def is_blocked(x, y):
     if not (0 <= x < MAP_WIDTH and 0 <= y < MAP_HEIGHT) or game_map[y][x] == WALL_CHAR: return True
     if x == player_x and y == player_y: return True
+    if any(c[0] == x and c[1] == y for c in chests): return True
     return any(enemy['x'] == x and enemy['y'] == y for enemy in enemies)
 
-def spawn_enemies(room):
-    global enemies
-    num_spawn = random.randint(0, MAX_ENEMIES_PER_ROOM)
-    for _ in range(num_spawn):
+def spawn_entities(room):
+    global enemies, chests
+    # Spawn Enemies
+    num_enemies = random.randint(0, MAX_ENEMIES_PER_ROOM)
+    for _ in range(num_enemies):
         for _attempt in range(10):
             x = random.randint(room.x1 + 1, room.x2 - 1)
             y = random.randint(room.y1 + 1, room.y2 - 1)
@@ -189,12 +223,22 @@ def spawn_enemies(room):
                 new_enemy.update({'x': x, 'y': y, 'current_hp': enemy_type['hp']})
                 enemies.append(new_enemy)
                 break
+    # Spawn Chests
+    num_chests = random.randint(0, MAX_CHESTS_PER_ROOM)
+    for _ in range(num_chests):
+        for _attempt in range(10):
+            x = random.randint(room.x1 + 1, room.x2 - 1)
+            y = random.randint(room.y1 + 1, room.y2 - 1)
+            if 0 <= x < MAP_WIDTH and 0 <= y < MAP_HEIGHT and not is_blocked(x, y):
+                chests.append((x,y))
+                break
+
 
 def generate_map():
-    global game_map, player_x, player_y, goal_x, goal_y, fov_map, enemies
+    global game_map, player_x, player_y, goal_x, goal_y, fov_map, enemies, chests
     game_map = [[WALL_CHAR for _ in range(MAP_WIDTH)] for _ in range(MAP_HEIGHT)]
     fov_map = [[0 for _ in range(MAP_WIDTH)] for _ in range(MAP_HEIGHT)]
-    enemies, rooms = [], []
+    enemies, rooms, chests = [], [], []
 
     for _ in range(MAX_ROOMS):
         w, h = random.randint(ROOM_MIN_SIZE, ROOM_MAX_SIZE), random.randint(ROOM_MIN_SIZE, ROOM_MAX_SIZE)
@@ -210,7 +254,7 @@ def generate_map():
             (prev_cx, prev_cy) = rooms[-1].center()
             if random.randint(0, 1): create_h_tunnel(prev_cx, new_cx, prev_cy); create_v_tunnel(prev_cy, new_cy, new_cx)
             else: create_v_tunnel(prev_cy, new_cy, prev_cx); create_h_tunnel(prev_cx, new_cx, new_cy)
-            spawn_enemies(new_room)
+        spawn_entities(new_room)
         rooms.append(new_room)
 
     if not rooms:
@@ -276,6 +320,7 @@ def get_char_at(x, y):
     for ex, ey, eft, _ in combat_effects:
         if ex == x and ey == y: return EFFECT_CHARS[eft]
     if x == player_x and y == player_y: return f"{player_class_info.get('color_code', Colors.RESET)}{player_char}{Colors.RESET}"
+    if any(c[0] == x and c[1] == y for c in chests): return f"{CHEST_COLOR}{CHEST_CHAR}{Colors.RESET}"
     for enemy in enemies:
         if enemy['x'] == x and enemy['y'] == y: return f"{enemy['color_code']}{enemy['char']}{Colors.RESET}"
     char = game_map[y][x]
@@ -331,7 +376,7 @@ def gain_xp(amount):
     if player_xp >= xp_to_next_level:
         player_xp -= xp_to_next_level
         player_level += 1
-        xp_to_next_level = int(xp_to_next_level * 1.5)
+        xp_to_next_level = int(xp_to_next_level * 1.2) # Reduced multiplier for faster leveling
         player_current_hp = player_max_hp # Fully heal on level up
         add_message(f"{Colors.BOLD}{Colors.BRIGHT_YELLOW}LEVEL UP! You are now level {player_level}!{Colors.RESET}")
         level_up_bonus()
@@ -373,17 +418,18 @@ def draw_game():
     hp_display = f"{Colors.BOLD}HP:{Colors.RESET} {hp_color}{player_current_hp}/{player_max_hp}{Colors.RESET}"
     attack_display = f"{Colors.BOLD}Atk:{Colors.RESET} {Colors.BRIGHT_RED}{get_player_attack_power()}{Colors.RESET}"
     level_display = f"{Colors.BOLD}Lvl:{Colors.RESET} {Colors.BRIGHT_YELLOW}{player_level}{Colors.RESET} ({player_xp}/{xp_to_next_level} XP)"
+    weapon_display = f"{Colors.BOLD}Weapon:{Colors.RESET} {equipped_weapon.name if equipped_weapon else 'None'}"
     
-    print(f"{Colors.BOLD}Class:{Colors.RESET} {player_class_info['color_code']}{player_class_info['name']}{Colors.RESET} | {hp_display} | {attack_display} | {Colors.BOLD}Turns:{Colors.RESET} {Colors.BRIGHT_CYAN}{turns}{Colors.RESET}")
-    print(level_display)
+    print(f"{Colors.BOLD}Class:{Colors.RESET} {player_class_info['color_code']}{player_class_info['name']}{Colors.RESET} | {hp_display} | {attack_display}")
+    print(f"{level_display} | {weapon_display}")
     
     print(f"{Colors.BOLD}{Colors.BRIGHT_CYAN}{'─' * (MAP_WIDTH + 2)}{Colors.RESET}")
     for msg in game_message: print(msg)
-    print(f"{Colors.BOLD}Move:{Colors.YELLOW}W,A,S,D{Colors.RESET} | {Colors.BOLD}Quit:{Colors.RED}Q{Colors.RESET}")
+    print(f"{Colors.BOLD}Move:{Colors.YELLOW}W,A,S,D{Colors.RESET} | {Colors.BOLD}Open:{Colors.GREEN}O{Colors.RESET} | {Colors.BOLD}Quit:{Colors.RED}Q{Colors.RESET}")
 
 # --- Main Game Logic ---
 def handle_input():
-    global player_x, player_y, turns
+    global player_x, player_y, turns, inventory, equipped_weapon, chests
     action = input("> ").lower()
     
     target_x, target_y = player_x, player_y
@@ -393,6 +439,20 @@ def handle_input():
     elif action == 's': target_y += 1; moved = True
     elif action == 'a': target_x -= 1; moved = True
     elif action == 'd': target_x += 1; moved = True
+    elif action == 'o': # Open Chest
+        chest_pos = next((c for c in chests if max(abs(c[0] - player_x), abs(c[1] - player_y)) <= 1), None)
+        if chest_pos:
+            loot = random.choice(CHEST_LOOT_TABLE)
+            add_message(f"You open the chest and find a {loot.name}!")
+            if isinstance(loot, Weapon):
+                if not equipped_weapon or loot.damage_bonus > equipped_weapon.damage_bonus:
+                    equipped_weapon = loot
+                    add_message(f"You equip the {loot.name}.")
+                else: inventory.append(loot)
+            else: inventory.append(loot)
+            chests.remove(chest_pos)
+        else: add_message("No chest nearby to open.")
+
     elif action == 'q': return "quit"
     else: add_message(f"{Colors.BRIGHT_RED}Invalid command.{Colors.RESET}"); return "playing"
 
