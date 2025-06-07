@@ -1,6 +1,7 @@
 import os
 import random
 import math
+from getch import getch # Import the getch library for instant key presses
 
 # --- Game Settings ---
 MAP_WIDTH = 60
@@ -290,14 +291,14 @@ def player_take_damage(damage_amount):
     if random.random() < 0.15 and passive == "Evasion Master": add_message(f"{Colors.BRIGHT_CYAN}You deftly evade the attack!{Colors.RESET}"); return
     player_current_hp -= damage_amount; add_message(f"{Colors.BRIGHT_RED}You take {damage_amount} damage!{Colors.RESET}")
     if player_current_hp < 0: player_current_hp = 0
-    auto_use_potion() # Check if we need to auto-heal
+    auto_use_potion()
 
 # --- XP and Leveling Up ---
 def level_up_bonus():
     global player_max_hp, player_current_hp
     add_message("Choose a bonus: (1) +20 Max HP, (2) +2 Attack")
     while True:
-        draw_game(); choice = input("> Your choice: ").lower()
+        draw_game(); choice = getch().lower()
         if choice == '1': player_max_hp += 20; player_current_hp = player_max_hp; add_message("Your maximum health increases!"); break
         elif choice == '2': player_class_info['base_attack'] += 2; add_message("Your base attack increases!"); break
         else: add_message("Invalid choice.")
@@ -380,36 +381,18 @@ def auto_use_potion():
             inventory.remove(potion_to_use)
 
 def auto_combat_action():
-    # Priority 1: Melee attack
     for dx in range(-1, 2):
         for dy in range(-1, 2):
             if dx == 0 and dy == 0: continue
             check_x, check_y = player_x + dx, player_y + dy
             target_enemy = next((e for e in enemies if e['x'] == check_x and e['y'] == check_y), None)
             if target_enemy and fov_map[check_y][check_x] == 2:
-                player_attack_enemy(target_enemy)
-                return True
-
-    # Priority 2: Ranged scroll
-    scroll_to_use = next((item for item in inventory if isinstance(item, Scroll)), None)
-    if scroll_to_use:
-        visible_enemies = [e for e in enemies if fov_map[e['y']][e['x']] == 2 and max(abs(e['x'] - player_x), abs(e['y'] - player_y)) > 1]
-        if visible_enemies:
-            target = random.choice(visible_enemies)
-            add_message(f"You automatically use {scroll_to_use.name} on the {target['name']}!")
-            if scroll_to_use.effect == "fireball": # Simple effect handling
-                target['current_hp'] -= scroll_to_use.damage
-                if target['current_hp'] <= 0:
-                    game_map[target['y']][target['x']] = DEAD_ENEMY_CHAR
-                    gain_xp(target.get('xp_value', 0))
-                    enemies[:] = [e for e in enemies if e != target]
-            inventory.remove(scroll_to_use)
-            return True
+                player_attack_enemy(target_enemy); return True
     return False
 
 def handle_input():
     global player_x, player_y, turns, dungeon_level
-    action = input("> ").lower()
+    action = getch().lower()
     
     target_x, target_y = player_x, player_y
     moved = False
@@ -419,7 +402,7 @@ def handle_input():
     elif action == 'a': target_x -= 1; moved = True
     elif action == 'd': target_x += 1; moved = True
     elif action == 'q': return "quit"
-    else: add_message(f"{Colors.BRIGHT_RED}Invalid command.{Colors.RESET}"); return "playing"
+    else: return "playing" # Ignore invalid keys
 
     turns += 1
     
@@ -435,7 +418,7 @@ def handle_input():
         elif not is_blocked(target_x, target_y):
             player_x, player_y = target_x, target_y
             update_fov()
-            auto_combat_action() # Try auto combat after moving
+            auto_combat_action()
         else: add_message(f"{Colors.BRIGHT_RED}Ouch! A wall.{Colors.RESET}")
     
     if game_map[player_y][player_x] == STAIRS_DOWN_CHAR:
