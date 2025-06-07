@@ -172,7 +172,7 @@ def initialize_player():
     player_char = player_class_info["char"]
     player_fov_radius = BASE_FOV_RADIUS
     turns_since_regen, warrior_regen_timer, druid_regen_timer = 0, 0, 0
-    player_level, player_xp, xp_to_next_level = 1, 50, 100
+    player_level, player_xp, xp_to_next_level = 1, 0, 50 # Start with 0 xp
     equipped_weapon = Weapon("Fists", 1) # Start with fists
 
     if player_class_info["passives"]["name"] == "Keen Eyes":
@@ -206,7 +206,8 @@ def create_v_tunnel(y1, y2, x):
 def is_blocked(x, y):
     if not (0 <= x < MAP_WIDTH and 0 <= y < MAP_HEIGHT) or game_map[y][x] == WALL_CHAR: return True
     if x == player_x and y == player_y: return True
-    if any(c[0] == x and c[1] == y for c in chests): return True
+    # Chests no longer block movement, they are interactable
+    # if any(c[0] == x and c[1] == y for c in chests): return True
     return any(enemy['x'] == x and enemy['y'] == y for enemy in enemies)
 
 def spawn_entities(room):
@@ -425,9 +426,25 @@ def draw_game():
     
     print(f"{Colors.BOLD}{Colors.BRIGHT_CYAN}{'─' * (MAP_WIDTH + 2)}{Colors.RESET}")
     for msg in game_message: print(msg)
-    print(f"{Colors.BOLD}Move:{Colors.YELLOW}W,A,S,D{Colors.RESET} | {Colors.BOLD}Open:{Colors.GREEN}O{Colors.RESET} | {Colors.BOLD}Quit:{Colors.RED}Q{Colors.RESET}")
+    print(f"{Colors.BOLD}Move:{Colors.YELLOW}W,A,S,D{Colors.RESET} | {Colors.BOLD}Quit:{Colors.RED}Q{Colors.RESET}")
 
 # --- Main Game Logic ---
+def open_chest(chest_pos):
+    global chests, equipped_weapon, inventory
+    loot = random.choice(CHEST_LOOT_TABLE)
+    add_message(f"You open the chest and find a {loot.name}!")
+    if isinstance(loot, Weapon):
+        if not equipped_weapon or loot.damage_bonus > equipped_weapon.damage_bonus:
+            add_message(f"You equip the {loot.name}.")
+            equipped_weapon = loot
+        else:
+            add_message(f"You stash the {loot.name} in your pack.")
+            inventory.append(loot)
+    else:
+        inventory.append(loot)
+        add_message(f"You add the {loot.name} to your inventory.")
+    chests.remove(chest_pos)
+
 def handle_input():
     global player_x, player_y, turns, inventory, equipped_weapon, chests
     action = input("> ").lower()
@@ -439,27 +456,16 @@ def handle_input():
     elif action == 's': target_y += 1; moved = True
     elif action == 'a': target_x -= 1; moved = True
     elif action == 'd': target_x += 1; moved = True
-    elif action == 'o': # Open Chest
-        chest_pos = next((c for c in chests if max(abs(c[0] - player_x), abs(c[1] - player_y)) <= 1), None)
-        if chest_pos:
-            loot = random.choice(CHEST_LOOT_TABLE)
-            add_message(f"You open the chest and find a {loot.name}!")
-            if isinstance(loot, Weapon):
-                if not equipped_weapon or loot.damage_bonus > equipped_weapon.damage_bonus:
-                    equipped_weapon = loot
-                    add_message(f"You equip the {loot.name}.")
-                else: inventory.append(loot)
-            else: inventory.append(loot)
-            chests.remove(chest_pos)
-        else: add_message("No chest nearby to open.")
-
     elif action == 'q': return "quit"
     else: add_message(f"{Colors.BRIGHT_RED}Invalid command.{Colors.RESET}"); return "playing"
 
     turns += 1
     
     if moved:
-        if not is_blocked(target_x, target_y):
+        bumped_chest = next((c for c in chests if c[0] == target_x and c[1] == target_y), None)
+        if bumped_chest:
+            open_chest(bumped_chest)
+        elif not is_blocked(target_x, target_y):
             player_x, player_y = target_x, target_y
             update_fov()
         else:
