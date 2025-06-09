@@ -29,9 +29,7 @@ UNSEEN_COLOR = Colors.BLACK
 CHEST_COLOR = Colors.BOLD + Colors.YELLOW
 
 # --- Combat Effects ---
-EFFECT_ATTACK = 1
-EFFECT_CRIT = 2
-EFFECT_HEAL = 3
+EFFECT_ATTACK = 1; EFFECT_CRIT = 2; EFFECT_HEAL = 3
 combat_effects = []
 EFFECT_CHARS = {
     EFFECT_ATTACK: f"{Colors.BOLD}{Colors.BRIGHT_RED}*{Colors.RESET}",
@@ -67,24 +65,26 @@ CHEST_LOOT_TABLE = POTION_TYPES + MELEE_WEAPON_TYPES + RANGED_WEAPON_TYPES
 
 # --- Player Class Definitions ---
 PLAYER_CLASSES = [
-    {"name": "Warrior", "char": "W", "hp": 30, "base_attack": 7, "color_code": Colors.BOLD + Colors.BRIGHT_BLUE, "passives": {"name": "Improved Fortitude", "desc": "Takes 1 less damage from melee attacks and regenerates 1 HP every 30 turns"}},
+    {"name": "Warrior", "char": "W", "hp": 30, "base_attack": 7, "color_code": Colors.BOLD + Colors.BRIGHT_BLUE, "passives": {"name": "Improved Fortitude", "desc": "Takes 1 less damage from melee attacks"}},
     {"name": "Rogue", "char": "R", "hp": 22, "base_attack": 5, "color_code": Colors.BOLD + Colors.GREEN, "passives": {"name": "Evasion Master", "desc": "15% dodge chance and deals +2 damage to enemies below 50% HP"}},
     {"name": "Mage", "char": "M", "hp": 18, "base_attack": 4, "color_code": Colors.BOLD + Colors.BRIGHT_MAGENTA, "passives": {"name": "Arcane Mastery", "desc": "Deals +2 damage and has 20% chance to deal 2 bonus damage"}, "range": 5},
     {"name": "Cleric", "char": "C", "hp": 26, "base_attack": 5, "color_code": Colors.BOLD + Colors.BRIGHT_CYAN, "passives": {"name": "Divine Blessing", "desc": "Heals 1 HP every 20 turns and deals +1 damage to undead"}},
     {"name": "Ranger", "char": "N", "hp": 24, "base_attack": 6, "color_code": Colors.BOLD + Colors.BRIGHT_GREEN, "passives": {"name": "Keen Eyes", "desc": "Increased Field of View (+2 radius)"}, "range": 6},
     {"name": "Barbarian", "char": "B", "hp": 35, "base_attack": 6, "color_code": Colors.BOLD + Colors.BRIGHT_RED, "passives": {"name": "Berserker", "desc": "+3 Attack when below 30% HP and 10% lifesteal on hits"}},
-    {"name": "Druid", "char": "D", "hp": 25, "base_attack": 5, "color_code": Colors.BOLD + Colors.YELLOW, "passives": {"name": "Nature's Wrath", "desc": "Enemies take 1-2 damage on hit and heal 1 HP every 40 turns"}},
     {"name": "Monk", "char": "O", "hp": 22, "base_attack": 5, "color_code": Colors.BOLD + Colors.BRIGHT_YELLOW, "passives": {"name": "Ki Master", "desc": "Ignores 1 defense and has 15% chance to strike twice"}},
+    {"name": "Paladin", "char": "P", "hp": 28, "base_attack": 6, "color_code": Colors.BOLD + Colors.WHITE, "passives": {"name": "Smite Evil", "desc": "Deals +3 bonus damage to undead enemies"}},
+    {"name": "Assassin", "char": "A", "hp": 20, "base_attack": 5, "color_code": Colors.DIM + Colors.WHITE, "passives": {"name": "Assassinate", "desc": "First attack on any enemy is a guaranteed critical hit"}},
+    {"name": "Necromancer", "char": "Y", "hp": 18, "base_attack": 4, "color_code": Colors.BOLD + Colors.MAGENTA, "passives": {"name": "Raise Dead", "desc": "30% chance to raise a slain enemy as a loyal Zombie minion"}},
 ]
 
 # --- Enemy Definitions with XP Value ---
 ENEMY_TYPES = [
-    {"name": "Goblin", "char": "g", "hp": 7, "attack": 3, "defense": 1, "xp_value": 10, "color_code": Colors.BOLD + Colors.RED, "spawn_level": 1},
-    {"name": "Orc", "char": "o", "hp": 15, "attack": 5, "defense": 2, "xp_value": 25, "color_code": Colors.BOLD + Colors.YELLOW, "spawn_level": 2},
-    {"name": "Skeleton", "char": "s", "hp": 10, "attack": 4, "defense": 1, "xp_value": 15, "color_code": Colors.BOLD + Colors.WHITE, "spawn_level": 1},
-    {"name": "Troll", "char": "T", "hp": 30, "attack": 7, "defense": 3, "xp_value": 50, "color_code": Colors.BOLD + Colors.GREEN, "spawn_level": 5},
-    {"name": "Ogre", "char": "O", "hp": 40, "attack": 8, "defense": 4, "xp_value": 75, "color_code": Colors.BOLD + Colors.BLUE, "spawn_level": 10},
-    {"name": "The Balrog", "char": "B", "hp": 150, "attack": 12, "defense": 5, "xp_value": 500, "color_code": Colors.BOLD + Colors.BRIGHT_RED, "spawn_level": BOSS_FLOOR},
+    {"name": "Goblin", "char": "g", "hp": 7, "attack": 3, "defense": 1, "xp_value": 10, "color_code": Colors.BOLD + Colors.RED, "spawn_level": 1, "type": "living"},
+    {"name": "Orc", "char": "o", "hp": 15, "attack": 5, "defense": 2, "xp_value": 25, "color_code": Colors.BOLD + Colors.YELLOW, "spawn_level": 2, "type": "living"},
+    {"name": "Skeleton", "char": "s", "hp": 10, "attack": 4, "defense": 1, "xp_value": 15, "color_code": Colors.BOLD + Colors.WHITE, "spawn_level": 1, "type": "undead"},
+    {"name": "Troll", "char": "T", "hp": 30, "attack": 7, "defense": 3, "xp_value": 50, "color_code": Colors.BOLD + Colors.GREEN, "spawn_level": 5, "type": "living"},
+    {"name": "Ogre", "char": "O", "hp": 40, "attack": 8, "defense": 4, "xp_value": 75, "color_code": Colors.BOLD + Colors.BLUE, "spawn_level": 10, "type": "living"},
+    {"name": "The Balrog", "char": "B", "hp": 150, "attack": 12, "defense": 5, "xp_value": 500, "color_code": Colors.BOLD + Colors.BRIGHT_RED, "spawn_level": BOSS_FLOOR, "type": "demon"},
 ]
 
 # --- Global Player and Game State Variables ---
@@ -93,11 +93,12 @@ player_class_info = {}
 player_char = "@"; player_max_hp, player_current_hp = 0, 0
 player_fov_radius = BASE_FOV_RADIUS
 turns = 0; dungeon_level = 1
-enemies = []; chests = []; inventory = []; equipped_melee = None; equipped_ranged = None
+enemies = []; chests = []; inventory = []; equipped_melee = None; equipped_ranged = None; minions = []
 game_message = ["Welcome! Explore and survive."];
 game_map = [[WALL_CHAR for _ in range(MAP_WIDTH)] for _ in range(MAP_HEIGHT)]
 fov_map = [[0 for _ in range(MAP_WIDTH)] for _ in range(MAP_HEIGHT)]
 player_level = 1; player_xp = 0; xp_to_next_level = 50
+hit_enemy_ids = set()
 
 # --- Rect Class for Map Generation ---
 class Rect:
@@ -110,7 +111,7 @@ def clear_screen(): os.system('cls' if os.name == 'nt' else 'clear')
 # --- Initialization ---
 def initialize_player():
     global player_class_info, player_max_hp, player_current_hp, player_char, player_fov_radius
-    global player_level, player_xp, xp_to_next_level, equipped_melee, equipped_ranged, inventory
+    global player_level, player_xp, xp_to_next_level, equipped_melee, equipped_ranged, inventory, hit_enemy_ids
 
     player_class_info = random.choice(PLAYER_CLASSES)
     player_max_hp = player_class_info["hp"]
@@ -118,7 +119,7 @@ def initialize_player():
     player_char = player_class_info["char"]
     player_fov_radius = BASE_FOV_RADIUS
     player_level, player_xp, xp_to_next_level = 1, 0, 50
-    inventory = []
+    inventory = []; hit_enemy_ids = set()
     
     equipped_melee = Weapon("Fists", 1, 'melee')
     if "range" in player_class_info:
@@ -157,7 +158,7 @@ def create_v_tunnel(y1, y2, x):
 def is_blocked(x, y):
     if not (0 <= x < MAP_WIDTH and 0 <= y < MAP_HEIGHT) or game_map[y][x] == WALL_CHAR: return True
     if x == player_x and y == player_y: return True
-    return any(enemy['x'] == x and enemy['y'] == y for enemy in enemies)
+    return any(enemy['x'] == x and enemy['y'] == y for enemy in enemies) or any(minion['x'] == x and minion['y'] == y for minion in minions)
 
 def spawn_entities(room):
     global enemies, chests
@@ -170,7 +171,7 @@ def spawn_entities(room):
             x = random.randint(room.x1 + 1, room.x2 - 1); y = random.randint(room.y1 + 1, room.y2 - 1)
             if 0 <= x < MAP_WIDTH and 0 <= y < MAP_HEIGHT and not is_blocked(x, y):
                 enemy_type = random.choice(eligible_enemies); new_enemy = enemy_type.copy()
-                new_enemy.update({'x': x, 'y': y, 'current_hp': enemy_type['hp']}); enemies.append(new_enemy); break
+                new_enemy.update({'x': x, 'y': y, 'current_hp': enemy_type['hp'], 'id': len(enemies) + len(minions)}); enemies.append(new_enemy); break
     
     num_chests = random.randint(0, MAX_CHESTS_PER_ROOM)
     for _ in range(num_chests):
@@ -180,10 +181,10 @@ def spawn_entities(room):
                 chests.append((x,y)); break
 
 def generate_map():
-    global game_map, player_x, player_y, fov_map, enemies, chests
+    global game_map, player_x, player_y, fov_map, enemies, chests, minions
     game_map = [[WALL_CHAR for _ in range(MAP_WIDTH)] for _ in range(MAP_HEIGHT)]
     fov_map = [[0 for _ in range(MAP_WIDTH)] for _ in range(MAP_HEIGHT)]
-    enemies, rooms, chests = [], [], []
+    enemies, rooms, chests, minions = [], [], [], []
 
     for _ in range(MAX_ROOMS):
         w,h = random.randint(ROOM_MIN_SIZE, ROOM_MAX_SIZE), random.randint(ROOM_MIN_SIZE, ROOM_MAX_SIZE)
@@ -208,7 +209,7 @@ def generate_map():
         final_room_center = rooms[-1].center()
         if dungeon_level == BOSS_FLOOR:
             boss_type = next(e for e in ENEMY_TYPES if e['name'] == 'The Balrog'); boss = boss_type.copy()
-            boss.update({'x': final_room_center[0], 'y': final_room_center[1], 'current_hp': boss_type['hp']})
+            boss.update({'x': final_room_center[0], 'y': final_room_center[1], 'current_hp': boss_type['hp'], 'id': len(enemies)})
             enemies.append(boss); add_message(f"{Colors.BOLD}{Colors.BRIGHT_RED}You have entered the Balrog's Lair!{Colors.RESET}")
         else:
             game_map[final_room_center[1]][final_room_center[0]] = STAIRS_DOWN_CHAR
@@ -216,24 +217,22 @@ def generate_map():
 
 # --- FOV, Messaging, Effects, Drawing ---
 def get_line(x1, y1, x2, y2):
-    points = []
-    dx = abs(x2 - x1); dy = abs(y2 - y1)
-    x, y = x1, y1
-    sx = 1 if x1 < x2 else -1; sy = 1 if y1 < y2 else -1
+    points = []; dx = abs(x2 - x1); dy = abs(y2 - y1)
+    x, y, sx, sy = x1, y1, 1 if x1 < x2 else -1, 1 if y1 < y2 else -1
     if dx > dy:
         err = dx / 2.0
         while True:
-            points.append((x, y))
+            points.append((x, y));
             if x == x2: break
-            err -= dy
+            err -= dy;
             if err < 0: y += sy; err += dx
             x += sx
     else:
         err = dy / 2.0
         while True:
-            points.append((x, y))
+            points.append((x, y));
             if y == y2: break
-            err -= dx
+            err -= dx;
             if err < 0: x += sx; err += dy
             y += sy
     return points
@@ -264,6 +263,7 @@ def get_char_at(x, y):
     for ex, ey, eft, _ in combat_effects:
         if ex == x and ey == y: return EFFECT_CHARS[eft]
     if x == player_x and y == player_y: return f"{player_class_info.get('color_code', Colors.RESET)}{player_char}{Colors.RESET}"
+    if any(m['x'] == x and m['y'] == y for m in minions): return f"{Colors.DIM}{Colors.GREEN}z{Colors.RESET}"
     if any(c[0] == x and c[1] == y for c in chests): return f"{CHEST_COLOR}{CHEST_CHAR}{Colors.RESET}"
     for enemy in enemies:
         if enemy['x'] == x and enemy['y'] == y: return f"{enemy['color_code']}{enemy['char']}{Colors.RESET}"
@@ -273,16 +273,42 @@ def get_char_at(x, y):
 
 # --- Combat System ---
 def player_attack_enemy(enemy_obj, attack_type):
-    global enemies, player_current_hp; current_player_atk = get_player_attack_power(attack_type)
-    enemy_def = enemy_obj.get('defense', 0); damage = max(0, current_player_atk - enemy_def)
+    global enemies, player_current_hp, hit_enemy_ids
+    current_player_atk = get_player_attack_power(attack_type)
+    enemy_def = enemy_obj.get('defense', 0);
+    is_critical = False
+    passive_name = player_class_info["passives"]["name"]
+
+    if passive_name == "Assassinate" and enemy_obj['id'] not in hit_enemy_ids:
+        is_critical = True
+        add_message(f"{Colors.BOLD}{Colors.BRIGHT_RED}Assassinate!{Colors.RESET}")
+    if passive_name == "Smite Evil" and enemy_obj.get('type') == 'undead':
+        current_player_atk += 3
+        add_message(f"{Colors.BOLD}{Colors.BRIGHT_YELLOW}Smite Evil!{Colors.RESET}")
+
+    damage = max(0, current_player_atk - enemy_def)
+    if is_critical: damage *= 2
+    
     add_combat_effect(enemy_obj['x'], enemy_obj['y'], EFFECT_ATTACK)
     enemy_obj['current_hp'] -= damage
+    hit_enemy_ids.add(enemy_obj['id'])
+    
     if enemy_obj['current_hp'] <= 0:
         add_message(f"{Colors.BRIGHT_GREEN}You defeated the {enemy_obj['color_code']}{enemy_obj['name']}{Colors.RESET}!{Colors.RESET}")
         if game_map[enemy_obj['y']][enemy_obj['x']] == FLOOR_CHAR:
             game_map[enemy_obj['y']][enemy_obj['x']] = DEAD_ENEMY_CHAR
         gain_xp(enemy_obj.get('xp_value', 0))
         if enemy_obj['name'] == 'The Balrog': return "won"
+        
+        # Necromancer passive
+        if passive_name == "Raise Dead" and random.random() < 0.3:
+            add_message(f"You raise the {enemy_obj['name']} as a zombie!")
+            zombie_minion = {
+                'name': 'Zombie', 'char': 'z', 'hp': 10, 'attack': 4,
+                'x': enemy_obj['x'], 'y': enemy_obj['y'], 'id': len(enemies) + len(minions)
+            }
+            minions.append(zombie_minion)
+
         enemies[:] = [e for e in enemies if e != enemy_obj]
     else:
         add_message(f"You attack the {enemy_obj['color_code']}{enemy_obj['name']}{Colors.RESET} for {Colors.BRIGHT_RED}{damage}{Colors.RESET} damage.")
@@ -317,6 +343,22 @@ def gain_xp(amount):
         level_up_bonus()
 
 # --- AI and Turns ---
+def minion_turn():
+    for minion in list(minions):
+        closest_enemy, closest_dist = None, float('inf')
+        for enemy in enemies:
+            if fov_map[enemy['y']][enemy['x']] == 2:
+                dist = max(abs(enemy['x'] - minion['x']), abs(enemy['y'] - minion['y']))
+                if dist < closest_dist: closest_dist, closest_enemy = dist, enemy
+        if closest_enemy:
+            if closest_dist <= 1:
+                add_message(f"Your zombie attacks the {closest_enemy['name']}!"); player_attack_enemy(closest_enemy, 'melee')
+            else:
+                dx = 1 if closest_enemy['x'] > minion['x'] else -1 if closest_enemy['x'] < minion['x'] else 0
+                dy = 1 if closest_enemy['y'] > minion['y'] else -1 if closest_enemy['y'] < minion['y'] else 0
+                new_x, new_y = minion['x'] + dx, minion['y'] + dy
+                if not is_blocked(new_x, new_y): minion['x'], minion['y'] = new_x, new_y
+
 def enemy_turn():
     for enemy in list(enemies):
         if enemy['current_hp'] <= 0: continue
@@ -339,9 +381,7 @@ def draw_game():
         for x in range(MAP_WIDTH):
             if fov_map[y][x] == 2: row_str += get_char_at(x,y)
             elif fov_map[y][x] == 1:
-                char_at_pos = get_char_at(x,y) # Get the char with color
-                # Dim the entire colored string
-                row_str += f"{Colors.DIM}{char_at_pos}{Colors.RESET}"
+                row_str += f"{Colors.DIM}{get_char_at(x, y)}{Colors.RESET}"
             else: row_str += f"{UNSEEN_COLOR}{UNSEEN_CHAR}{Colors.RESET}"
         row_str += f"{Colors.BOLD}{Colors.BRIGHT_CYAN}║{Colors.RESET}"; print(row_str)
     print(f"{Colors.BOLD}{Colors.BRIGHT_CYAN}{border}{Colors.RESET}")
@@ -359,6 +399,7 @@ def draw_game():
     print(f"{Colors.BOLD}Class:{Colors.RESET} {player_class_info['color_code']}{player_class_info['name']}{Colors.RESET} | {hp_display} | {attack_display}")
     print(f"{level_display} | {dungeon_display}")
     print(f"{melee_weapon_display} | {ranged_weapon_display}")
+    if minions: print(f"{Colors.BOLD}Minions:{Colors.RESET} {len(minions)} Zombies")
     
     print(f"{Colors.BOLD}{Colors.BRIGHT_CYAN}{'─' * (MAP_WIDTH + 2)}{Colors.RESET}")
     for msg in game_message: print(msg)
@@ -447,7 +488,7 @@ def handle_input():
         generate_map()
         return "playing"
 
-    enemy_turn()
+    enemy_turn(); minion_turn()
 
     if player_current_hp <= 0: return "lost"
     return "playing"
