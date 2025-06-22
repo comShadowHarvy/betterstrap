@@ -1,388 +1,274 @@
 #!/bin/bash
 
 # Enhanced Ultimate Pentest Installer
-# This script categorizes and installs penetration testing tools with an interactive menu
+# A comprehensive, cross-distro installer for penetration testing tools.
+# Version 2.0
+#
+# Disclaimer: These tools are for professional and educational purposes only.
+#             Unauthorized use against systems you do not own is illegal.
 
-# Colors for better readability
+set -eo pipefail
+
+# --- Style and Color Configuration ---
 RED='\033[0;31m'
 GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
+YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 MAGENTA='\033[0;35m'
 CYAN='\033[0;36m'
 BOLD='\033[1m'
 NC='\033[0m' # No Color
 
-# Function to display a loading bar with percentage
-loading_bar() {
-    local current=$1
-    local total=$2
-    local percent=$((100 * current / total))
-    local bar_length=40
-    local filled_length=$((bar_length * current / total))
-    local empty_length=$((bar_length - filled_length))
+# --- Global Variables ---
+PKG_MANAGER=""
+PKG_INSTALL=""
+PKG_UPDATE=""
+AUR_HELPER=""
 
-    printf -v bar "%0.s█" $(seq 1 $filled_length)
-    printf -v space "%0.s░" $(seq 1 $empty_length)
+# --- Helper Functions ---
 
-    echo -ne "${BLUE}Progress: [${GREEN}${bar}${RED}${space}${BLUE}] ${YELLOW}${percent}%%${NC}\r"
+# Function to check for sudo privileges
+check_sudo() {
+    if [[ "$EUID" -eq 0 ]]; then
+        echo -e "${RED}Error: This script should not be run as root. Run as a regular user.${NC}"
+        exit 1
+    fi
+    if ! command -v sudo &>/dev/null || ! sudo -v; then
+        echo -e "${RED}Error: sudo is required and the current user must have sudo privileges.${NC}"
+        exit 1
+    fi
 }
 
-# Function to check if a package is installed
-is_package_installed() {
-    pacman -Qs "$1" > /dev/null 2>&1
+# Function to detect the system's package manager
+detect_package_manager() {
+    echo -e "${BLUE}Detecting package manager...${NC}"
+    if command -v apt &>/dev/null; then
+        PKG_MANAGER="apt"; PKG_INSTALL="sudo apt install -y"; PKG_UPDATE="sudo apt update"
+        echo -e "${GREEN}Detected apt (Debian/Ubuntu).${NC}"
+    elif command -v dnf &>/dev/null; then
+        PKG_MANAGER="dnf"; PKG_INSTALL="sudo dnf install -y"; PKG_UPDATE="sudo dnf check-update || true"
+        echo -e "${GREEN}Detected dnf (Fedora/RHEL).${NC}"
+    elif command -v pacman &>/dev/null; then
+        PKG_MANAGER="pacman"; PKG_INSTALL="sudo pacman -S --needed --noconfirm"; PKG_UPDATE="sudo pacman -Sy"
+        echo -e "${GREEN}Detected pacman (Arch Linux).${NC}"
+    else
+        echo -e "${RED}Error: No supported package manager found (apt, dnf, pacman).${NC}"
+        exit 1
+    fi
 }
 
-# Function to display the header
+# Function to check if a command is installed
+is_installed() {
+    command -v "$1" &>/dev/null
+}
+
+# Ensure an AUR helper (yay/paru) is installed on Arch Linux
+ensure_aur_helper() {
+    if [[ "$PKG_MANAGER" != "pacman" ]]; then return; fi
+    if is_installed yay; then AUR_HELPER="yay"; return; fi
+    if is_installed paru; then AUR_HELPER="paru"; return; fi
+
+    echo -e "${YELLOW}No AUR helper found. Attempting to install 'yay'...${NC}"
+    is_installed git || sudo pacman -S --noconfirm git base-devel
+    local temp_dir
+    temp_dir=$(mktemp -d)
+    (
+        cd "$temp_dir" || exit 1
+        git clone https://aur.archlinux.org/yay.git
+        cd yay || exit 1
+        makepkg -si --noconfirm
+    )
+    rm -rf "$temp_dir"
+    if is_installed yay; then
+        echo -e "${GREEN}yay installed successfully.${NC}"
+        AUR_HELPER="yay"
+    else
+        echo -e "${RED}Failed to install yay. AUR packages cannot be installed.${NC}"
+        sleep 2
+    fi
+}
+
+# --- Installation Logic ---
+
+# Installs a package using the system's package manager
+install_from_pkg_manager() {
+    local name="$1"
+    local pkgs_to_install="$2"
+    echo -e "${BLUE}Installing $name via $PKG_MANAGER...${NC}"
+    if $PKG_INSTALL $pkgs_to_install; then
+        echo -e "\n${GREEN}$name installed successfully.${NC}"
+    else
+        echo -e "\n${RED}Failed to install $name via $PKG_MANAGER.${NC}"
+        return 1
+    fi
+}
+
+# Installs a package from the Arch User Repository
+install_from_aur() {
+    if [[ -z "$AUR_HELPER" ]]; then
+        echo -e "${YELLOW}Cannot install '$1': No AUR helper is available.${NC}"; sleep 2; return 1;
+    fi
+    echo -e "${BLUE}Installing $1 via AUR helper ($AUR_HELPER)...${NC}"
+    if $AUR_HELPER -S --noconfirm "$2"; then
+        echo -e "\n${GREEN}$1 installed successfully.${NC}"
+    else
+        echo -e "\n${RED}Failed to install $1 from AUR.${NC}"; return 1;
+    fi
+}
+
+# Installs a Python tool from a Git repository
+install_from_git_pip() {
+    local name="$1"
+    local url="$2"
+    is_installed pip || install_from_pkg_manager "python3-pip" "python3-pip"
+    
+    echo -e "${BLUE}Installing $name from Git (pip)...${NC}"
+    if sudo pip install "git+$url"; then
+         echo -e "\n${GREEN}$name installed successfully.${NC}"
+    else
+         echo -e "\n${RED}Failed to install $name from Git.${NC}"; return 1;
+    fi
+}
+
+# Primary tool installer function, acts as a dispatcher
+install_tool() {
+    IFS=':' read -r name description advantages disadvantages category method source <<< "$1"
+
+    clear; display_header
+    display_description "Installing $name" "$description" "$advantages" "$disadvantages"
+
+    if is_installed "$name"; then
+        echo -e "${GREEN}$name is already installed.${NC}"; sleep 2; return 0;
+    fi
+
+    # Ensure build dependencies are present if needed
+    if [[ "$method" == "git_"* ]]; then
+        is_installed git || install_from_pkg_manager "git" "git"
+    fi
+
+    local success=0
+    case "$method" in
+        pkg) install_from_pkg_manager "$name" "$source" || success=1 ;;
+        aur) install_from_aur "$name" "$source" || success=1 ;;
+        git_pip) install_from_git_pip "$name" "$source" || success=1 ;;
+        *) echo -e "${RED}Unknown installation method '$method' for $name.${NC}"; success=1 ;;
+    esac
+
+    sleep 2
+    return $success
+}
+
+# --- UI and Menu Functions ---
+
 display_header() {
     clear
     echo -e "${BOLD}${BLUE}=====================================================${NC}"
-    echo -e "${BOLD}${CYAN}            Ultimate Pentest Installer               ${NC}"
+    echo -e "${BOLD}${CYAN}         Ultimate Pentest Installer (v2.0)           ${NC}"
     echo -e "${BOLD}${BLUE}=====================================================${NC}"
+    echo
+    echo -e "${BOLD}System Info:${NC} $(grep PRETTY_NAME /etc/os-release | cut -d'"' -f 2 2>/dev/null || uname -a)"
+    echo -e "${BOLD}Package Manager:${NC} $PKG_MANAGER"
     echo
 }
 
-# Function to display a description
 display_description() {
-    local title=$1
-    local description=$2
-    local advantages=$3
-    local disadvantages=$4
-
-    echo -e "${BOLD}${BLUE}=====================================================${NC}"
-    echo -e "${BOLD}${CYAN}   $title${NC}"
-    echo -e "${BOLD}${BLUE}=====================================================${NC}"
-    echo
-    echo -e "${BOLD}Description:${NC}"
-    echo -e "$description"
-    echo
-    echo -e "${BOLD}${GREEN}Advantages:${NC}"
-    echo -e "$advantages"
-    echo
-    echo -e "${BOLD}${RED}Disadvantages:${NC}"
-    echo -e "$disadvantages"
-    echo
-    echo -e "${BLUE}--------------------------------------------------${NC}"
-    echo
+    echo -e "${BOLD}${CYAN}--- $1 ---${NC}\n"
+    echo -e "${BOLD}Description:${NC}\n$2\n"
+    echo -e "${BOLD}${GREEN}Advantages:${NC}\n$3\n"
+    echo -e "${BOLD}${RED}Disadvantages:${NC}\n$4\n"
+    echo -e "${BLUE}--------------------------------------------------${NC}\n"
 }
 
-# Function to install AUR helper if needed
-ensure_aur_helper() {
-    if command -v yay > /dev/null 2>&1; then
-        return 0
-    elif command -v paru > /dev/null 2>&1; then
-        AUR_HELPER="paru"
-        return 0
-    else
-        echo -e "${YELLOW}No AUR helper found. Installing yay...${NC}"
-        
-        # Check if git is installed
-        if ! command -v git > /dev/null 2>&1; then
-            echo -e "${YELLOW}Installing git...${NC}"
-            sudo pacman -S --noconfirm git || {
-                echo -e "${RED}Failed to install git. Exiting.${NC}"
-                exit 1
-            }
+# --- Tool Definitions ---
+declare -A TOOL_CATEGORIES
+TOOL_CATEGORIES=(
+    ["network"]="Network Scanning & Enumeration"
+    ["vuln_scan"]="Vulnerability Scanning"
+    ["exploit"]="Exploitation Frameworks"
+    ["web"]="Web Application Testing"
+    ["password"]="Password & Credential Testing"
+    ["osint"]="OSINT & Reconnaissance"
+)
+ORDERED_CATEGORIES=("network" "vuln_scan" "exploit" "web" "password" "osint")
+
+# Format: name:description:advantages:disadvantages:category:method:source
+TOOLS=(
+    "nmap:Network discovery and security auditing.:- Comprehensive scanning.\n- Scripting engine (NSE).:- Can be complex for beginners.:network:pkg:nmap"
+    "masscan:Extremely fast TCP port scanner.:- Incredible speed for large networks.:- Less feature-rich than nmap.:network:pkg:masscan"
+    "nikto:Web server scanner for vulnerabilities.:- Scans for thousands of potential issues.:- Can be noisy and produce false positives.:vuln_scan:pkg:nikto"
+    "metasploit-framework:The world's most used penetration testing framework.:- Massive exploit database.\n- Highly extensible.:- Heavy and can be slow to start.:exploit:pkg:metasploit-framework"
+    "sqlmap:Automatic SQL injection and database takeover tool.:- Automates complex SQLi attacks.\n- Wide database support.:- Requires careful handling to avoid damage.:web:pkg:sqlmap"
+    "ffuf:Fast web fuzzer written in Go.:- Extremely fast for directory/file discovery.:- Command-line only, results need parsing.:web:pkg:ffuf"
+    "john:John the Ripper, a powerful password cracker.:- Supports hundreds of hash types.\n- Highly optimized.:- Can be complex to configure.:password:pkg:john"
+    "hashcat:The world's fastest password cracker.:- GPU acceleration for incredible speed.:- Requires a compatible GPU and drivers.:password:pkg:hashcat"
+    "hydra:A very fast network logon cracker.:- Supports numerous protocols (SSH, FTP, etc).:- Can be noisy and easily detected.:password:pkg:hydra"
+    "cloud_enum:Multi-cloud asset discovery tool.:- Enumerates assets in AWS, Azure, GCP.:- Requires cloud environment knowledge.:osint:git_pip:https://github.com/initstring/cloud_enum.git"
+    "subfinder:Subdomain discovery tool.:- Uses passive sources for speed and stealth.:- Quality of results depends on sources.:osint:pkg:subfinder"
+    "amass:In-depth attack surface mapping and asset discovery.:- Extremely thorough.\n- Gathers massive amounts of data.:- Can be slow and complex to run.:osint:pkg:amass"
+)
+
+# --- Main Logic ---
+
+install_from_category() {
+    local category_key="$1"
+    local category_name="${TOOL_CATEGORIES[$category_key]}"
+    local category_tools=()
+    for tool_data in "${TOOLS[@]}"; do
+        if [[ "$tool_data" == *":$category_key:"* ]]; then
+            category_tools+=("$tool_data")
         fi
-        
-        # Create temp directory and install yay
-        local temp_dir=$(mktemp -d)
-        cd "$temp_dir" || exit 1
-        git clone https://aur.archlinux.org/yay.git || {
-            echo -e "${RED}Failed to clone yay repository. Exiting.${NC}"
-            exit 1
-        }
-        cd yay || exit 1
-        makepkg -si --noconfirm || {
-            echo -e "${RED}Failed to build yay. Exiting.${NC}"
-            exit 1
-        }
-        cd "$OLDPWD" || exit 1
-        rm -rf "$temp_dir"
-        
-        echo -e "${GREEN}yay installed successfully.${NC}"
-        AUR_HELPER="yay"
-        return 0
-    fi
-}
-
-# Function to install a tool
-install_tool() {
-    local name=$1
-    local description=$2
-    local advantages=$3
-    local disadvantages=$4
-    
-    display_description "Installing $name" "$description" "$advantages" "$disadvantages"
-    
-    if is_package_installed "$name"; then
-        echo -e "${GREEN}$name is already installed. Skipping installation.${NC}"
-        sleep 1
-        return 0
-    else
-        echo -e "${YELLOW}Installing $name...${NC}"
-        if $AUR_HELPER -S --noconfirm "$name"; then
-            echo -e "${GREEN}$name installed successfully.${NC}"
-            sleep 1
-            return 0
-        else
-            echo -e "${RED}Error installing $name. Skipping to the next tool.${NC}"
-            sleep 2
-            return 1
-        fi
-    fi
-}
-
-# Tool definitions by category
-declare -A tool_categories
-
-# Network Scanning & Enumeration
-tool_categories["network"]=(
-    "nmap:Network discovery and security auditing:- Comprehensive network scanning capabilities.\n- Extensive scripting engine for custom scans and vulnerability detection.:- Can be complex for beginners.\n- May produce false positives."
-    "masscan:Fast TCP port scanner:- Extremely fast port scanning.:- Limited to port scanning only."
-    "massdns:High-performance DNS resolver:- Fast DNS resolution for large wordlists.:- Requires DNS knowledge."
-    "dnsvalidator:DNS validation tool:- Validates DNS configurations.:- Requires knowledge of DNS."
-    "interlace:Parallel command execution tool:- Speeds up command execution for large lists.:- Requires understanding of parallel execution."
-    "cloud_enum:Cloud asset enumeration tool:- Enumerates cloud assets for potential security issues.:- Limited to cloud-specific scenarios."
-    "nmap-parse-output:Tool for parsing nmap XML output:- Simplifies nmap output parsing.:- Limited to nmap scans."
-)
-
-# Vulnerability Scanning
-tool_categories["vuln_scan"]=(
-    "nessus:Comprehensive vulnerability scanner:- Wide range of vulnerability checks.\n- Regular updates.:- Requires a subscription for advanced features."
-    "openvas:Open-source vulnerability scanner:- Free and open-source.\n- Regularly updated vulnerability database.:- Can be resource-intensive."
-    "nikto:Web server scanner:- Effective web server scanning.:- May produce false positives."
-    "testssl:SSL/TLS scanner:- Comprehensive SSL/TLS analysis.:- Requires manual interpretation of results."
-    "Nuclei templates:Vulnerability scanning templates for Nuclei:- Provides templates for Nuclei scans.:- Limited to the templates available."
-    "wafw00f:Web application firewall detection tool:- Detects WAFs in web applications.:- Limited to known WAF signatures."
-)
-
-# Exploitation
-tool_categories["exploit"]=(
-    "metasploit:Exploit development and vulnerability research:- Extensive database of exploits.\n- Powerful automation capabilities.:- Can be complex for beginners."
-    "beef:Browser-based exploitation:- Specialized in browser exploitation.:- Limited to browser-based attacks."
-    "commix:Automated command injection and exploitation tool:- Automated command injection testing.:- Can be complex for beginners."
-    "set:Framework for social engineering attacks:- Powerful social engineering tools.:- Requires knowledge of social engineering."
-    "smuggler:Tool for HTTP request smuggling:- Effective for finding HTTP smuggling vulnerabilities.:- Requires knowledge of HTTP smuggling."
-    "regulator:Tool for identifying and exploiting HTTP parameter pollution:- Detects and exploits parameter pollution.:- Limited to HTTP requests."
-    "nomore403:Tool for bypassing 403 forbidden responses:- Attempts to bypass 403 restrictions.:- May not work on all sites."
-    "spoofy:Spoofing tool:- Effective for various spoofing tasks.:- Requires knowledge of spoofing techniques."
-)
-
-# Web Application Testing
-tool_categories["web"]=(
-    "burpsuite:Web vulnerability scanner and testing platform:- Comprehensive web application testing.:- Requires a subscription for advanced features."
-    "owasp-zap:Integrated web application security testing tool:- Free and open-source.\n- Wide range of testing tools.:- Can be slower than commercial tools."
-    "fiddler:Web debugging proxy:- Effective for web debugging and traffic capture.:- Requires manual setup for HTTPS."
-    "mitmproxy:Interactive man-in-the-middle proxy for HTTP and HTTPS:- Powerful and versatile proxy capabilities.:- Requires command-line knowledge."
-    "sqlmap:Automatic SQL injection and database takeover tool:- Automated SQL injection testing.:- Can be complex for beginners."
-    "ghauri:Advanced SQL injection tool:- Effective for finding and exploiting SQL injection.:- Requires SQL knowledge."
-    "Corsy:CORS misconfiguration scanner:- Identifies misconfigurations in CORS.:- May produce false positives."
-    "CMSeeK:CMS detection and exploitation suite:- Detects various CMS platforms and vulnerabilities.:- Limited by the CMS platforms supported."
-    "swaggerspy:Swagger API enumeration tool:- Enumerates endpoints in Swagger APIs.:- Limited to Swagger API endpoints."
-    "ffufPostprocessing:Post-processing for ffuf results:- Simplifies analysis of ffuf output.:- Limited to ffuf scans."
-)
-
-# Wireless Testing
-tool_categories["wireless"]=(
-    "aircrack-ng:Suite of tools for auditing wireless networks:- Comprehensive suite for wireless network security.:- Requires compatible hardware."
-    "kismet:Wireless network detector and sniffer:- Effective for detecting and sniffing wireless networks.:- May require additional configuration."
-)
-
-# Password & Credential Testing
-tool_categories["password"]=(
-    "john:Password cracker:- Powerful and versatile password cracking capabilities.:- Can be resource-intensive."
-    "hashcat:Advanced password recovery tool:- High performance with support for various algorithms.:- Requires a compatible GPU for best performance."
-    "hydra:Network login cracker:- Fast and effective login cracking.:- Requires manual configuration."
-    "pydictor:Python-based password generator and dictionary tool:- Customizable password generation.:- Requires Python knowledge."
-    "LeakSearch:Tool for searching leaked credentials:- Automates the search for leaked credentials.:- Requires access to leaked databases."
-)
-
-# Forensics & Analysis
-tool_categories["forensics"]=(
-    "autopsy:Digital forensics platform:- Comprehensive digital forensics tools.:- Requires knowledge of digital forensics."
-    "volatility:Advanced memory forensics framework:- Powerful memory analysis capabilities.:- Requires knowledge of memory forensics."
-    "wireshark:Network protocol analyzer:- Comprehensive network analysis.:- Can be complex for beginners."
-    "gitleaks:Tool for finding secrets in git repositories:- Detects secrets in git repositories.:- Limited to git repositories."
-    "trufflehog:Tool for finding secrets in git history:- Effective for finding sensitive data in git history.:- Requires access to git history."
-)
-
-# Mobile & IoT
-tool_categories["mobile"]=(
-    "mobsf:Automated security analysis framework for mobile applications:- Comprehensive mobile app security analysis.:- Requires mobile app knowledge."
-    "firmware-analysis-toolkit:Toolkit for analyzing and emulating firmware:- Effective firmware analysis tools.:- Requires knowledge of firmware analysis."
-)
-
-# Container & Cloud Security
-tool_categories["container"]=(
-    "aquasec:Container security platform:- Effective container security tools.:- Requires knowledge of container security."
-    "kube-bench:Kubernetes security benchmark:- Automated Kubernetes security checks.:- Requires Kubernetes knowledge."
-    "misconfig-mapper:Tool for mapping misconfigurations:- Identifies misconfigurations in systems.:- Requires manual analysis."
-)
-
-# OSINT & Reconnaissance
-tool_categories["osint"]=(
-    "dorks_hunter:Search engine dorking tool:- Automates the process of finding vulnerable sites via search engines.:- Limited to the dorks available."
-    "fav-up:Tool for exploiting favicon.ico:- Useful for identifying web technologies via favicon.ico.:- Limited by the database of favicons."
-    "waymore:Automated wayback machine URL extraction:- Extracts URLs from wayback machine.:- Limited to archived content."
-    "emailfinder:Tool for finding email addresses:- Extracts emails from various sources.:- Limited to the sources provided."
-    "xnLinkFinder:Tool for finding links in JavaScript files:- Automates link extraction from JS files.:- May produce false positives."
-    "getjswords:Tool for extracting JavaScript words:- Useful for finding hidden JavaScript functions.:- Limited to words in JS files."
-    "JSA:JavaScript analysis tool:- Analyzes JavaScript files for security issues.:- Requires manual analysis."
-    "urless:URL extraction tool:- Extracts URLs from various sources.:- Limited to the sources provided."
-)
-
-# Wordlists & Resources
-tool_categories["wordlists"]=(
-    "OneListForAll:One list for all wordlists:- Consolidated wordlists for various purposes.:- May require filtering for specific use cases."
-    "lfi_wordlist:Wordlist for Local File Inclusion attacks:- Specialized wordlist for LFI attacks.:- Limited to LFI-specific scenarios."
-    "ssti_wordlist:Wordlist for Server-Side Template Injection:- Specialized wordlist for SSTI attacks.:- Limited to SSTI-specific scenarios."
-    "subs_wordlist:Wordlist for subdomain enumeration:- Effective for finding subdomains.:- May require filtering for specific domains."
-    "subs_wordlist_big:Larger wordlist for subdomain enumeration:- Comprehensive subdomain enumeration.:- Increased scan time."
-    "resolvers:List of DNS resolvers:- Useful for DNS resolution tasks.:- May include untrusted resolvers."
-    "resolvers_trusted:List of trusted DNS resolvers:- Trusted DNS resolution.:- Limited number of resolvers."
-    "Fuzzing templates:Fuzzing templates for various tools:- Consolidated fuzzing templates.:- Requires filtering for specific use cases."
-    "ripgen:Tool for generating wordlists based on target information:- Custom wordlist generation.:- Requires target-specific information."
-)
-
-# Miscellaneous
-tool_categories["misc"]=(
-    "porch-pirate:Tool for automating package capture:- Automates the process of capturing packages.:- Limited to scenarios where packages are captured."
-)
-
-# Function to display category menu
-display_category_menu() {
+    done
     display_header
-    echo -e "${BOLD}${CYAN}Tool Categories:${NC}"
-    echo
-    
-    local i=1
-    for category in "${!tool_categories[@]}"; do
-        local count=${#tool_categories[$category][@]}
-        local desc=""
-        
-        case $category in
-            network) desc="Network Scanning & Enumeration Tools" ;;
-            vuln_scan) desc="Vulnerability Scanning Tools" ;;
-            exploit) desc="Exploitation Frameworks & Tools" ;;
-            web) desc="Web Application Testing Tools" ;;
-            wireless) desc="Wireless Testing Tools" ;;
-            password) desc="Password & Credential Testing Tools" ;;
-            forensics) desc="Forensics & Analysis Tools" ;;
-            mobile) desc="Mobile & IoT Security Tools" ;;
-            container) desc="Container & Cloud Security Tools" ;;
-            osint) desc="OSINT & Reconnaissance Tools" ;;
-            wordlists) desc="Wordlists & Resources" ;;
-            misc) desc="Miscellaneous Tools" ;;
-        esac
-        
-        echo -e "${MAGENTA}$i)${NC} ${BOLD}$desc${NC} (${YELLOW}$count tools${NC})"
-        categories_array[$i]=$category
-        ((i++))
-    done
-    
-    echo -e "${MAGENTA}a)${NC} ${BOLD}Install all tools${NC}"
-    echo -e "${MAGENTA}q)${NC} ${BOLD}Quit${NC}"
-    echo
+    echo -e "${BLUE}Installing all ${#category_tools[@]} tools in category: ${BOLD}$category_name${NC}"; sleep 2
+    for tool_data in "${category_tools[@]}"; do install_tool "$tool_data"; done
+    echo -e "\n${GREEN}Finished installing tools for category: $category_name${NC}"
+    echo -e "Press any key to return to the menu..."; read -n 1 -s
 }
 
-# Function to install tools from a specific category
-install_category() {
-    local category=$1
-    local tools=("${tool_categories[$category][@]}")
-    local total_steps=${#tools[@]}
-    local current_step=0
-    
+install_all() {
     display_header
-    echo -e "${BOLD}${CYAN}Installing ${category} tools...${NC}"
-    echo
-    
-    for tool in "${tools[@]}"; do
-        IFS=':' read -r name description advantages disadvantages <<< "$tool"
-        
-        clear
-        install_tool "$name" "$description" "$advantages" "$disadvantages"
-        
-        loading_bar $((++current_step)) $total_steps
-    done
-    
-    echo -e "\n${GREEN}All tools in ${category} category installed.${NC}"
-    sleep 2
-}
-
-# Function to install all tools
-install_all_tools() {
-    local all_tools=()
-    
-    # Combine all categories
-    for category in "${!tool_categories[@]}"; do
-        all_tools+=("${tool_categories[$category][@]}")
-    done
-    
-    local total_steps=${#all_tools[@]}
-    local current_step=0
-    
-    display_header
-    echo -e "${BOLD}${CYAN}Installing all tools...${NC}"
-    echo
-    
-    for tool in "${all_tools[@]}"; do
-        IFS=':' read -r name description advantages disadvantages <<< "$tool"
-        
-        clear
-        install_tool "$name" "$description" "$advantages" "$disadvantages"
-        
-        loading_bar $((++current_step)) $total_steps
-    done
-    
+    echo -e "${BLUE}Installing all ${#TOOLS[@]} development tools...${NC}"
+    read -p "This will install all tools. Are you sure? (y/N): " -r choice
+    if [[ ! "$choice" =~ ^[Yy]$ ]]; then return; fi
+    for tool_data in "${TOOLS[@]}"; do install_tool "$tool_data"; done
     echo -e "\n${GREEN}All tools installed.${NC}"
-    sleep 2
+    echo -e "Press any key to return to the menu..."; read -n 1 -s
 }
 
-# Main function
-main() {
-    # Check if running as root
-    if [ "$(id -u)" -eq 0 ]; then
-        echo -e "${RED}Error: This script should not be run as root.${NC}"
-        exit 1
-    fi
-    
-    # Initialize variables
-    declare -A categories_array
-    AUR_HELPER="yay"
-    
-    # Ensure an AUR helper is installed
-    ensure_aur_helper
-    
-    # Main loop
+main_menu() {
     while true; do
-        display_category_menu
-        echo -n -e "${CYAN}Select a category to install (or 'q' to quit): ${NC}"
-        read -r choice
-        
-        case $choice in
-            [0-9]*)
-                if [ -n "${categories_array[$choice]}" ]; then
-                    install_category "${categories_array[$choice]}"
+        display_header
+        echo -e "${BOLD}${CYAN}Select a category to install:${NC}\n"
+        for i in "${!ORDERED_CATEGORIES[@]}"; do
+            local key="${ORDERED_CATEGORIES[$i]}"
+            local name="${TOOL_CATEGORIES[$key]}"
+            echo -e "  ${MAGENTA}$((i + 1)))${NC} ${BOLD}$name${NC}"
+        done
+        echo -e "\n  ${MAGENTA}a)${NC} ${BOLD}Install All Tools${NC}"
+        echo -e "  ${MAGENTA}q)${NC} ${BOLD}Quit${NC}\n"
+        read -p "Enter your choice: " -r choice
+        case "$choice" in
+            [1-9]*)
+                if (( choice > 0 && choice <= ${#ORDERED_CATEGORIES[@]} )); then
+                    install_from_category "${ORDERED_CATEGORIES[$((choice-1))]}"
                 else
-                    echo -e "${RED}Invalid choice. Please try again.${NC}"
-                    sleep 1
+                    echo -e "${RED}Invalid choice. Press any key.${NC}"; read -n 1 -s
                 fi
                 ;;
-            "a"|"A")
-                install_all_tools
-                ;;
-            "q"|"Q")
-                echo -e "${GREEN}Exiting. Thank you for using the Ultimate Pentest Installer!${NC}"
-                exit 0
-                ;;
-            *)
-                echo -e "${RED}Invalid choice. Please try again.${NC}"
-                sleep 1
-                ;;
+            a|A) install_all ;;
+            q|Q) echo -e "${GREEN}Exiting installer.${NC}"; exit 0 ;;
+            *) echo -e "${RED}Invalid choice. Press any key.${NC}"; read -n 1 -s ;;
         esac
     done
 }
 
-# Run the main function
+# --- Script Entry Point ---
+main() {
+    check_sudo
+    detect_package_manager
+    ensure_aur_helper # Will only run on Arch Linux
+    main_menu
+}
+
 main
+

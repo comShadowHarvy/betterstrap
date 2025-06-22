@@ -2,8 +2,7 @@
 
 # Enhanced Development Tools Installer
 # A comprehensive installer for development tools with categorization and interactive options
-# Version 2.0 (Updated by Gemini)
-
+# Version 2.0
 set -eo pipefail
 
 # --- Style and Color Configuration ---
