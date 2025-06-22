@@ -6,7 +6,7 @@
 # 1. Check for dependencies.
 # 2. Identify which popular or standard repositories are missing/disabled.
 # 3. Ask the user which ones they wish to set up.
-# 4. Handle custom repos (Chaotic, BlackArch) or official repos (multilib, standard-arch).
+# 4. Handle custom repos (CachyOS, Chaotic-AUR) or official repos (multilib, standard-arch).
 # 5. Provide a final summary.
 #
 
@@ -28,8 +28,7 @@ INFO="[${C_BLUE}*${C_RESET}]"
 WARN="[${C_YELLOW}!${C_RESET}]"
 
 # List of repositories the script knows how to handle
-# 'standard-arch' is for systems that replace default repos (e.g., CachyOS)
-REPOS_TO_MANAGE=("chaotic-aur" "blackarch" "archstrike" "multilib" "standard-arch")
+REPOS_TO_MANAGE=("cachyos" "chaotic-aur" "blackarch" "archstrike" "multilib" "standard-arch")
 
 # Create a temporary directory and set a trap to clean it up on exit
 TMP_DIR=$(mktemp -d)
@@ -74,9 +73,10 @@ check_dependencies() {
 # Check if a repository is already configured and enabled in pacman.conf
 repo_exists() {
     local repo_name="$1"
-    # 'standard-arch' is considered present if the [core] repo exists
     if [[ "$repo_name" == "standard-arch" ]]; then
         grep -q "^\s*\[core\]" /etc/pacman.conf
+    elif [[ "$repo_name" == "cachyos" ]]; then
+        grep -q "^\s*\[cachyos" /etc/pacman.conf
     else
         grep -q "^\s*\[$repo_name\]" /etc/pacman.conf
     fi
@@ -84,32 +84,46 @@ repo_exists() {
 
 # --- Repository Setup Functions ---
 
+setup_cachyos() {
+    log header "Setting up CachyOS Repository"
+    
+    log info "Fetching CachyOS keyring..."
+    cd "$TMP_DIR" || return 1
+    curl -O 'https://mirror.cachyos.org/cachyos-repo.tar.zst' || { handle_error "Failed to download cachyos-repo.tar.zst"; return 1; }
+    
+    log info "Verifying and extracting repository setup files..."
+    if ! tar -xvf cachyos-repo.tar.zst; then
+        handle_error "Failed to extract cachyos-repo.tar.zst"
+        return 1
+    fi
+    
+    cd cachyos-repo || return 1
+
+    log info "Setting up CachyOS keyring and mirrorlist..."
+    sudo ./cachyos-repo.sh || { handle_error "CachyOS setup script failed."; return 1; }
+    
+    log success "CachyOS repository and keyring have been added."
+    log warn "${C_BOLD}ACTION REQUIRED:${C_RESET} ${C_YELLOW}For CachyOS packages to have priority, you ${C_BOLD}MUST${C_RESET}${C_YELLOW} manually edit '/etc/pacman.conf'."
+    log warn "Move the '[cachyos-v4]', '[cachyos-v3]', and '[cachyos]' repository blocks to be ${C_BOLD}BEFORE${C_RESET}${C_YELLOW} the standard '[core]', '[extra]', and '[community]' repositories."
+}
+
 add_standard_arch_repos() {
     log header "Adding Standard Arch Linux Repositories"
     log warn "This is for systems like CachyOS that replace the default repos."
-    log warn "On standard Arch or EndeavourOS, this is not needed."
     
-    # Create a block of text to append
     local standard_repos_block
     standard_repos_block=$(cat <<'EOF'
 
-#
-# Standard Arch Linux Repositories (added by script)
-#
 [core]
 Include = /etc/pacman.d/mirrorlist
-
 [extra]
 Include = /etc/pacman.d/mirrorlist
-
 [community]
 Include = /etc/pacman.d/mirrorlist
 EOF
 )
-    # Append the block to pacman.conf
     echo "$standard_repos_block" | sudo tee -a /etc/pacman.conf > /dev/null
-    log success "Standard Arch Linux repositories ([core], [extra], [community]) have been added."
-    log info "You may need to edit /etc/pacman.d/mirrorlist to enable your preferred mirrors."
+    log success "Standard Arch Linux repositories have been added to the end of your pacman.conf."
 }
 
 setup_chaotic_aur() {
@@ -162,6 +176,7 @@ enable_multilib() {
     fi
 }
 
+
 # --- Main Script Logic ---
 main() {
     # Initial checks
@@ -187,6 +202,7 @@ main() {
             read -p "$(echo -e "\n${C_YELLOW}?${C_RESET} Do you want to add/enable the '${C_BOLD}$repo${C_RESET}' repository? (y/N) ")" answer
             if [[ "$answer" =~ ^[Yy]$ ]]; then
                 case "$repo" in
+                    "cachyos")       setup_cachyos ;;
                     "standard-arch") add_standard_arch_repos ;;
                     "chaotic-aur")   setup_chaotic_aur ;;
                     "blackarch")     setup_blackarch ;;
