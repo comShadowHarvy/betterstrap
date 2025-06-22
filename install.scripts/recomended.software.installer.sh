@@ -1,11 +1,15 @@
 #!/bin/bash
 
 # Enhanced Recommended Software Installer
-# A comprehensive installer that categorizes software and provides an interactive selection menu
+# A comprehensive, cross-distro installer for common desktop applications.
+# Version 2.0 
+#
+# This script provides an interactive menu to install software categorized
+# by function, supporting various package managers and formats.
 
-#set -eo pipefail
+set -eo pipefail
 
-# Colors and formatting
+# --- Style and Color Configuration ---
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -15,749 +19,269 @@ CYAN='\033[0;36m'
 BOLD='\033[1m'
 NC='\033[0m' # No Color
 
-# Log file
-LOG_FILE="software_install_$(date +%Y%m%d_%H%M%S).log"
+# --- Global Variables ---
+PKG_MANAGER=""
+PKG_INSTALL=""
+PKG_UPDATE=""
+AUR_HELPER=""
+DISTRO=""
+LOG_FILE="recommended_software_install_$(date +%Y-%m-%d_%H-%M-%S).txt"
 
-# Logging function
-log() {
-  local level=$1
-  shift
-  local timestamp=$(date "+%Y-%m-%d %H:%M:%S")
+# --- Helper Functions ---
 
-  # Write to log file
-  echo "$timestamp [$level] $*" >>"$LOG_FILE"
-
-  # Output to console with colors
-  case "$level" in
-  "INFO") echo -e "${GREEN}[INFO]${NC} $*" ;;
-  "WARN") echo -e "${YELLOW}[WARN]${NC} $*" ;;
-  "ERROR") echo -e "${RED}[ERROR]${NC} $*" ;;
-  esac
+# Function to log messages to a file and console
+log_message() {
+    local level="$1"; shift
+    local message="$*"
+    local timestamp
+    timestamp=$(date "+%Y-%m-%d %H:%M:%S")
+    # Write clean message to log file
+    echo "$timestamp [$level] $message" >> "$LOG_FILE"
+    # Write colorized message to console
+    case "$level" in
+        INFO) echo -e "${GREEN}[INFO]${NC} $message" ;;
+        WARN) echo -e "${YELLOW}[WARN]${NC} $message" ;;
+        ERROR) echo -e "${RED}[ERROR]${NC} $message" ;;
+    esac
 }
 
-# Initialize log file
-init_log() {
-  echo "=== Software Installation Log - $(date) ===" >"$LOG_FILE"
-  echo "System: $(uname -a)" >>"$LOG_FILE"
-}
-
-# Enhanced loading bar with Unicode blocks
-loading_bar() {
-  local current=$1
-  local total=$2
-  local percent=$((100 * current / total))
-  local bar_length=30
-  local filled_length=$((bar_length * current / total))
-  local empty_length=$((bar_length - filled_length))
-
-  printf -v bar "%0.s█" $(seq 1 $filled_length)
-  printf -v space "%0.s░" $(seq 1 $empty_length)
-
-  echo -ne "${BLUE}Progress: [${GREEN}${bar}${BLUE}${space}] ${YELLOW}${percent}%${NC}\r"
-}
-
-# Check for root/sudo privileges
+# Function to check for sudo privileges
 check_sudo() {
-  log "INFO" "Checking for sudo privileges..."
-
-  if [ "$EUID" -eq 0 ]; then
-    log "WARN" "Running as root is not recommended. Consider using a regular user with sudo privileges."
-  elif ! command -v sudo &>/dev/null; then
-    log "ERROR" "sudo is not installed. Please install sudo and grant your user appropriate privileges."
-    exit 1
-  elif ! sudo -v &>/dev/null; then
-    log "ERROR" "You do not have sudo privileges. Please contact your system administrator."
-    exit 1
-  else
-    log "INFO" "Sudo privileges confirmed."
-  fi
+    if [[ "$EUID" -eq 0 ]]; then
+        log_message "ERROR" "This script should not be run as root. Run as a regular user."
+        exit 1
+    fi
+    if ! command -v sudo &>/dev/null || ! sudo -v; then
+        log_message "ERROR" "sudo is required and the current user must have sudo privileges."
+        exit 1
+    fi
 }
 
-# Detect package manager and distribution
+# Function to detect the system's package manager and distribution
 detect_system() {
-  log "INFO" "Detecting system..."
+    log_message "INFO" "Detecting system..."
+    if [ -f /etc/os-release ]; then
+        # shellcheck source=/dev/null
+        . /etc/os-release
+        DISTRO=$ID
+    else
+        log_message "ERROR" "Cannot detect Linux distribution."
+        exit 1
+    fi
 
-  if [ -f /etc/os-release ]; then
-    . /etc/os-release
-    DISTRO=$ID
-    DISTRO_NAME=$NAME
-    DISTRO_VERSION=$VERSION_ID
+    if command -v apt &>/dev/null; then
+        PKG_MANAGER="apt"; PKG_INSTALL="sudo apt install -y"; PKG_UPDATE="sudo apt update"
+    elif command -v dnf &>/dev/null; then
+        PKG_MANAGER="dnf"; PKG_INSTALL="sudo dnf install -y"; PKG_UPDATE="sudo dnf check-update || true"
+    elif command -v pacman &>/dev/null; then
+        PKG_MANAGER="pacman"; PKG_INSTALL="sudo pacman -S --needed --noconfirm"; PKG_UPDATE="sudo pacman -Sy"
+    else
+        log_message "ERROR" "No supported package manager found (apt, dnf, pacman)."
+        exit 1
+    fi
+    log_message "INFO" "Detected Distro: $DISTRO, Package Manager: $PKG_MANAGER"
+}
 
-    case $ID in
-    debian | ubuntu | linuxmint | pop | elementary | zorin)
-      PKG_MANAGER="apt"
-      PKG_CHECK="dpkg -l"
-      PKG_INSTALL="sudo apt install -y"
-      PKG_UPDATE="sudo apt update"
-      INSTALL_FLATPAK="sudo apt install -y flatpak"
-      INSTALL_SNAP="sudo apt install -y snapd"
-      HAS_AUR=false
-      ;;
-    fedora)
-      PKG_MANAGER="dnf"
-      PKG_CHECK="rpm -q"
-      PKG_INSTALL="sudo dnf install -y"
-      PKG_UPDATE="sudo dnf check-update || true"
-      INSTALL_FLATPAK="sudo dnf install -y flatpak"
-      INSTALL_SNAP="sudo dnf install -y snapd"
-      HAS_AUR=false
-      ;;
-    centos | rhel)
-      PKG_MANAGER="dnf"
-      PKG_CHECK="rpm -q"
-      PKG_INSTALL="sudo dnf install -y"
-      PKG_UPDATE="sudo dnf check-update || true"
-      INSTALL_FLATPAK="sudo dnf install -y flatpak"
-      INSTALL_SNAP="sudo dnf install -y epel-release && sudo dnf install -y snapd"
-      HAS_AUR=false
-      ;;
-    arch | manjaro | endeavouros)
-      PKG_MANAGER="pacman"
-      PKG_CHECK="pacman -Qs"
-      PKG_INSTALL="sudo pacman -S --needed --noconfirm"
-      PKG_UPDATE="sudo pacman -Sy"
-      INSTALL_FLATPAK="sudo pacman -S --needed --noconfirm flatpak"
-      INSTALL_SNAP="yay -S --needed --noconfirm snapd"
-      HAS_AUR=true
+# Function to check if a command or package is installed
+is_installed() {
+    local name="$1"
+    local method="$2"
 
-      # Check for AUR helper
-      if command -v yay &>/dev/null; then
-        AUR_HELPER="yay"
-        AUR_INSTALL="yay -S --needed --noconfirm"
-        log "INFO" "Using yay as AUR helper"
-      elif command -v paru &>/dev/null; then
-        AUR_HELPER="paru"
-        AUR_INSTALL="paru -S --needed --noconfirm"
-        log "INFO" "Using paru as AUR helper"
-      else
-        log "WARN" "No AUR helper found. Installing yay..."
-        install_aur_helper
-      fi
-      ;;
-    opensuse* | suse)
-      PKG_MANAGER="zypper"
-      PKG_CHECK="rpm -q"
-      PKG_INSTALL="sudo zypper install -y"
-      PKG_UPDATE="sudo zypper refresh"
-      INSTALL_FLATPAK="sudo zypper install -y flatpak"
-      INSTALL_SNAP="sudo zypper install -y snapd"
-      HAS_AUR=false
-      ;;
-    *)
-      log "ERROR" "Unsupported distribution: $NAME"
-      exit 1
-      ;;
+    case "$method" in
+        flatpak) flatpak list --app | grep -q "$name" ;;
+        snap) snap list | grep -q "$name" ;;
+        *) command -v "$name" &>/dev/null || $PKG_INSTALL -s "$name" &>/dev/null ;; # Fallback for package check
     esac
-
-    log "INFO" "Detected distribution: $DISTRO_NAME $DISTRO_VERSION"
-    log "INFO" "Package manager: $PKG_MANAGER"
-  else
-    log "ERROR" "Could not detect distribution"
-    exit 1
-  fi
 }
 
-# Install AUR helper (for Arch-based distributions)
-install_aur_helper() {
-  log "INFO" "Installing yay AUR helper..."
-
-  # Install dependencies
-  $PKG_INSTALL git base-devel
-
-  # Create temporary directory
-  local tmp_dir=$(mktemp -d)
-  cd "$tmp_dir"
-
-  # Clone and build yay
-  git clone https://aur.archlinux.org/yay.git
-  cd yay
-  makepkg -si --noconfirm
-
-  # Clean up
-  cd "$OLDPWD"
-  rm -rf "$tmp_dir"
-
-  # Verify installation
-  if command -v yay &>/dev/null; then
-    AUR_HELPER="yay"
-    AUR_INSTALL="yay -S --needed --noconfirm"
-    log "INFO" "yay installed successfully"
-  else
-    log "ERROR" "Failed to install yay"
-    exit 1
-  fi
+# Ensures an AUR helper is available on Arch Linux
+ensure_aur_helper() {
+    if [[ "$PKG_MANAGER" != "pacman" ]]; then return; fi
+    if is_installed yay "yay"; then AUR_HELPER="yay"; return; fi
+    if is_installed paru "paru"; then AUR_HELPER="paru"; return; fi
+    log_message "WARN" "No AUR helper found. Attempting to install 'yay'."
+    sudo pacman -S --noconfirm --needed git base-devel
+    local temp_dir; temp_dir=$(mktemp -d)
+    ( cd "$temp_dir" && git clone https://aur.archlinux.org/yay.git && cd yay && makepkg -si --noconfirm )
+    rm -rf "$temp_dir"
+    if is_installed yay "yay"; then AUR_HELPER="yay"; else log_message "ERROR" "Failed to install AUR helper."; fi
 }
 
-# Install Flatpak
-install_flatpak_support() {
-  log "INFO" "Setting up Flatpak support..."
+# --- Installation Logic ---
 
-  if command -v flatpak &>/dev/null; then
-    log "INFO" "Flatpak is already installed"
-  else
-    log "INFO" "Installing Flatpak..."
-    $INSTALL_FLATPAK
+install_with_pkg_manager() {
+    log_message "INFO" "Installing '$1' with $PKG_MANAGER"
+    if $PKG_INSTALL "$2"; then log_message "INFO" "'$1' installed successfully."; else log_message "ERROR" "Failed to install '$1'."; return 1; fi
+}
 
-    # Add Flathub repository
+install_with_flatpak() {
+    is_installed flatpak "flatpak" || install_with_pkg_manager "flatpak" "flatpak"
     sudo flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-    log "INFO" "Added Flathub repository"
-  fi
+    log_message "INFO" "Installing '$1' with Flatpak."
+    if sudo flatpak install -y flathub "$2"; then log_message "INFO" "'$1' installed successfully."; else log_message "ERROR" "Failed to install '$1'."; return 1; fi
 }
 
-# Install Snap
-install_snap_support() {
-  log "INFO" "Setting up Snap support..."
-
-  if command -v snap &>/dev/null; then
-    log "INFO" "Snap is already installed"
-  else
-    log "INFO" "Installing Snap..."
-    $INSTALL_SNAP
-
-    # Enable snapd service if needed
-    if systemctl --version &>/dev/null; then
-      sudo systemctl enable --now snapd.socket
-      sudo systemctl enable --now snapd.service
-    fi
-
-    # Create symbolic link if it doesn't exist
-    if [ ! -e /snap ] && [ -d /var/lib/snapd/snap ]; then
-      sudo ln -s /var/lib/snapd/snap /snap
-    fi
-  fi
+install_with_snap() {
+    is_installed snap "snap" || install_with_pkg_manager "snapd" "snapd"
+    # For non-Debian systems that need the service enabled
+    if ! dpkg -l &>/dev/null; then sudo systemctl enable --now snapd.socket; fi
+    log_message "INFO" "Installing '$1' with Snap."
+    if sudo snap install "$2"; then log_message "INFO" "'$1' installed successfully."; else log_message "ERROR" "Failed to install '$1'."; return 1; fi
 }
 
-# Check if package is installed
-is_package_installed() {
-  local package=$1
-  local package_manager=$2
+# Primary installer function dispatcher
+install_tool() {
+    IFS=':' read -r name description advantages disadvantages category method source <<< "$1"
 
-  case $package_manager in
-  "system")
-    case $PKG_MANAGER in
-    apt)
-      dpkg -l "$package" &>/dev/null
-      ;;
-    dnf | zypper)
-      rpm -q "$package" &>/dev/null
-      ;;
-    pacman)
-      pacman -Qi "$package" &>/dev/null
-      ;;
+    clear; display_header
+    display_description "$name" "$description" "$advantages" "$disadvantages" "$method"
+
+    if is_installed "$name" "$method"; then
+        log_message "INFO" "$name is already installed."
+        sleep 2; return 0;
+    fi
+
+    local success=0
+    case "$method" in
+        pkg) install_with_pkg_manager "$name" "$source" || success=1 ;;
+        flatpak) install_with_flatpak "$name" "$source" || success=1 ;;
+        snap) install_with_snap "$name" "$source" || success=1 ;;
+        *) log_message "ERROR" "Unknown installation method '$method' for $name."; success=1 ;;
     esac
-    ;;
-  "flatpak")
-    flatpak list --app | grep -q "$package"
-    ;;
-  "snap")
-    snap list | grep -q "$package"
-    ;;
-  "aur")
-    if [ "$HAS_AUR" = true ]; then
-      $AUR_HELPER -Qi "$package" &>/dev/null
-    else
-      return 1
-    fi
-    ;;
-  esac
-}
 
-# Display header with detected system info
-display_header() {
-  clear
-  echo -e "${BOLD}${BLUE}=====================================================${NC}"
-  echo -e "${BOLD}${CYAN}          Recommended Software Installer              ${NC}"
-  echo -e "${BOLD}${BLUE}=====================================================${NC}"
-  echo -e "${BLUE}Distribution:${NC} $DISTRO_NAME $DISTRO_VERSION"
-  echo -e "${BLUE}Package Manager:${NC} $PKG_MANAGER"
-
-  if [ "$HAS_AUR" = true ]; then
-    echo -e "${BLUE}AUR Helper:${NC} $AUR_HELPER"
-  fi
-
-  # Add system info
-  echo -e "${BLUE}Kernel:${NC} $(uname -r)"
-  echo -e "${BLUE}Architecture:${NC} $(uname -m)"
-
-  # Add memory and disk info
-  mem_total=$(free -h | awk '/^Mem:/{print $2}')
-  mem_avail=$(free -h | awk '/^Mem:/{print $7}')
-  disk_avail=$(df -h . | awk 'NR==2 {print $4}')
-  disk_total=$(df -h . | awk 'NR==2 {print $2}')
-  echo -e "${BLUE}Memory:${NC} ${mem_avail} available / ${mem_total} total"
-  echo -e "${BLUE}Disk Space:${NC} ${disk_avail} available / ${disk_total} total"
-
-  echo
-}
-
-# Function to display a description
-display_description() {
-  local title=$1
-  local description=$2
-  local advantages=$3
-  local disadvantages=$4
-  local source=$5
-
-  echo -e "${BOLD}${BLUE}=====================================================${NC}"
-  echo -e "${BOLD}${CYAN}   $title${NC}"
-  echo -e "${BOLD}${BLUE}=====================================================${NC}"
-  echo
-  echo -e "${BOLD}Description:${NC}"
-  echo -e "$description"
-  echo
-  echo -e "${BOLD}${GREEN}Advantages:${NC}"
-  echo -e "$advantages"
-  echo
-  echo -e "${BOLD}${RED}Disadvantages:${NC}"
-  echo -e "$disadvantages"
-  echo
-  echo -e "${BOLD}${MAGENTA}Installation Source:${NC} $source"
-  echo
-  echo -e "${BLUE}--------------------------------------------------${NC}"
-  echo
-}
-
-# Software categories
-declare -A categories
-categories["office"]="Office and Productivity"
-categories["internet"]="Internet and Communication"
-categories["multimedia"]="Multimedia and Entertainment"
-categories["graphics"]="Graphics and Design"
-categories["utilities"]="System Utilities"
-categories["development"]="Development Tools"
-categories["security"]="Security and Privacy"
-categories["games"]="Games and Entertainment"
-
-# Package name mappings for different distributions
-get_package_name() {
-  local app=$1
-  local distro=$DISTRO
-
-  # Define package names for different distributions
-  case "$app" in
-  "libreoffice")
-    case $distro in
-    debian | ubuntu | linuxmint | pop) echo "libreoffice" ;;
-    fedora | centos | rhel) echo "libreoffice" ;;
-    arch | manjaro | endeavouros) echo "libreoffice-fresh" ;;
-    *) echo "libreoffice" ;;
-    esac
-    ;;
-  "firefox")
-    case $distro in
-    debian | ubuntu | linuxmint | pop) echo "firefox" ;;
-    fedora | centos | rhel) echo "firefox" ;;
-    arch | manjaro | endeavouros) echo "firefox" ;;
-    *) echo "firefox" ;;
-    esac
-    ;;
-  # Add more package name mappings as needed
-  *)
-    echo "$app"
-    ;;
-  esac
-}
-
-# Define software with categories and installation methods
-declare -A software_info
-
-# Office and Productivity
-software_info["libreoffice"]="office:Free and powerful office suite, compatible with Microsoft Office formats:- Comprehensive office suite.\n- Free and open-source.:- May not have all features of Microsoft Office.\n- Interface may be different for MS Office users.:system"
-software_info["onlyoffice-desktopeditors"]="office:Powerful office suite with collaborative features:- Collaborative editing.\n- Good compatibility with MS Office.:- Some advanced features require a subscription.:flatpak"
-software_info["simplenote"]="office:Simple and fast note-taking app:- Fast and easy to use.\n- Cross-platform support.:- Limited advanced features.:snap"
-software_info["nextcloud-desktop"]="office:Self-hosted productivity platform client:- Complete control over data.\n- Many plugins available.:- Requires server setup.:system"
-
-# Internet and Communication
-software_info["firefox"]="internet:Fast and privacy-focused web browser:- Strong privacy protections.\n- Wide range of extensions.:- Can be resource-intensive.:system"
-software_info["chromium"]="internet:Open-source web browser that is the foundation of Chrome:- Fast performance.\n- Extensive extension library.:- Privacy concerns from Google integration.:system"
-software_info["thunderbird"]="internet:Free and open-source email client:- Supports multiple email protocols.\n- Extensible with add-ons.:- Interface may seem dated.:system"
-software_info["slack"]="internet:Collaboration hub for work, providing chat and file sharing:- Integrates with many services.\n- Good team collaboration features.:- Free version has limitations.:snap"
-software_info["discord"]="internet:VoIP, instant messaging, and digital distribution platform:- Free and feature-rich.\n- Large user base.:- Can be resource-intensive.:flatpak"
-
-# Multimedia and Entertainment
-software_info["vlc"]="multimedia:Free and open-source multimedia player:- Plays almost any media file.:- Interface may seem basic.:system"
-software_info["spotify"]="multimedia:Digital music service providing access to millions of songs:- Huge music library.\n- Easy to use.:- Free version has ads.:snap"
-software_info["obs-studio"]="multimedia:Free and open source software for video recording and live streaming:- Professional-grade features.\n- Free and open-source.:- Can be complex to set up.:system"
-software_info["kodi"]="multimedia:Free and open source media player application:- Extensive media library features.\n- Customizable with add-ons.:- May be too complex for simple needs.:system"
-
-# Graphics and Design
-software_info["gimp"]="graphics:Powerful and free image editor:- Comparable to Adobe Photoshop.\n- Free and open-source.:- Can have a steep learning curve.:system"
-software_info["krita"]="graphics:Professional and open-source painting program:- Great for digital painting.\n- Free and open-source.:- Not as versatile as Photoshop for photo editing.:system"
-software_info["inkscape"]="graphics:Professional vector graphics editor:- Powerful vector editing capabilities.\n- Free and open-source.:- Learning curve for beginners.:system"
-software_info["blender"]="graphics:Free and open source 3D creation suite:- Comprehensive 3D modeling and animation.\n- Free and open-source.:- Complex interface and steep learning curve.:system"
-
-# System Utilities
-software_info["timeshift"]="utilities:System restore tool for Linux:- Easy system backups and restores.:- Can use a lot of disk space.:system"
-software_info["bleachbit"]="utilities:Disk space cleaner and privacy manager:- Free up space and protect privacy.:- Can delete important files if not used carefully.:system"
-software_info["htop"]="utilities:Interactive process viewer for Unix systems:- Easy-to-use interface.\n- Detailed system monitoring.:- No built-in logging.:system"
-software_info["glances"]="utilities:Cross-platform system monitoring tool:- Detailed and comprehensive monitoring.:- Requires command-line knowledge.:system"
-software_info["rclone"]="utilities:Command-line program to manage files on cloud storage:- Supports many cloud providers.\n- Powerful and flexible.:- Requires command-line knowledge.:system"
-
-# Development Tools
-software_info["visual-studio-code"]="development:Popular code editor from Microsoft:- Highly extensible.\n- Large community and support.:- Some features require extensions.:system"
-software_info["git"]="development:Free and open-source distributed version control system:- Essential for version control.:- Requires learning Git commands.:system"
-software_info["docker"]="development:Platform for developing, shipping, and running applications in containers:- Isolates applications.\n- Consistent environments.:- Requires learning container concepts.:system"
-software_info["postman"]="development:API development environment:- Makes API testing easy.\n- Good documentation features.:- Can be resource-intensive.:snap"
-
-# Security and Privacy
-software_info["keepassxc"]="security:Cross-platform password manager:- Strong encryption.\n- Free and open-source.:- Interface can seem complex.:system"
-software_info["bitwarden"]="security:Open source password management solution:- Cross-platform synchronization.\n- Free tier is feature-rich.:- Online account required for sync.:snap"
-software_info["ufw"]="security:Uncomplicated Firewall:- Easy to configure.\n- Good default settings.:- Limited advanced features.:system"
-software_info["cryptomator"]="security:Free cloud encryption tool:- Encrypts files before uploading to cloud.\n- Cross-platform.:- Adds additional steps to workflow.:flatpak"
-
-# Games and Entertainment
-software_info["steam"]="games:Digital distribution platform for video games:- Huge game library.\n- Regular sales.:- Resource-intensive client.:system"
-software_info["lutris"]="games:Open gaming platform for Linux:- Simplifies game installation.\n- Supports various game sources.:- Some games may not work perfectly.:system"
-software_info["minecraft"]="games:Popular sandbox video game:- Infinite possibilities.\n- Cross-platform multiplayer.:- Requires account purchase for full version.:flatpak"
-
-# Function to install software based on its source
-install_software_item() {
-  local name=$1
-  local info=${software_info[$name]}
-
-  IFS=':' read -r category description advantages disadvantages source <<<"$info"
-
-  display_description "Installing $name" "$description" "$advantages" "$disadvantages" "$source"
-
-  # Check if already installed
-  if is_package_installed "$name" "$source"; then
-    log "INFO" "$name is already installed. Skipping installation."
-    echo -e "${GREEN}$name is already installed. Skipping installation.${NC}"
-    sleep 1
-    return 0
-  fi
-
-  # Install based on source
-  log "INFO" "Installing $name from $source source"
-  echo -e "${YELLOW}Installing $name...${NC}"
-
-  case $source in
-  "system")
-    local pkg_name=$(get_package_name "$name")
-
-    if [ "$PKG_MANAGER" = "pacman" ] && ! $PKG_INSTALL "$pkg_name" &>>"$LOG_FILE"; then
-      # If package is not in official repos, try AUR if available
-      if [ "$HAS_AUR" = true ]; then
-        log "INFO" "Package not found in official repos, trying AUR..."
-        $AUR_INSTALL "$pkg_name" &>>"$LOG_FILE"
-      else
-        log "ERROR" "Failed to install $name"
-        echo -e "${RED}Failed to install $name. See log for details.${NC}"
-        sleep 2
-        return 1
-      fi
-    elif ! $PKG_INSTALL "$pkg_name" &>>"$LOG_FILE"; then
-      log "ERROR" "Failed to install $name"
-      echo -e "${RED}Failed to install $name. See log for details.${NC}"
-      sleep 2
-      return 1
-    fi
-    ;;
-  "flatpak")
-    if ! command -v flatpak &>/dev/null; then
-      log "INFO" "Flatpak not installed. Installing now..."
-      install_flatpak_support
-    fi
-    flatpak install -y flathub "$name" &>>"$LOG_FILE" || {
-      log "ERROR" "Failed to install $name via Flatpak"
-      echo -e "${RED}Failed to install $name via Flatpak. See log for details.${NC}"
-      sleep 2
-      return 1
-    }
-    ;;
-  "snap")
-    if ! command -v snap &>/dev/null; then
-      log "INFO" "Snap not installed. Installing now..."
-      install_snap_support
-    fi
-    sudo snap install "$name" &>>"$LOG_FILE" || {
-      log "ERROR" "Failed to install $name via Snap"
-      echo -e "${RED}Failed to install $name via Snap. See log for details.${NC}"
-      sleep 2
-      return 1
-    }
-    ;;
-  "aur")
-    if [ "$HAS_AUR" = true ]; then
-      $AUR_INSTALL "$name" &>>"$LOG_FILE" || {
-        log "ERROR" "Failed to install $name from AUR"
-        echo -e "${RED}Failed to install $name from AUR. See log for details.${NC}"
-        sleep 2
-        return 1
-      }
-    else
-      log "WARN" "AUR not available on this distribution. Skipping $name."
-      echo -e "${YELLOW}AUR not available on this distribution. Skipping $name.${NC}"
-      sleep 2
-      return 1
-    fi
-    ;;
-  esac
-
-  log "INFO" "Successfully installed $name"
-  echo -e "${GREEN}Successfully installed $name.${NC}"
-  sleep 1
-  return 0
-}
-
-# Install all software in a category
-install_category() {
-  local category=$1
-  local category_name=${categories[$category]}
-  local software_list=()
-
-  # Find all software in this category
-  for name in "${!software_info[@]}"; do
-    local info=${software_info[$name]}
-    IFS=':' read -r cat _ _ _ _ <<<"$info"
-
-    if [ "$cat" = "$category" ]; then
-      software_list+=("$name")
-    fi
-  done
-
-  local total=${#software_list[@]}
-  if [ $total -eq 0 ]; then
-    log "WARN" "No software found in category $category_name"
-    echo -e "${YELLOW}No software found in category $category_name.${NC}"
     sleep 2
-    return
-  fi
+    return $success
+}
 
-  display_header
-  log "INFO" "Installing all software in category: $category_name"
-  echo -e "${CYAN}Installing all software in category: ${BOLD}$category_name${NC}"
-  echo -e "${BLUE}Total software in this category: ${YELLOW}$total${NC}"
-  sleep 1
 
-  local current=0
-  for name in "${software_list[@]}"; do
+# --- UI and Menu Functions ---
+
+display_header() {
     clear
-    install_software_item "$name"
-    ((current++))
-    loading_bar $current $total
-  done
-
-  echo -e "\n${GREEN}Completed installation of $category_name software.${NC}"
-  sleep 2
+    echo -e "${BOLD}${BLUE}=====================================================${NC}"
+    echo -e "${BOLD}${CYAN}      Recommended Software Installer (v2.0)          ${NC}"
+    echo -e "${BOLD}${BLUE}=====================================================${NC}"
+    echo
+    echo -e "${BOLD}System Info:${NC} $(grep PRETTY_NAME /etc/os-release | cut -d'"' -f 2 2>/dev/null || uname -a)"
+    echo -e "${BOLD}Package Manager:${NC} $PKG_MANAGER"
+    echo
 }
 
-# Display software in a category
-display_category_software() {
-  local category=$1
-  local category_name=${categories[$category]}
-  local software_list=()
-
-  # Find all software in this category
-  for name in "${!software_info[@]}"; do
-    local info=${software_info[$name]}
-    IFS=':' read -r cat description _ _ source <<<"$info"
-
-    if [ "$cat" = "$category" ]; then
-      software_list+=("$name")
-    fi
-  done
-
-  local total=${#software_list[@]}
-  if [ $total -eq 0 ]; then
-    echo -e "${YELLOW}No software found in category $category_name.${NC}"
-    return
-  fi
-
-  clear
-  display_header
-  echo -e "${BOLD}${CYAN}Software in category: $category_name${NC}"
-  echo
-
-  local i=1
-  for name in "${software_list[@]}"; do
-    local info=${software_info[$name]}
-    IFS=':' read -r _ description _ _ source <<<"$info"
-
-    # Truncate description if too long
-    if [ ${#description} -gt 60 ]; then
-      description="${description:0:57}..."
-    fi
-
-    # Check if installed
-    if is_package_installed "$name" "$source"; then
-      echo -e "${MAGENTA}$i)${NC} ${BOLD}$name${NC} [${GREEN}Installed${NC}]"
-    else
-      echo -e "${MAGENTA}$i)${NC} ${BOLD}$name${NC} - $description"
-    fi
-
-    category_items[$i]=$name
-    ((i++))
-  done
-
-  echo -e "${MAGENTA}a)${NC} ${BOLD}Install all${NC}"
-  echo -e "${MAGENTA}b)${NC} ${BOLD}Back to categories${NC}"
-  echo
+display_description() {
+    echo -e "${BOLD}${CYAN}--- $1 ---${NC}\n"
+    echo -e "${BOLD}Description:${NC}\n$2\n"
+    echo -e "${BOLD}${GREEN}Advantages:${NC}\n$3\n"
+    echo -e "${BOLD}${RED}Disadvantages:${NC}\n$4\n"
+    echo -e "${BOLD}Source:${NC} $5\n"
+    echo -e "${BLUE}--------------------------------------------------${NC}\n"
 }
 
-# Function for category menu
-category_menu() {
-  local category=$1
-  declare -A category_items # Declare category_items here
+# --- Tool Definitions ---
 
-  while true; do
-    display_category_software "$category"
-    echo -n -e "${CYAN}Select software to install (1-${#category_items[@]}, a for all, b for back): ${NC}"
-    read -r choice
+declare -A TOOL_CATEGORIES
+TOOL_CATEGORIES=(
+    ["office"]="Office & Productivity"
+    ["internet"]="Internet & Communication"
+    ["multimedia"]="Multimedia"
+    ["graphics"]="Graphics & Design"
+    ["utilities"]="System Utilities"
+    ["development"]="Development Tools"
+    ["security"]="Security & Privacy"
+    ["games"]="Gaming"
+)
+ORDERED_CATEGORIES=("office" "internet" "multimedia" "graphics" "utilities" "development" "security" "games")
 
-    case $choice in
-    [0-9]*)
-      if [ -n "${category_items[$choice]}" ]; then
-        clear
-        install_software_item "${category_items[$choice]}"
-        echo -e "\nPress Enter to continue..."
-        read
-      else
-        echo -e "${RED}Invalid choice.${NC}"
-        sleep 1
-      fi
-      ;;
-    a | A)
-      install_category "$category"
-      ;;
-    b | B)
-      return
-      ;;
-    *)
-      echo -e "${RED}Invalid choice.${NC}"
-      sleep 1
-      ;;
-    esac
-  done
-}
+# Format: name:description:advantages:disadvantages:category:method:source_package_name
+TOOLS=(
+    "libreoffice:Free office suite compatible with MS Office.:- Comprehensive and free.\n- Works offline.:- UI can feel dated.:office:pkg:libreoffice-fresh|libreoffice"
+    "onlyoffice:Modern office suite with great MS Office compatibility.:- Excellent compatibility.\n- Clean interface.:- Some features are proprietary.:flatpak:org.onlyoffice.desktopeditors"
+    "firefox:Fast, private, and open-source web browser.:- Strong privacy features.\n- Highly extensible.:- Can use more memory than rivals.:internet:pkg:firefox"
+    "thunderbird:Powerful, free email client from Mozilla.:- Manages multiple accounts.\n- Extensible.:- Interface can feel complex.:internet:pkg:thunderbird"
+    "discord:Chat, voice, and video for communities and friends.:- Excellent for gaming.\n- High quality voice chat.:- Proprietary, resource intensive.:flatpak:com.discordapp.Discord"
+    "vlc:Plays almost any video or audio file imaginable.:- Unmatched format support.\n- Free and open-source.:- Default UI is very basic.:multimedia:pkg:vlc"
+    "spotify:Stream millions of songs and podcasts.:- Huge music library.\n- Great discovery features.:- Free version has ads.:snap:spotify"
+    "obs-studio:Free software for video recording and live streaming.:- Professional features for free.\n- Highly configurable.:- Can have a steep learning curve.:multimedia:pkg:obs-studio"
+    "gimp:Powerful free and open-source image editor.:- Photoshop-level features for free.:- UI can be intimidating for new users.:graphics:pkg:gimp"
+    "krita:Professional digital painting software.:- Excellent for artists and illustrators.:- Less focused on photo manipulation.:graphics:pkg:krita"
+    "inkscape:Professional vector graphics editor.:- The best FOSS alternative to Illustrator.:- Can be slow with complex files.:graphics:pkg:inkscape"
+    "timeshift:System restore utility, like Windows System Restore.:- Can save a system from breaking changes.:- Requires significant disk space.:utilities:pkg:timeshift"
+    "bleachbit:System cleaner and privacy guard.:- Frees up disk space.\n- Wipes free space.:- Can be dangerous if used improperly.:utilities:pkg:bleachbit"
+    "htop:An interactive process viewer.:- Easy to read and use.\n- Color-coded display.:- Terminal-based only.:utilities:pkg:htop"
+    "vscode:A powerful, popular, and extensible code editor.:- Massive extension ecosystem.\n- Great performance.:- Microsoft telemetry (can be disabled).:development:pkg:code"
+    "docker:Platform for developing and running apps in containers.:- Consistent environments.\n- Simplifies deployment.:- Requires learning container concepts.:development:pkg:docker"
+    "keepassxc:Secure, offline, and open-source password manager.:- You control your data.\n- No subscription fees.:- Syncing is a manual process.:security:pkg:keepassxc"
+    "steam:The largest digital distribution platform for PC gaming.:- Huge library of games.\n- Great sales.:- Client can be resource-heavy.:games:pkg:steam-installer|steam"
+    "lutris:An open gaming platform for Linux.:- Manages games from all sources.\n- Community install scripts.:- Can require manual tweaking.:games:pkg:lutris"
+)
 
-# Display main category menu
-display_main_menu() {
-  clear
-  display_header
 
-  echo -e "${BOLD}${CYAN}Select a software category:${NC}"
-  echo
+# --- Main Logic ---
 
-  local i=1
-  for category in "${!categories[@]}"; do
-    # Count software in this category
-    local count=0
-    for name in "${!software_info[@]}"; do
-      local info=${software_info[$name]}
-      IFS=':' read -r cat _ _ _ _ <<<"$info"
-
-      if [ "$cat" = "$category" ]; then
-        ((count++))
-      fi
+install_from_category() {
+    local category_key="$1"
+    local category_name="${TOOL_CATEGORIES[$category_key]}"
+    local category_tools=()
+    for tool_data in "${TOOLS[@]}"; do
+        if [[ "$tool_data" == *":$category_key:"* ]]; then
+            category_tools+=("$tool_data")
+        fi
     done
-
-    echo -e "${MAGENTA}$i)${NC} ${BOLD}${categories[$category]}${NC} (${YELLOW}$count items${NC})"
-    menu_categories[$i]=$category
-    ((i++))
-  done
-
-  echo -e "${MAGENTA}a)${NC} ${BOLD}Install all recommended software${NC}"
-  echo -e "${MAGENTA}u)${NC} ${BOLD}Update system packages${NC}"
-  echo -e "${MAGENTA}q)${NC} ${BOLD}Quit${NC}"
-  echo
+    display_header
+    log_message "INFO" "Installing all tools in category: $category_name"
+    for tool_data in "${category_tools[@]}"; do install_tool "$tool_data"; done
+    log_message "INFO" "Finished installing tools for category: $category_name"
+    echo -e "\nPress any key to return to the menu..."; read -n 1 -s
 }
 
-# Install all recommended software
-install_all_recommended() {
-  local total=0
-  local all_software=()
-
-  # Count total software
-  for name in "${!software_info[@]}"; do
-    all_software+=("$name")
-    ((total++))
-  done
-
-  display_header
-  log "INFO" "Installing all recommended software ($total items)"
-  echo -e "${CYAN}Installing all recommended software (${YELLOW}$total items${NC})${NC}"
-  sleep 1
-
-  local current=0
-  for name in "${all_software[@]}"; do
-    clear
-    install_software_item "$name"
-    ((current++))
-    loading_bar $current $total
-  done
-
-  echo -e "\n${GREEN}Completed installation of all recommended software.${NC}"
-  sleep 2
+install_all() {
+    display_header
+    log_message "WARN" "User initiated install of all recommended software."
+    read -p "This will install all ${#TOOLS[@]} tools. Are you sure? (y/N): " -r choice
+    if [[ ! "$choice" =~ ^[Yy]$ ]]; then log_message "INFO" "Installation cancelled."; return; fi
+    for tool_data in "${TOOLS[@]}"; do install_tool "$tool_data"; done
+    log_message "INFO" "Finished installing all recommended software."
+    echo -e "\nPress any key to return to the menu..."; read -n 1 -s
 }
 
-# Update system packages
-update_system() {
-  display_header
-  log "INFO" "Updating system packages"
-  echo -e "${CYAN}Updating system packages...${NC}"
-
-  if eval "$PKG_UPDATE" &>>"$LOG_FILE"; then
-    log "INFO" "System packages updated successfully"
-    echo -e "${GREEN}System packages updated successfully.${NC}"
-  else
-    log "ERROR" "Failed to update system packages"
-    echo -e "${RED}Failed to update system packages. See log for details.${NC}"
-  fi
-
-  echo -e "\nPress Enter to continue..."
-  read
+main_menu() {
+    while true; do
+        display_header
+        echo -e "${BOLD}${CYAN}Select a category to install:${NC}\n"
+        for i in "${!ORDERED_CATEGORIES[@]}"; do
+            local key="${ORDERED_CATEGORIES[$i]}"; local name="${TOOL_CATEGORIES[$key]}"
+            echo -e "  ${MAGENTA}$((i + 1)))${NC} ${BOLD}$name${NC}"
+        done
+        echo -e "\n  ${MAGENTA}a)${NC} ${BOLD}Install All Recommended Tools${NC}"
+        echo -e "  ${MAGENTA}q)${NC} ${BOLD}Quit${NC}\n"
+        read -p "Enter your choice: " -r choice
+        case "$choice" in
+            [1-9]*)
+                if (( choice > 0 && choice <= ${#ORDERED_CATEGORIES[@]} )); then
+                    install_from_category "${ORDERED_CATEGORIES[$((choice-1))]}"
+                else
+                    log_message "WARN" "Invalid menu choice: $choice"; read -n 1 -s
+                fi
+                ;;
+            a|A) install_all ;;
+            q|Q) log_message "INFO" "Exiting."; exit 0 ;;
+            *) log_message "WARN" "Invalid menu choice: $choice"; read -n 1 -s ;;
+        esac
+    done
 }
 
-# Main function
+# --- Script Entry Point ---
 main() {
-  init_log
-  check_sudo
-  detect_system
-
-  # Main menu loop
-  while true; do
-    # Populate menu_categories array
-    unset menu_categories
-    declare -A menu_categories
-    local i=1
-    for category in "${!categories[@]}"; do
-      menu_categories[$i]=$category
-      ((i++))
-    done
-
-    display_main_menu
-    echo -n -e "${CYAN}Select an option (1-${#menu_categories[@]}, a, u, or q): ${NC}"
-    read -r choice
-
-    case $choice in
-    [0-9]*)
-      if [ -n "${menu_categories[$choice]}" ]; then
-        category_menu "${menu_categories[$choice]}"
-      else
-        echo -e "${RED}Invalid choice.${NC}"
-        sleep 1
-      fi
-      ;;
-    a | A)
-      install_all_recommended
-      ;;
-    u | U)
-      update_system
-      ;;
-    q | Q)
-      log "INFO" "Exiting"
-      echo -e "${GREEN}Thank you for using the Recommended Software Installer!${NC}"
-      exit 0
-      ;;
-    *)
-      echo -e "${RED}Invalid choice.${NC}"
-      sleep 1
-      ;;
-    esac
-  done
+    init_log
+    check_sudo
+    detect_system
+    ensure_aur_helper
+    main_menu
 }
 
-# Run the main function
-main
+# Initialize log file and run main function
+init_log() {
+    echo "=== Recommended Software Installer Log - $(date) ===" > "$LOG_FILE"
+    log_message "INFO" "Script started. Log file: $LOG_FILE"
+}
 
+main
