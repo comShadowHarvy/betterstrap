@@ -44,6 +44,7 @@ STEPS=(
   "Executing dev.tools.install.sh script;local;./dev.tools.install.sh"
   "Executing attack.install.sh script;local;./attack.install.sh"
   "Executing waypipe.sh script;local;./waypipe.sh"
+  "Executing plymouth.sh script;local;./plymouth.sh"
   "Fetching and executing Chris Titus Linux script;remote;https://christitus.com/linux"
 )
 STEPS_TOTAL=${#STEPS[@]}
