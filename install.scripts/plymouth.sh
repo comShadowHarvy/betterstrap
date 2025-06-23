@@ -1,4 +1,3 @@
-#!/bin/sh
 # This script installs and configures Plymouth on Arch Linux.
 
 # --- Configuration Variables ---
