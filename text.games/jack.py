@@ -5,29 +5,16 @@ import sys
 import enum # Import enum for AI types and Game Modes
 import json # For Save/Load
 import re # Import regex for stripping ANSI codes
-# import shutil # Alternative for terminal size, os is preferred
 
-# --- ANSI Color Codes ---
-COLOR_RESET = "\033[0m"
-COLOR_RED = "\033[91m"       # For Hearts/Diamonds
-COLOR_BLACK = "\033[30m"     # For Clubs/Spades (often default, but explicit)
-COLOR_WHITE_BG = "\033[107m" # White background for cards
-COLOR_GREEN = "\033[92m"     # For wins/positive messages
-COLOR_YELLOW = "\033[93m"    # For warnings/bets
-COLOR_BLUE = "\033[94m"      # For info/player names
-COLOR_MAGENTA = "\033[95m"   # For title/special events
-COLOR_CYAN = "\033[96m"      # For menu options
-COLOR_BOLD = "\033[1m"
-COLOR_DIM = "\033[2m"        # Dim color for hidden card text
+from card import Card, SUITS, RANKS, VALUES, CARD_BACK, get_card_color, COLOR_RESET, COLOR_RED, COLOR_BLACK, COLOR_WHITE_BG, COLOR_GREEN, COLOR_YELLOW, COLOR_BLUE, COLOR_MAGENTA, COLOR_CYAN, COLOR_BOLD, COLOR_DIM
+from game_utils import clear_screen, typing_effect, strip_ansi_codes, get_visible_width, center_text, shuffle_animation
+from player import Player, HumanPlayer, AIPlayer, AIType
+from ai_chat import AI_CHAT
 
 # --- Constants ---
-SUITS = {'Hearts': '♥', 'Diamonds': '♦', 'Clubs': '♣', 'Spades': '♠'}
-RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A']
-VALUES = {'2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 10, 'Q': 10, 'K': 10, 'A': 11}
 AI_NAMES = ["Alice", "Bob", "Charlie", "Diana", "Ethan", "Fiona", "George", "Hannah", "Ivan", "Judy", "Kevin", "Laura"] # More names
 MIN_AI_PLAYERS = 1
 MAX_AI_PLAYERS = 5 # Increased max slightly
-CARD_BACK = "░"
 AI_STARTING_CHIPS = 100 # Increased AI starting chips
 AI_DEFAULT_BET = 5
 SAVE_FILE = "blackjack_save.json" # Filename for save/load
@@ -44,45 +31,12 @@ class GameMode(enum.Enum):
     SOLO = "Solo Play (vs Dealer)"
     POKER_STYLE = "Poker Style (vs AI with Chips)"
 
-class AIType(enum.Enum):
-    BASIC = "Basic Strategy"
-    CONSERVATIVE = "Conservative"
-    AGGRESSIVE = "Aggressive"
-    RANDOM = "Random" # Added Random AI
-    COUNTER = "Card Counter Lite" # Added Counter AI
 
-# --- AI Chat Lines (Expanded) ---
-AI_CHAT = {
-    "hit_good": ["Nice hit!", "Good card!", "Looking sharp.", "Calculated risk.", "That's the spirit!", "Keep 'em coming!", "Bold move paying off."],
-    "hit_bad": ["Oof, tough luck.", "That didn't help much.", "Getting close...", "Risky!", "Careful now...", "Hmm, not ideal.", "Pushing your luck?"],
-    "stand_good": ["Smart stand.", "Good call.", "Solid play.", "Playing it safe.", "Wise decision.", "Holding strong.", "I respect that."],
-    "stand_bad": ["Standing on that? Bold.", "Feeling brave?", "Hope that holds up!", "Interesting strategy...", "Are you sure about that?", "Dealer might like that.", "Living dangerously!"],
-    "player_bust": ["Busted! Too greedy?", "Ouch, over 21!", "Better luck next time!", "Happens to the best of us.", "Too many!", "The house always wins... sometimes.", "Greed is a killer."],
-    "player_win": ["Congrats!", "You got lucky!", "Nice hand!", "Well played!", "Beginner's luck holds!", "Impressive.", "You earned that one."],
-    "player_blackjack": ["Blackjack! Wow!", "Can't beat that!", "Beginner's luck?", "Natural 21! Sweet!", "Right off the deal!", "Impossible!"],
-    "ai_win": ["Winner!", "Gotcha!", "Too easy.", "Read 'em and weep!", "My turn!", "Dealer's loss is my gain.", "That's how it's done!", "Chip stack growing!", "Victory!"],
-    "ai_bust": ["Darn!", "Too many!", "Argh, busted!", "Miscalculated!", "Pushed my luck.", "Blast!", "Overcooked it.", "My bad."],
-    "taunt": ["My chips are piling up!", "Feeling confident?", "Easy money!", "You can't beat me!", "Is that all you've got?", "Think you can win?", "Dealer looks weak...", "I could do this all day.", "Getting predictable?", "Maybe try a different strategy?", "I'm just getting started."],
-    "general_insult": ["Are you even trying?", "My grandma plays better than that.", "Was that intentional?", "Seriously?", "...", "Did you forget the rules?", "That was... a choice.", "Were you aiming for 21 or 31?", "Painful to watch.", "Just give me your chips already."] # Keep some generic
-}
 
-# --- Helper Functions (Global Scope) ---
 
-def clear_screen():
-    """Clears the terminal screen."""
-    os.system('cls' if os.name == 'nt' else 'clear')
 
-def typing_effect(text, delay=0.03, color=COLOR_RESET, newline=True):
-    """Prints text with a typing effect."""
-    sys.stdout.write(color)
-    for char in text:
-        sys.stdout.write(char); sys.stdout.flush(); time.sleep(delay)
-    sys.stdout.write(COLOR_RESET)
-    if newline: print()
 
-def get_card_color(suit_name):
-    """Determines the color for a card based on its suit."""
-    return COLOR_RED if suit_name in ['Hearts', 'Diamonds'] else COLOR_BLACK
+
 
 def create_deck(num_decks=1):
     """Creates a deck with a specified number of standard 52-card decks."""
@@ -90,7 +44,7 @@ def create_deck(num_decks=1):
     for _ in range(num_decks):
         for suit_name in SUITS:
             for rank in RANKS:
-                deck.append((suit_name, SUITS[suit_name], rank))
+                deck.append(Card(suit_name, rank))
     print(f"{COLOR_DIM}(Using {num_decks} deck{'s' if num_decks > 1 else ''}){COLOR_RESET}")
     time.sleep(0.5)
     return deck
@@ -100,10 +54,8 @@ def calculate_hand_value(hand):
     if not hand: return 0
     value = 0; num_aces = 0
     for card in hand:
-        if len(card) < 3: continue # Skip invalid card data
-        rank = card[2]
-        value += VALUES.get(rank, 0) # Use .get for safety
-        if rank == 'A': num_aces += 1
+        value += card.value
+        if card.rank == 'A': num_aces += 1
     while value > 21 and num_aces: value -= 10; num_aces -= 1
     return value
 
@@ -114,15 +66,14 @@ def display_card(card, hidden=False):
         back = CARD_BACK * 9
         lines = ["┌─────────┐", f"│{back}│", f"│{back}│", f"│{COLOR_DIM} HIDDEN {COLOR_RESET}{COLOR_WHITE_BG}{COLOR_BLACK}│", f"│{back}│", f"│{back}│", "└─────────┘"]
         return [f"{COLOR_WHITE_BG}{COLOR_BLACK}{line}{COLOR_RESET}" for line in lines]
-    if not isinstance(card, (list, tuple)) or len(card) < 3:
+    if not isinstance(card, Card):
         print(f"{COLOR_RED}Error: Invalid card data format: {card}{COLOR_RESET}")
         lines = ["┌─────────┐", "│  ERROR  │", "│ INVALID │", "│  CARD   │", "│  DATA   │", "│         │", "└─────────┘"]
         return [f"{COLOR_WHITE_BG}{COLOR_RED}{line}{COLOR_RESET}" for line in lines]
 
-    suit_name, suit_symbol, rank = card
-    card_color = get_card_color(suit_name)
-    rank_str = rank.ljust(2) # Ensure rank takes 2 spaces (e.g., '10', 'K ', 'A ')
-    suit_str = suit_symbol
+    card_color = card.color
+    rank_str = card.rank.ljust(2) # Ensure rank takes 2 spaces (e.g., '10', 'K ', 'A ')
+    suit_str = card.suit_symbol
 
     # Enhanced card layout
     lines = [
@@ -136,36 +87,7 @@ def display_card(card, hidden=False):
     ]
     return [f"{COLOR_WHITE_BG}{COLOR_BLACK}{line}{COLOR_RESET}" for line in lines]
 
-def strip_ansi_codes(text):
-    """Removes ANSI escape codes from a string."""
-    ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
-    return ansi_escape.sub('', text)
 
-def get_visible_width(text):
-    """Calculates the visible width of a string after stripping ANSI codes."""
-    return len(strip_ansi_codes(text))
-
-def center_text(text, width):
-    """Centers text within a given width, accounting for ANSI codes."""
-    visible_width = get_visible_width(text)
-    padding = (width - visible_width) // 2
-    if padding < 0: padding = 0
-    return " " * padding + text
-
-def shuffle_animation(duration=1.5):
-    """Displays a visual shuffling animation."""
-    clear_screen(); print(f"{COLOR_YELLOW}Shuffling Deck...{COLOR_RESET}")
-    symbols = ['♠', '♥', '♦', '♣', CARD_BACK, '?']; colors = [COLOR_RED, COLOR_BLACK, COLOR_DIM, COLOR_BLUE, COLOR_GREEN]
-    width = 40; lines = 5; end_time = time.time() + duration
-    while time.time() < end_time:
-        output_lines = []
-        for _ in range(lines):
-            line = "".join(f"{random.choice(colors)}{random.choice(symbols)}{COLOR_RESET}" if random.random() < 0.3 else " " for _ in range(width))
-            output_lines.append(line)
-        sys.stdout.write(f"\033[{lines}A")
-        for line in output_lines: sys.stdout.write(f"\r{line.ljust(width)}\n")
-        sys.stdout.flush(); time.sleep(0.05)
-    clear_screen(); print(f"{COLOR_GREEN}Deck Shuffled!{COLOR_RESET}"); time.sleep(0.5)
 
 def title_screen():
     """Displays a simplified, animated title screen."""
@@ -174,8 +96,9 @@ def title_screen():
     print("\n" * 5); typing_effect(center_text(title, screen_width), delay=0.08, color=COLOR_GREEN + COLOR_BOLD); print("\n")
     print(center_text(f"{COLOR_BLUE}Dealing...{COLOR_RESET}", screen_width)); time.sleep(0.5)
     temp_deck = create_deck(); random.shuffle(temp_deck)
-    dealt_card1 = temp_deck.pop() if temp_deck else ('Spades', '♠', 'A')
-    dealt_card2 = temp_deck.pop() if temp_deck else ('Hearts', '♥', 'K')
+    dealt_card1 = temp_deck.pop() if temp_deck else Card('Spades', 'A')
+    dealt_card2 = temp_deck.pop() if temp_deck else Card('Hearts', 'K')
+
     card1_lines = display_card(dealt_card1); card2_lines = display_card(dealt_card2)
     total_card_width = card_width * 2 + 2; left_padding = (screen_width - total_card_width) // 2; padding_str = " " * left_padding
     current_lines = [""] * (5 + 1 + 1 + 7 + 1); line_offset = 6
@@ -285,68 +208,7 @@ def display_stats(stats):
     print(f"Net Chips: {chip_color}{net_chips:+}{COLOR_RESET}")
     print("-" * 30); input(f"{COLOR_YELLOW}Press Enter to return to the menu...{COLOR_RESET}"); clear_screen()
 
-# --- AI Player Logic ---
 
-def get_ai_decision(ai_type, hand, dealer_up_card_value, running_count=0, true_count=0):
-    """Selects the appropriate AI decision function based on type and count."""
-    if ai_type == AIType.COUNTER: return ai_decision_counter(hand, dealer_up_card_value, true_count)
-    elif ai_type == AIType.BASIC: return ai_decision_basic(hand, dealer_up_card_value)
-    elif ai_type == AIType.CONSERVATIVE: return ai_decision_conservative(hand, dealer_up_card_value)
-    elif ai_type == AIType.AGGRESSIVE: return ai_decision_aggressive(hand, dealer_up_card_value)
-    elif ai_type == AIType.RANDOM: return random.choice(["hit", "stand"]) # Purely random
-    else: print(f"{COLOR_RED}Warning: Unknown AI type {ai_type}. Defaulting to Basic.{COLOR_RESET}"); return ai_decision_basic(hand, dealer_up_card_value)
-
-def ai_decision_basic(hand, dealer_up_card_value):
-    """Standard Basic Strategy AI logic."""
-    hand_value = calculate_hand_value(hand); num_aces = sum(1 for _, _, rank in hand if rank == 'A'); is_soft = num_aces > 0 and hand_value - 10 < 11
-    if hand_value < 12: return "hit"
-    if is_soft:
-        if hand_value == 18 and dealer_up_card_value >= 9: return "hit"
-        if hand_value >= 19: return "stand"
-        if hand_value <= 17: return "hit"
-        return "stand"
-    else:
-        if hand_value >= 17: return "stand"
-        if hand_value >= 13 and hand_value <= 16: return "stand" if dealer_up_card_value >= 2 and dealer_up_card_value <= 6 else "hit"
-        if hand_value == 12: return "stand" if dealer_up_card_value >= 4 and dealer_up_card_value <= 6 else "hit"
-        return "hit"
-
-def ai_decision_conservative(hand, dealer_up_card_value):
-    """Conservative AI: Stands earlier."""
-    hand_value = calculate_hand_value(hand); num_aces = sum(1 for _, _, rank in hand if rank == 'A'); is_soft = num_aces > 0 and hand_value - 10 < 11
-    if hand_value < 11: return "hit"
-    if is_soft: return "stand" if hand_value >= 18 else "hit"
-    else:
-        if hand_value >= 15: return "stand"
-        if hand_value >= 12 and dealer_up_card_value <= 6: return "stand"
-        return "hit"
-
-def ai_decision_aggressive(hand, dealer_up_card_value):
-    """Aggressive AI: Hits more often."""
-    hand_value = calculate_hand_value(hand); num_aces = sum(1 for _, _, rank in hand if rank == 'A'); is_soft = num_aces > 0 and hand_value - 10 < 11
-    if hand_value < 13: return "hit"
-    if is_soft:
-        if hand_value == 18 and dealer_up_card_value not in [2, 7, 8]: return "hit"
-        if hand_value >= 19: return "stand"
-        return "hit"
-    else:
-        if hand_value >= 17: return "stand"
-        if hand_value == 16 and dealer_up_card_value <= 6 and random.random() < 0.4: return "hit"
-        if hand_value >= 12 and dealer_up_card_value >= 7: return "hit"
-        if hand_value >= 13 and hand_value <= 16: return "stand"
-        if hand_value == 12: return "stand" if dealer_up_card_value >= 4 else "hit"
-        return "hit"
-
-def ai_decision_counter(hand, dealer_up_card_value, true_count):
-    """Card Counter Lite AI: Modifies basic strategy based on true count."""
-    decision = ai_decision_basic(hand, dealer_up_card_value) # Start with basic
-    hand_value = calculate_hand_value(hand)
-    if true_count >= 2: # High count - consider hitting more
-        if decision == "stand" and hand_value in [15, 16] and dealer_up_card_value >= 7: decision = "hit"
-    elif true_count <= -1: # Low count - consider standing more
-        if decision == "hit" and hand_value == 12 and dealer_up_card_value <= 6: decision = "stand"
-        elif decision == "hit" and hand_value == 13 and dealer_up_card_value <= 3: decision = "stand"
-    return decision
 
 # --- Card Counting Logic ---
 def get_card_count_value(rank):
@@ -359,19 +221,19 @@ def get_card_count_value(rank):
 def get_basic_strategy_hint(player_hand, dealer_up_card):
     """Provides a basic strategy hint (Simplified)."""
     player_value = calculate_hand_value(player_hand)
-    # Ensure dealer_up_card is valid before accessing index 2
+    # Ensure dealer_up_card is valid before accessing its rank
     dealer_value = 0
-    if dealer_up_card and len(dealer_up_card) > 2:
-        dealer_rank = dealer_up_card[2]
+    if dealer_up_card:
+        dealer_rank = dealer_up_card.rank
         dealer_value = VALUES.get(dealer_rank, 0)
         if dealer_rank == 'A': dealer_value = 11 # Treat Ace as 11 for hints initially
 
-    num_aces = sum(1 for _, _, rank in player_hand if rank == 'A')
+    num_aces = sum(1 for card in player_hand if card.rank == 'A')
     is_soft = num_aces > 0 and calculate_hand_value(player_hand) - 10 < 11
 
     # Check for split possibility
-    if len(player_hand) == 2 and len(player_hand[0]) > 2 and len(player_hand[1]) > 2 and player_hand[0][2] == player_hand[1][2]:
-        rank = player_hand[0][2]
+    if len(player_hand) == 2 and player_hand[0].rank == player_hand[1].rank:
+        rank = player_hand[0].rank
         if rank == 'A' or rank == '8': return "(Hint: Always split Aces and 8s)"
         if rank == '5' or rank == '10': return "(Hint: Never split 5s or 10s)"
         # Add more specific split hints if desired
@@ -397,11 +259,9 @@ def get_basic_strategy_hint(player_hand, dealer_up_card):
 class BlackjackGame:
     def __init__(self, game_mode=GameMode.QUICK_PLAY, settings=None, stats=None):
         self.deck = []
-        self.dealer_hand = []
-        self.ai_players = {}
-        self.player_chips = 100
-        self.player_hands = []
-        self.player_bets = []
+        self.dealer = Player("Dealer")
+        self.human_player = HumanPlayer("Player (You)")
+        self.ai_players = []
         self.current_hand_index = 0
         self.game_mode = game_mode
         self.settings = settings if settings is not None else self._default_settings()
@@ -426,15 +286,15 @@ class BlackjackGame:
         self.running_count = 0; self.true_count = 0; self.decks_remaining = self.settings['num_decks']
         print(f"{COLOR_DIM}Deck created with {self.settings['num_decks']} deck(s) and shuffled.{COLOR_RESET}"); time.sleep(0.5)
 
-    def _update_count(self, card_rank):
+    def _update_count(self, card):
         """Updates the running and true count."""
-        self.running_count += get_card_count_value(card_rank)
+        self.running_count += get_card_count_value(card.rank)
         self.decks_remaining = max(0.5, len(self.deck) / 52.0)
         self.true_count = self.running_count / self.decks_remaining if self.decks_remaining > 0 else self.running_count
 
     def _initialize_ai_players(self):
         """Sets up AI players based on game mode."""
-        self.ai_players = {}
+        self.ai_players = []
         if self.game_mode == GameMode.SOLO: return
         num_ai = random.randint(MIN_AI_PLAYERS, MAX_AI_PLAYERS)
         available_names = random.sample(AI_NAMES, k=min(len(AI_NAMES), MAX_AI_PLAYERS + 2))
@@ -442,23 +302,26 @@ class BlackjackGame:
         for name in chosen_names:
             ai_type = random.choice(list(AIType))
             chips = AI_STARTING_CHIPS if self.game_mode == GameMode.POKER_STYLE else 0
-            self.ai_players[name] = {'hand': [], 'type': ai_type, 'chips': chips, 'current_bet': 0}
+            self.ai_players.append(AIPlayer(name, ai_type, chips))
 
     def _ai_place_bets(self):
         """Handles AI betting for Poker Style mode."""
         if self.game_mode != GameMode.POKER_STYLE: return
         print(f"\n{COLOR_BLUE}--- AI Players Placing Bets ---{COLOR_RESET}"); time.sleep(0.5)
-        for name, ai_data in list(self.ai_players.items()):
+        for ai_player in self.ai_players:
             bet_amount = 0
             # Dynamic Betting (Simple Example)
-            if ai_data['chips'] >= AI_DEFAULT_BET * 2 and self.true_count >= 1: bet_amount = AI_DEFAULT_BET * 2
-            elif ai_data['chips'] >= AI_DEFAULT_BET: bet_amount = AI_DEFAULT_BET
-            else: bet_amount = ai_data['chips'] # Bet all if less than default
+            if ai_player.chips >= AI_DEFAULT_BET * 2 and self.true_count >= 1: bet_amount = AI_DEFAULT_BET * 2
+            elif ai_player.chips >= AI_DEFAULT_BET: bet_amount = AI_DEFAULT_BET
+            else: bet_amount = ai_player.chips # Bet all if less than default
 
             if bet_amount > 0:
-                ai_data['chips'] -= bet_amount; ai_data['current_bet'] = bet_amount
-                print(f"{COLOR_BLUE}{name}{COLOR_RESET} bets {COLOR_YELLOW}{bet_amount}{COLOR_RESET} chips. ({COLOR_RED}-{bet_amount}{COLOR_RESET}) (Remaining: {ai_data['chips']})") # Added visual chip change
-            else: ai_data['current_bet'] = 0; print(f"{COLOR_BLUE}{name}{COLOR_RESET} cannot bet.")
+                ai_player.chips -= bet_amount
+                ai_player.current_bet = bet_amount
+                print(f"{COLOR_BLUE}{ai_player.name}{COLOR_RESET} bets {COLOR_YELLOW}{bet_amount}{COLOR_RESET} chips. ({COLOR_RED}-{bet_amount}{COLOR_RESET}) (Remaining: {ai_player.chips})") # Added visual chip change
+            else:
+                ai_player.current_bet = 0
+                print(f"{COLOR_BLUE}{ai_player.name}{COLOR_RESET} cannot bet.")
             time.sleep(0.7)
         print("-" * 30)
 
@@ -472,7 +335,7 @@ class BlackjackGame:
         card = self.deck.pop()
         hand.append(card)
         if update_count: # Only update count for visible cards
-            self._update_count(card[2])
+            self._update_count(card)
         return card
 
     def _ai_chat(self, category, player_action=None):
@@ -480,7 +343,7 @@ class BlackjackGame:
         if not self.ai_players: return
         if random.random() < 0.40: # Increased chat chance significantly (e.g., 40%)
             if not self.ai_players: return # Check again in case AI left
-            ai_name = random.choice(list(self.ai_players.keys()))
+            ai_player = random.choice(self.ai_players)
 
             # Select appropriate chat list
             chat_list = AI_CHAT.get(category)
@@ -493,23 +356,23 @@ class BlackjackGame:
 
             if chat_list: # Ensure the list exists and is not empty
                  message = random.choice(chat_list)
-                 print(f"{COLOR_CYAN}[{ai_name}]: {message}{COLOR_RESET}")
+                 print(f"{COLOR_CYAN}[{ai_player.name}]: {message}{COLOR_RESET}")
                  time.sleep(1.2)
 
     def place_bet(self):
         """Allows the player to place the initial bet."""
         while True:
             try:
-                print(f"\n{COLOR_YELLOW}Your chips: {self.player_chips}{COLOR_RESET}")
-                if self.player_chips <= 0: print(f"{COLOR_RED}You have no chips left to bet!{COLOR_RESET}"); return False
+                print(f"\n{COLOR_YELLOW}Your chips: {self.human_player.chips}{COLOR_RESET}")
+                if self.human_player.chips <= 0: print(f"{COLOR_RED}You have no chips left to bet!{COLOR_RESET}"); return False
                 bet_input = input(f"Place your initial bet (minimum 1, or 'q' to quit round): ")
                 if bet_input.lower() == 'q': return False
                 bet = int(bet_input)
                 if bet <= 0: print(f"{COLOR_RED}Bet must be positive.{COLOR_RESET}")
-                elif bet > self.player_chips: print(f"{COLOR_RED}You don't have enough chips.{COLOR_RESET}")
+                elif bet > self.human_player.chips: print(f"{COLOR_RED}You don't have enough chips.{COLOR_RESET}")
                 else:
-                    self.player_hands = [[]]; self.player_bets = [bet]
-                    self.player_chips -= bet; self.current_hand_index = 0
+                    self.human_player.hands = [[]]; self.human_player.bets = [bet]
+                    self.human_player.chips -= bet; self.current_hand_index = 0
                     print(f"{COLOR_GREEN}Betting {bet} chips. ({COLOR_RED}-{bet}{COLOR_RESET}){COLOR_RESET}"); time.sleep(1); return True # Added visual chip change
             except ValueError: print(f"{COLOR_RED}Invalid input. Please enter a number or 'q'.{COLOR_RESET}")
             except EOFError: print(f"\n{COLOR_RED}Input error. Returning to menu.{COLOR_RESET}"); return False
@@ -517,27 +380,32 @@ class BlackjackGame:
     def deal_initial_cards(self):
         """Deals the initial two cards to everyone with animation."""
         print(f"\n{COLOR_BLUE}Dealing cards...{COLOR_RESET}"); time.sleep(0.5)
-        self.player_hands = [[] for _ in self.player_bets]
-        self.dealer_hand = []
-        for name in self.ai_players: self.ai_players[name]['hand'] = []
-        participants_order = ["Player"]
-        if self.game_mode != GameMode.SOLO: participants_order.extend(list(self.ai_players.keys()))
-        participants_order.append("Dealer")
+        self.human_player.hands = [[] for _ in self.human_player.bets]
+        self.dealer.hand = []
+        for ai_player in self.ai_players:
+            ai_player.hand = []
+        participants_order = [self.human_player]
+        if self.game_mode != GameMode.SOLO:
+            participants_order.extend(self.ai_players)
+        participants_order.append(self.dealer)
         hidden_card_lines = display_card(None, hidden=True)
 
-        for round_num in range(2): # Deal two rounds
-            for name in participants_order:
-                target_hand = None; display_name = name
-                is_dealer_hidden_card = (name == "Dealer" and round_num == 0)
+        for round_num in range(2):
+            for participant in participants_order:
+                target_hand = None
+                display_name = participant.name
+                is_dealer_hidden_card = (participant == self.dealer and round_num == 0)
 
-                if name == "Player":
-                    if not self.player_hands: continue
-                    if len(self.player_hands[0]) < 2: target_hand = self.player_hands[0]; display_name = "Player (You)"
-                    else: continue
-                elif name == "Dealer": target_hand = self.dealer_hand
-                else: # AI Player
-                    if name in self.ai_players: target_hand = self.ai_players[name]['hand']
-                    else: continue
+                if isinstance(participant, HumanPlayer):
+                    if not self.human_player.hands: continue
+                    if len(self.human_player.hands[0]) < 2:
+                        target_hand = self.human_player.hands[0]
+                    else:
+                        continue
+                elif isinstance(participant, AIPlayer):
+                    target_hand = participant.hand
+                elif isinstance(participant, Player):
+                    target_hand = participant.hand
 
                 if target_hand is not None:
                     # --- Dealing Animation ---
@@ -553,16 +421,16 @@ class BlackjackGame:
     # *** Methods to be restored: _offer_insurance, _resolve_insurance, _offer_even_money ***
     def _offer_insurance(self):
         """Offers insurance bet to the player."""
-        if not self.player_hands or not self.player_bets: return 0
-        if not self.dealer_hand or len(self.dealer_hand) != 2 or len(self.dealer_hand[1]) < 3: return 0
-        if self.dealer_hand[1][2] == 'A': # Check if dealer shows Ace
-            max_insurance = self.player_bets[0] // 2
-            if self.player_chips >= max_insurance and max_insurance > 0:
+        if not self.human_player.hands or not self.human_player.bets: return 0
+        if not self.dealer.hand or len(self.dealer.hand) != 2: return 0
+        if self.dealer.hand[1].rank == 'A': # Check if dealer shows Ace
+            max_insurance = self.human_player.bets[0] // 2
+            if self.human_player.chips >= max_insurance and max_insurance > 0:
                 while True:
                     ins_choice = input(f"{COLOR_YELLOW}Dealer shows Ace. Insurance? (y/n): {COLOR_RESET}").lower().strip()
                     if ins_choice.startswith('y'):
                         insurance_bet = max_insurance
-                        self.player_chips -= insurance_bet
+                        self.human_player.chips -= insurance_bet
                         print(f"{COLOR_GREEN}Placed insurance bet of {insurance_bet} chips. ({COLOR_RED}-{insurance_bet}{COLOR_RESET}){COLOR_RESET}"); time.sleep(1) # Added visual chip change
                         return insurance_bet
                     elif ins_choice.startswith('n'): print(f"{COLOR_BLUE}Insurance declined.{COLOR_RESET}"); time.sleep(1); return 0
@@ -573,31 +441,31 @@ class BlackjackGame:
     def _resolve_insurance(self, insurance_bet):
         """Resolves the insurance bet if one was placed."""
         if insurance_bet > 0:
-            if not self.dealer_hand or len(self.dealer_hand) != 2: return False
-            dealer_value = calculate_hand_value(self.dealer_hand)
+            if not self.dealer.hand or len(self.dealer.hand) != 2: return False
+            dealer_value = calculate_hand_value(self.dealer.hand)
             is_dealer_blackjack = dealer_value == 21
             print(f"\n{COLOR_MAGENTA}--- Resolving Insurance ---{COLOR_RESET}")
-            self._update_count(self.dealer_hand[0][2]) # Count hidden card now
+            self._update_count(self.dealer.hand[0]) # Count hidden card now
             self.display_table(hide_dealer=False)
             if is_dealer_blackjack:
                 winnings = insurance_bet * 3 # Total returned (original insurance + 2:1 payout)
                 payout = insurance_bet * 2 # The actual winnings
                 print(f"{COLOR_GREEN}Dealer has Blackjack! Insurance pays {payout}. You win {winnings} chips back. ({COLOR_GREEN}+{winnings}{COLOR_RESET}){COLOR_RESET}") # Added visual chip change
-                self.player_chips += winnings
+                self.human_player.chips += winnings
             else: print(f"{COLOR_RED}Dealer does not have Blackjack. Insurance bet lost.{COLOR_RESET}")
             time.sleep(2.5); return is_dealer_blackjack
         return False
 
     def _offer_even_money(self):
         """Offers even money if player has BJ and dealer shows Ace."""
-        if not self.player_hands or not self.dealer_hand or len(self.dealer_hand) != 2 or len(self.dealer_hand[1]) < 3: return False
-        player_has_bj = len(self.player_hands) == 1 and calculate_hand_value(self.player_hands[0]) == 21 and len(self.player_hands[0]) == 2
-        dealer_shows_ace = self.dealer_hand[1][2] == 'A'
+        if not self.human_player.hands or not self.dealer.hand or len(self.dealer.hand) != 2: return False
+        player_has_bj = len(self.human_player.hands) == 1 and calculate_hand_value(self.human_player.hands[0]) == 21 and len(self.human_player.hands[0]) == 2
+        dealer_shows_ace = self.dealer.hand[1].rank == 'A'
         if player_has_bj and dealer_shows_ace:
             while True:
                 choice = input(f"{COLOR_YELLOW}You have Blackjack, Dealer shows Ace. Take Even Money (1:1 payout)? (y/n): {COLOR_RESET}").lower().strip()
                 if choice.startswith('y'):
-                    payout = self.player_bets[0] # Even money pays 1:1 on the original bet
+                    payout = self.human_player.bets[0] # Even money pays 1:1 on the original bet
                     print(f"{COLOR_GREEN}Taking Even Money! Guaranteed win of {payout} chips. ({COLOR_GREEN}+{payout}{COLOR_RESET}){COLOR_RESET}"); # Added visual chip change
                     return True
                 elif choice.startswith('n'): print(f"{COLOR_BLUE}Declining Even Money. Playing out the hand...{COLOR_RESET}"); return False
@@ -643,14 +511,10 @@ class BlackjackGame:
                 status = f" {COLOR_RED}{COLOR_BOLD}BUST!{COLOR_RESET}"
             value_line = f"{COLOR_YELLOW}Value: {value}{status}{COLOR_RESET}"
         elif len(hand) > 1:
-            if len(hand[1]) > 2:
-                rank = hand[1][2]
-                visible_value = VALUES.get(rank, 0)
-                if rank == 'A':
-                    visible_value = 11
-                value_line = f"{COLOR_YELLOW}Showing: {visible_value}{COLOR_RESET}"
-            else:
-                value_line = f"{COLOR_YELLOW}Showing: ? (Invalid card data){COLOR_RESET}"
+            visible_value = hand[1].value
+            if hand[1].rank == 'A':
+                visible_value = 11
+            value_line = f"{COLOR_YELLOW}Showing: {visible_value}{COLOR_RESET}"
         elif hide_one:
             value_line = f"{COLOR_YELLOW}Showing: ?{COLOR_RESET}"
         if value_line:
@@ -665,15 +529,15 @@ class BlackjackGame:
         """Displays the current state of the table with simplified layout."""
         clear_screen()
         title = f"{COLOR_MAGENTA}{COLOR_BOLD}~~~ {self.game_mode.value} ~~~{COLOR_RESET}"
-        total_bet = sum(self.player_bets) if self.player_bets else 0
+        total_bet = sum(self.human_player.bets) if self.human_player.bets else 0
         count_info = ""
         if self.settings['card_counting_cheat']:
              count_info = f" | RC: {self.running_count} | TC: {self.true_count:.1f}"
         # Print Header centered
-        print(center_text(title, TERMINAL_WIDTH)); print(center_text(f"{COLOR_YELLOW}Your Chips: {self.player_chips} | Your Bet(s): {total_bet}{count_info}{COLOR_RESET}", TERMINAL_WIDTH)); print(f"{COLOR_DIM}{'-' * TERMINAL_WIDTH}{COLOR_RESET}")
+        print(center_text(title, TERMINAL_WIDTH)); print(center_text(f"{COLOR_YELLOW}Your Chips: {self.human_player.chips} | Your Bet(s): {total_bet}{count_info}{COLOR_RESET}", TERMINAL_WIDTH)); print(f"{COLOR_DIM}{'-' * TERMINAL_WIDTH}{COLOR_RESET}")
 
         # --- Dealer (Top) ---
-        dealer_lines = self.get_hand_lines("Dealer", self.dealer_hand, hide_one=hide_dealer)
+        dealer_lines = self.get_hand_lines("Dealer", self.dealer.hand, hide_one=hide_dealer)
         for line in dealer_lines:
             print(line)
         print()
@@ -682,13 +546,12 @@ class BlackjackGame:
         if self.ai_players:
             print(center_text(f"{COLOR_BLUE}--- AI Players ---{COLOR_RESET}", TERMINAL_WIDTH)) # Center Header
             show_ai_details = (self.game_mode == GameMode.POKER_STYLE)
-            for name, ai_data in list(self.ai_players.items()):
-                 if name not in self.ai_players: continue
+            for ai_player in self.ai_players:
                  ai_lines = self.get_hand_lines(
-                     name, ai_data['hand'],
-                     ai_type=ai_data['type'],
-                     chips=ai_data.get('chips'),
-                     current_bet=ai_data.get('current_bet'),
+                     ai_player.name, ai_player.hand,
+                     ai_type=ai_player.ai_type,
+                     chips=ai_player.chips,
+                     current_bet=ai_player.current_bet,
                      show_ai_details=show_ai_details
                  )
                  for line in ai_lines:
@@ -697,14 +560,14 @@ class BlackjackGame:
             print(f"{COLOR_DIM}{'-' * TERMINAL_WIDTH}{COLOR_RESET}")
 
         # --- Player Hands (Bottom) ---
-        if self.player_hands:
+        if self.human_player.hands:
             print(center_text(f"{COLOR_MAGENTA}--- Your Hands ---{COLOR_RESET}", TERMINAL_WIDTH)) # Center Header
-            for i, hand in enumerate(self.player_hands):
-                 is_current_hand = (self.current_hand_index >= 0 and i == self.current_hand_index) and (len(self.player_hands) > 1)
-                 hand_label = f"Hand {i+1}" if len(self.player_hands) > 1 else ""
-                 bet = self.player_bets[i] if i < len(self.player_bets) else 0
+            for i, hand in enumerate(self.human_player.hands):
+                 is_current_hand = (self.current_hand_index >= 0 and i == self.current_hand_index) and (len(self.human_player.hands) > 1)
+                 hand_label = f"Hand {i+1}" if len(self.human_player.hands) > 1 else ""
+                 bet = self.human_player.bets[i] if i < len(self.human_player.bets) else 0
                  player_lines = self.get_hand_lines(
-                     "Player (You)", hand,
+                     self.human_player.name, hand,
                      highlight=is_current_hand,
                      bet_amount=bet,
                      hand_label=hand_label
@@ -718,11 +581,11 @@ class BlackjackGame:
 
     def _play_one_hand(self, hand_index):
         """Handles the player's turn for a single hand."""
-        if hand_index >= len(self.player_hands): print(f"{COLOR_RED}Error: Invalid hand index.{COLOR_RESET}"); return 'error'
-        hand = self.player_hands[hand_index]
-        if hand_index >= len(self.player_bets): print(f"{COLOR_RED}Error: Bet index out of sync.{COLOR_RESET}"); bet = 0
-        else: bet = self.player_bets[hand_index]
-        hand_label = f"Hand {hand_index + 1}" if len(self.player_hands) > 1 else "Your Hand"
+        if hand_index >= len(self.human_player.hands): print(f"{COLOR_RED}Error: Invalid hand index.{COLOR_RESET}"); return 'error'
+        hand = self.human_player.hands[hand_index]
+        if hand_index >= len(self.human_player.bets): print(f"{COLOR_RED}Error: Bet index out of sync.{COLOR_RESET}"); bet = 0
+        else: bet = self.human_player.bets[hand_index]
+        hand_label = f"Hand {hand_index + 1}" if len(self.human_player.hands) > 1 else "Your Hand"
         can_take_initial_action = len(hand) == 2
         player_stood = False
 
@@ -730,8 +593,8 @@ class BlackjackGame:
             self.display_table(hide_dealer=True)
             hint = ""
             # Ensure dealer hand exists and has upcard before getting hint
-            if self.settings['easy_mode'] and len(hand) >= 1 and self.dealer_hand and len(self.dealer_hand) > 1 and len(self.dealer_hand[1]) > 2:
-                hint = get_basic_strategy_hint(hand, self.dealer_hand[1])
+            if self.settings['easy_mode'] and len(hand) >= 1 and self.dealer.hand and len(self.dealer.hand) > 1:
+                hint = get_basic_strategy_hint(hand, self.dealer.hand[1])
             count_hint = ""
             if self.settings['easy_mode'] and self.settings['card_counting_cheat']:
                 if self.true_count >= 2: count_hint = f" {COLOR_GREEN}(High Count: {self.true_count:.1f}){COLOR_RESET}"
@@ -739,9 +602,9 @@ class BlackjackGame:
             print(f"\n--- Playing {COLOR_MAGENTA}{hand_label}{COLOR_RESET} (Value: {calculate_hand_value(hand)}) {hint}{count_hint} ---")
 
             options = ["(h)it", "(s)tand"]
-            can_double = can_take_initial_action and self.player_chips >= bet
-            can_split = (can_take_initial_action and len(hand) == 2 and len(hand[0]) > 2 and len(hand[1]) > 2 and
-                         hand[0][2] == hand[1][2] and self.player_chips >= bet and len(self.player_hands) < 4)
+            can_double = can_take_initial_action and self.human_player.chips >= bet
+            can_split = (can_take_initial_action and len(hand) == 2 and
+                         hand[0].rank == hand[1].rank and self.human_player.chips >= bet and len(self.human_player.hands) < 4)
             can_surrender = can_take_initial_action
 
             if can_double: options.append("(d)ouble down")
@@ -762,8 +625,8 @@ class BlackjackGame:
                 print(f"\n{COLOR_BLUE}You stand on {hand_label}.{COLOR_RESET}"); self._ai_chat("player_action", player_action='stand') # Pass action to chat
                 player_stood = True; time.sleep(1);
             elif action.startswith('d') and can_double:
-                print(f"\n{COLOR_YELLOW}Doubling down on {hand_label}!{COLOR_RESET}"); self.player_chips -= bet; self.player_bets[hand_index] += bet
-                print(f"Bet for this hand is now {self.player_bets[hand_index]}. Chips remaining: {self.player_chips}"); time.sleep(1.5)
+                print(f"\n{COLOR_YELLOW}Doubling down on {hand_label}!{COLOR_RESET}"); self.human_player.chips -= bet; self.human_player.bets[hand_index] += bet
+                print(f"Bet for this hand is now {self.human_player.bets[hand_index]}. Chips remaining: {self.human_player.chips}"); time.sleep(1.5)
                 new_card = self._deal_card(hand); print(f"{COLOR_BLUE}Received one card:{COLOR_RESET}")
                 for line in display_card(new_card): print(line)
                 self._ai_chat("player_action", player_action='double') # Pass action to chat
@@ -772,9 +635,9 @@ class BlackjackGame:
                 else: print(f"\n{hand_label} finishes with {final_value} after doubling down.")
                 time.sleep(2); return 'double_bust' if final_value > 21 else 'double_stand'
             elif action.startswith('p') and can_split:
-                 print(f"\n{COLOR_YELLOW}Splitting {hand[0][2]}s!{COLOR_RESET}"); self.player_chips -= bet; split_card = hand.pop(1)
-                 new_hand = [split_card]; self.player_hands.insert(hand_index + 1, new_hand); self.player_bets.insert(hand_index + 1, bet)
-                 print(f"Placed additional {bet} bet. Chips remaining: {self.player_chips}"); time.sleep(1.5)
+                 print(f"\n{COLOR_YELLOW}Splitting {hand[0].rank}s!{COLOR_RESET}"); self.human_player.chips -= bet; split_card = hand.pop(1)
+                 new_hand = [split_card]; self.human_player.hands.insert(hand_index + 1, new_hand); self.human_player.bets.insert(hand_index + 1, bet)
+                 print(f"Placed additional {bet} bet. Chips remaining: {self.human_player.chips}"); time.sleep(1.5)
                  print(f"Dealing card to original hand (Hand {hand_index + 1})..."); self._deal_card(hand); time.sleep(0.5)
                  print(f"Dealing card to new hand (Hand {hand_index + 2})..."); self._deal_card(new_hand); time.sleep(1)
                  self._ai_chat("player_action", player_action='split') # Pass action to chat
@@ -782,7 +645,7 @@ class BlackjackGame:
             elif action.startswith('r') and can_surrender:
                  print(f"\n{COLOR_YELLOW}Surrendering {hand_label}.{COLOR_RESET}")
                  refund = bet // 2; print(f"Half your bet ({refund}) is returned.")
-                 self.player_chips += refund; self.session_stats['chips_lost'] += (bet - refund);
+                 self.human_player.chips += refund; self.session_stats['chips_lost'] += (bet - refund);
                  self._ai_chat("player_action", player_action='surrender') # Pass action to chat
                  time.sleep(2); return 'surrender'
             else:
@@ -798,88 +661,91 @@ class BlackjackGame:
     def player_turn(self):
         """Handles the player's turn, iterating through all active hands."""
         self.current_hand_index = 0
-        while self.current_hand_index < len(self.player_hands):
-            if self.current_hand_index >= len(self.player_hands): break
+        while self.current_hand_index < len(self.human_player.hands):
+            if self.current_hand_index >= len(self.human_player.hands): break
             hand_status = self._play_one_hand(self.current_hand_index)
-            if hand_status == 'surrender': self.player_hands[self.current_hand_index] = [] # Mark as done
+            if hand_status == 'surrender': self.human_player.hands[self.current_hand_index] = [] # Mark as done
             self.current_hand_index += 1
         self.current_hand_index = -1
-        if any(h and calculate_hand_value(h) <= 21 for h in self.player_hands): print(f"\n{COLOR_BLUE}Player finishes playing all hands.{COLOR_RESET}"); time.sleep(1.5)
+        if any(h and calculate_hand_value(h) <= 21 for h in self.human_player.hands): print(f"\n{COLOR_BLUE}Player finishes playing all hands.{COLOR_RESET}"); time.sleep(1.5)
 
     def ai_turns(self):
         """Handles the turns for all AI players."""
         if not self.ai_players: return
         print(f"\n{COLOR_BLUE}--- AI Players' Turns ---{COLOR_RESET}"); time.sleep(1)
         dealer_up_card_value = 0
-        if len(self.dealer_hand) > 1 and len(self.dealer_hand[1]) > 2: dealer_up_rank = self.dealer_hand[1][2]; dealer_up_card_value = 11 if dealer_up_rank == 'A' else VALUES.get(dealer_up_rank, 0)
-        for name, ai_data in list(self.ai_players.items()):
-            if name not in self.ai_players: continue
-            hand = ai_data['hand']; ai_type = ai_data['type']
-            if self.game_mode == GameMode.POKER_STYLE and ai_data.get('current_bet', 0) == 0: print(f"{COLOR_DIM}{name} did not bet this round.{COLOR_RESET}"); time.sleep(0.5); continue
-            self.display_table(hide_dealer=True); print(f"\n{COLOR_BLUE}{name}'s turn ({ai_type.value})...{COLOR_RESET}"); time.sleep(1.5)
+        if len(self.dealer.hand) > 1: dealer_up_rank = self.dealer.hand[1].rank; dealer_up_card_value = 11 if dealer_up_rank == 'A' else VALUES.get(dealer_up_rank, 0)
+        for ai_player in self.ai_players:
+            hand = ai_player.hand
+            if self.game_mode == GameMode.POKER_STYLE and ai_player.current_bet == 0:
+                print(f"{COLOR_DIM}{ai_player.name} did not bet this round.{COLOR_RESET}")
+                time.sleep(0.5)
+                continue
+            self.display_table(hide_dealer=True)
+            print(f"\n{COLOR_BLUE}{ai_player.name}'s turn ({ai_player.ai_type.value})...{COLOR_RESET}")
+            time.sleep(1.5)
             while True:
                 current_value = calculate_hand_value(hand)
                 if current_value > 21: time.sleep(1); break
-                decision = get_ai_decision(ai_type, hand, dealer_up_card_value, self.running_count, self.true_count)
-                print(f"{name} ({ai_type.value}) decides to {COLOR_YELLOW}{decision}{COLOR_RESET}..."); time.sleep(1.2)
+                decision = ai_player.get_decision(hand, dealer_up_card_value, self.true_count)
+                print(f"{ai_player.name} ({ai_player.ai_type.value}) decides to {COLOR_YELLOW}{decision}{COLOR_RESET}..."); time.sleep(1.2)
                 if decision == "hit":
-                    print(f"{name} {COLOR_GREEN}hits{COLOR_RESET}..."); time.sleep(0.8)
+                    print(f"{ai_player.name} {COLOR_GREEN}hits{COLOR_RESET}..."); time.sleep(0.8)
                     self._deal_card(hand); self.display_table(hide_dealer=True); time.sleep(1.5)
-                    if calculate_hand_value(hand) > 21: print(f"\n{COLOR_RED}{COLOR_BOLD}{name} BUSTS!{COLOR_RESET}"); self._ai_chat("ai_bust"); time.sleep(1.5); break # AI chat on AI bust
-                else: print(f"{name} {COLOR_BLUE}stands{COLOR_RESET}."); time.sleep(1); break # No chat for AI stand? Or add one?
-            if list(self.ai_players.keys())[-1] != name or True: print(f"{COLOR_DIM}{'-' * 15}{COLOR_RESET}"); time.sleep(1)
+                    if calculate_hand_value(hand) > 21: print(f"\n{COLOR_RED}{COLOR_BOLD}{ai_player.name} BUSTS!{COLOR_RESET}"); self._ai_chat("ai_bust"); time.sleep(1.5); break # AI chat on AI bust
+                else: print(f"{ai_player.name} {COLOR_BLUE}stands{COLOR_RESET}."); time.sleep(1); break # No chat for AI stand? Or add one?
+            if self.ai_players[-1] != ai_player or True: print(f"{COLOR_DIM}{'-' * 15}{COLOR_RESET}"); time.sleep(1)
 
     def dealer_turn(self):
         """Handles the dealer's turn."""
         print(f"\n{COLOR_MAGENTA}--- Dealer's Turn ---{COLOR_RESET}"); time.sleep(1)
-        if len(self.dealer_hand) == 2: self._update_count(self.dealer_hand[0][2])
+        if len(self.dealer.hand) == 2: self._update_count(self.dealer.hand[0])
         self.display_table(hide_dealer=False)
-        while calculate_hand_value(self.dealer_hand) < 17:
+        while calculate_hand_value(self.dealer.hand) < 17:
             print(f"{COLOR_MAGENTA}Dealer must hit...{COLOR_RESET}"); time.sleep(1.5)
-            new_card = self._deal_card(self.dealer_hand); print(f"{COLOR_MAGENTA}Dealer receives:{COLOR_RESET}")
+            new_card = self._deal_card(self.dealer.hand); print(f"{COLOR_MAGENTA}Dealer receives:{COLOR_RESET}")
             for line in display_card(new_card): print(line)
             time.sleep(1.5); self.display_table(hide_dealer=False)
-            if calculate_hand_value(self.dealer_hand) > 21: print(f"\n{COLOR_RED}{COLOR_BOLD}Dealer BUSTS!{COLOR_RESET}"); time.sleep(1.5); return
-        dealer_value = calculate_hand_value(self.dealer_hand)
+            if calculate_hand_value(self.dealer.hand) > 21: print(f"\n{COLOR_RED}{COLOR_BOLD}Dealer BUSTS!{COLOR_RESET}"); time.sleep(1.5); return
+        dealer_value = calculate_hand_value(self.dealer.hand)
         if dealer_value <= 21: print(f"{COLOR_MAGENTA}Dealer stands with {dealer_value}.{COLOR_RESET}")
         time.sleep(2)
 
     def determine_winner(self):
         """Determines the winner(s) and distributes chips."""
         clear_screen(); print(f"\n{COLOR_MAGENTA}{COLOR_BOLD}--- Round Results ---{COLOR_RESET}"); time.sleep(1)
-        dealer_value = calculate_hand_value(self.dealer_hand) if self.dealer_hand else 0
-        dealer_blackjack = dealer_value == 21 and len(self.dealer_hand) == 2
+        dealer_value = calculate_hand_value(self.dealer.hand) if self.dealer.hand else 0
+        dealer_blackjack = dealer_value == 21 and len(self.dealer.hand) == 2
 
         # --- Display Final Hands (using simplified layout) ---
         print(f"\n{COLOR_BLUE}--- Final Hands ---{COLOR_RESET}")
-        for line in self.get_hand_lines("Dealer", self.dealer_hand, hide_one=False):
+        for line in self.get_hand_lines("Dealer", self.dealer.hand, hide_one=False):
             print(line)
         print()
 
         if self.ai_players:
-            print(f"{COLOR_BLUE}--- AI Players Final Hands ---{COLOR_RESET}")
+            print(f"\n{COLOR_BLUE}--- AI Players Final Hands ---{COLOR_RESET}")
             show_ai_details = (self.game_mode == GameMode.POKER_STYLE)
-            for name, ai_data in list(self.ai_players.items()):
-                if name not in self.ai_players: continue
+            for ai_player in self.ai_players:
                 for line in self.get_hand_lines(
-                    name, ai_data['hand'],
-                    ai_type=ai_data['type'],
-                    chips=ai_data.get('chips'),
-                    current_bet=ai_data.get('current_bet'),
+                    ai_player.name, ai_player.hand,
+                    ai_type=ai_player.ai_type,
+                    chips=ai_player.chips,
+                    current_bet=ai_player.current_bet,
                     show_ai_details=show_ai_details
                 ):
                     print(line)
                 print()
             print(f"{COLOR_DIM}{'-' * 60}{COLOR_RESET}")
 
-        if self.player_hands:
-            print(f"{COLOR_MAGENTA}--- Your Final Hands ---{COLOR_RESET}")
+        if self.human_player.hands:
+            print(f"\n{COLOR_MAGENTA}--- Your Final Hands ---{COLOR_RESET}")
             self.current_hand_index = -1
-            for i, hand in enumerate(self.player_hands):
+            for i, hand in enumerate(self.human_player.hands):
                 if not hand: continue # Skip surrendered
-                hand_label = f"Hand {i+1}" if len(self.player_hands) > 1 else ""
-                bet = self.player_bets[i] if i < len(self.player_bets) else 0
-                for line in self.get_hand_lines("Player (You)", hand, bet_amount=bet, hand_label=hand_label):
+                hand_label = f"Hand {i+1}" if len(self.human_player.hands) > 1 else ""
+                bet = self.human_player.bets[i] if i < len(self.human_player.bets) else 0
+                for line in self.get_hand_lines(self.human_player.name, hand, bet_amount=bet, hand_label=hand_label):
                     print(line)
                 print()
             print(f"{COLOR_DIM}{'-' * 60}{COLOR_RESET}")
@@ -888,18 +754,18 @@ class BlackjackGame:
         # --- Player Hand Outcomes ---
         print(f"\n{COLOR_YELLOW}--- Your Hand Results ---{COLOR_RESET}")
         player_won_any = False
-        if not self.player_hands:
+        if not self.human_player.hands:
             print(f"{COLOR_DIM}[ No hands played this round ]{COLOR_RESET}")
         else:
-            for i, hand in enumerate(self.player_hands):
+            for i, hand in enumerate(self.human_player.hands):
                 if not hand:
                     print(f"\n{COLOR_YELLOW}Hand {i+1}: {COLOR_DIM}Surrendered (Half bet returned){COLOR_RESET}")
                     continue
-                if i >= len(self.player_bets): continue
+                if i >= len(self.human_player.bets): continue
                 player_value = calculate_hand_value(hand)
-                bet = self.player_bets[i]
-                hand_label = f"Hand {i+1}" if len(self.player_hands) > 1 else "Your Hand"
-                is_initial_hand_blackjack = (i == 0 and len(self.player_hands) == 1 and player_value == 21 and len(hand) == 2)
+                bet = self.human_player.bets[i]
+                hand_label = f"Hand {i+1}" if len(self.human_player.hands) > 1 else "Your Hand"
+                is_initial_hand_blackjack = (i == 0 and len(self.human_player.hands) == 1 and player_value == 21 and len(hand) == 2)
                 player_21 = player_value == 21
                 payout = 0
                 result_text = ""
@@ -959,7 +825,7 @@ class BlackjackGame:
                     self.session_stats['dealer_wins'] += 1
 
                 print(result_text)
-                self.player_chips += payout
+                self.human_player.chips += payout
                 if chips_change > 0:
                     self.session_stats['chips_won'] += chips_change
                 elif chips_change < 0:
@@ -971,23 +837,22 @@ class BlackjackGame:
             # AI chat based on overall player outcome for the round
             if player_won_any:
                 self._ai_chat("player_win")
-            elif all(not h or calculate_hand_value(h) > 21 for h in self.player_hands):
+            elif all(not h or calculate_hand_value(h) > 21 for h in self.human_player.hands):
                 pass # Already chatted on bust
             else:
                 self._ai_chat("taunt") # Player didn't win, maybe taunt?
 
         print("-" * 30)
-        print(f"{COLOR_YELLOW}Your chip total after round: {self.player_chips}{COLOR_RESET}")
+        print(f"{COLOR_YELLOW}Your chip total after round: {self.human_player.chips}{COLOR_RESET}")
         print(f"{COLOR_DIM}{'-' * 20}{COLOR_RESET}")
         time.sleep(2.5)
 
         # --- AI Outcomes & Chip Handling (Poker Style) ---
         if self.ai_players:
             print(f"\n{COLOR_BLUE}--- AI Player Results ---{COLOR_RESET}")
-            for name, ai_data in list(self.ai_players.items()):
-                if name not in self.ai_players: continue
-                hand = ai_data['hand']; ai_type = ai_data['type']
-                ai_bet = ai_data.get('current_bet', 0); result = ""; result_color = COLOR_RESET; ai_payout = 0
+            for ai_player in self.ai_players:
+                hand = ai_player.hand
+                ai_bet = ai_player.current_bet; result = ""; result_color = COLOR_RESET; ai_payout = 0
                 if ai_bet > 0:
                     ai_value = calculate_hand_value(hand)
                     ai_blackjack = ai_value == 21 and len(hand) == 2
@@ -1011,15 +876,15 @@ class BlackjackGame:
                         result = f"Loses ({ai_value} vs {dealer_value})" ; result_color = COLOR_RED; ai_payout = 0; net_change = -ai_bet
 
                     if self.game_mode == GameMode.POKER_STYLE:
-                        ai_data['chips'] += ai_payout
+                        ai_player.chips += ai_payout
                         chip_change_color = COLOR_GREEN if net_change > 0 else (COLOR_RED if net_change < 0 else COLOR_YELLOW)
                         chip_change_sign = "+" if net_change > 0 else ""
-                        result += f" ({chip_change_color}{chip_change_sign}{net_change}{COLOR_RESET}) | Chips: {ai_data['chips']}" # Added visual chip change
-                        if ai_data['chips'] <= 0:
-                             print(f"{COLOR_RED}{name} ran out of chips and leaves the table!{COLOR_RESET}")
-                             del self.ai_players[name]; time.sleep(1); continue
+                        result += f" ({chip_change_color}{chip_change_sign}{net_change}{COLOR_RESET}) | Chips: {ai_player.chips}" # Added visual chip change
+                        if ai_player.chips <= 0:
+                             print(f"{COLOR_RED}{ai_player.name} ran out of chips and leaves the table!{COLOR_RESET}")
+                             self.ai_players.remove(ai_player); time.sleep(1); continue
                 else: result = "Did not bet"; result_color = COLOR_DIM
-                print(f"{COLOR_BLUE}{name} ({ai_data['type'].value}){COLOR_RESET}: {result_color}{result}{COLOR_RESET}"); time.sleep(0.6)
+                print(f"{COLOR_BLUE}{ai_player.name} ({ai_player.ai_type.value}){COLOR_RESET}: {result_color}{result}{COLOR_RESET}"); time.sleep(0.6)
             print(f"{COLOR_DIM}{'-' * 20}{COLOR_RESET}")
 
 
@@ -1027,34 +892,41 @@ class BlackjackGame:
         """Manages AI players joining/leaving."""
         if self.game_mode == GameMode.SOLO: return
         print(f"\n{COLOR_YELLOW}Checking table activity...{COLOR_RESET}"); time.sleep(1); activity = False
-        for name in list(self.ai_players.keys()): # Leaving
-             leave_chance = 0.25 if len(self.ai_players) >= MAX_AI_PLAYERS else 0.15
-             if len(self.ai_players) > MIN_AI_PLAYERS and random.random() < leave_chance:
-                 if name in self.ai_players: del self.ai_players[name]
-                 print(f"{COLOR_RED}{name} has left the table.{COLOR_RESET}"); activity = True; time.sleep(0.8)
-        available_spots = MAX_AI_PLAYERS - len(self.ai_players) # Joining
-        potential_new_players = [n for n in AI_NAMES if n not in self.ai_players]
+        # AI leaving
+        ai_players_to_remove = []
+        for ai_player in self.ai_players:
+            leave_chance = 0.25 if len(self.ai_players) >= MAX_AI_PLAYERS else 0.15
+            if len(self.ai_players) > MIN_AI_PLAYERS and random.random() < leave_chance:
+                ai_players_to_remove.append(ai_player)
+                print(f"{COLOR_RED}{ai_player.name} has left the table.{COLOR_RESET}"); activity = True; time.sleep(0.8)
+        for ai_player in ai_players_to_remove:
+            self.ai_players.remove(ai_player)
+
+        # AI joining
+        available_spots = MAX_AI_PLAYERS - len(self.ai_players)
+        potential_new_names = [n for n in AI_NAMES if n not in [p.name for p in self.ai_players]]
         join_chance = 0.4 if len(self.ai_players) < MAX_AI_PLAYERS / 2 else 0.25
-        if available_spots > 0 and potential_new_players and random.random() < join_chance:
-             num_joining = random.randint(1, min(available_spots, len(potential_new_players)))
-             for _ in range(num_joining):
-                 if not potential_new_players: break
-                 new_player_name = random.choice(potential_new_players); potential_new_players.remove(new_player_name)
-                 new_ai_type = random.choice(list(AIType))
-                 new_chips = AI_STARTING_CHIPS if self.game_mode == GameMode.POKER_STYLE else 0
-                 self.ai_players[new_player_name] = {'hand': [], 'type': new_ai_type, 'chips': new_chips, 'current_bet': 0}
-                 chip_info = f" with {new_chips} chips" if self.game_mode == GameMode.POKER_STYLE else ""
-                 print(f"{COLOR_GREEN}{new_player_name} ({new_ai_type.value}) has joined the table{chip_info}!{COLOR_RESET}"); activity = True; time.sleep(0.8)
+        if available_spots > 0 and potential_new_names and random.random() < join_chance:
+            num_joining = random.randint(1, min(available_spots, len(potential_new_names)))
+            for _ in range(num_joining):
+                if not potential_new_names: break
+                new_player_name = random.choice(potential_new_names)
+                potential_new_names.remove(new_player_name)
+                new_ai_type = random.choice(list(AIType))
+                new_chips = AI_STARTING_CHIPS if self.game_mode == GameMode.POKER_STYLE else 0
+                self.ai_players.append(AIPlayer(new_player_name, new_ai_type, new_chips))
+                chip_info = f" with {new_chips} chips" if self.game_mode == GameMode.POKER_STYLE else ""
+                print(f"{COLOR_GREEN}{new_player_name} ({new_ai_type.value}) has joined the table{chip_info}!{COLOR_RESET}"); activity = True; time.sleep(0.8)
         if not activity: print(f"{COLOR_DIM}The table remains the same.{COLOR_RESET}"); time.sleep(1)
 
     def play_round(self):
         """Plays a single round of Blackjack."""
         clear_screen(); print(f"{COLOR_MAGENTA}--- Starting New Round ({self.game_mode.value}) ---{COLOR_RESET}")
-        self.player_hands = []; self.player_bets = []; self.current_hand_index = 0
+        self.human_player.hands = []; self.human_player.bets = []; self.current_hand_index = 0
         self.session_stats['hands_played'] += 1
 
         if not self.place_bet():
-             if self.player_chips <= 0: print(f"\n{COLOR_RED}Out of chips!{COLOR_RESET}"); time.sleep(2); return 'game_over'
+             if self.human_player.chips <= 0: print(f"\n{COLOR_RED}Out of chips!{COLOR_RESET}"); time.sleep(2); return 'game_over'
              else: print(f"{COLOR_YELLOW}Returning to menu...{COLOR_RESET}"); time.sleep(1.5); return 'quit'
 
         self._ai_place_bets()
@@ -1070,9 +942,9 @@ class BlackjackGame:
         insurance_bet = self._offer_insurance()
 
         if self._offer_even_money():
-             payout = self.player_bets[0] # This is the *winnings*, not the total returned
+             payout = self.human_player.bets[0] # This is the *winnings*, not the total returned
              total_returned = payout * 2
-             self.player_chips += total_returned # Add originalbet back + winnings
+             self.human_player.chips += total_returned # Add originalbet back + winnings
              self.session_stats['player_wins'] += 1; self.session_stats['player_blackjacks'] += 1; self.session_stats['chips_won'] += payout
              # Message already printed in _offer_even_money
              print(f"{COLOR_GREEN}Round over.{COLOR_RESET}"); time.sleep(2)
@@ -1085,7 +957,7 @@ class BlackjackGame:
         dealer_had_blackjack = self._resolve_insurance(insurance_bet)
 
         is_player_blackjack = False
-        if self.player_hands and len(self.player_hands[0]) == 2: initial_player_hand = self.player_hands[0]; is_player_blackjack = calculate_hand_value(initial_player_hand) == 21
+        if self.human_player.hands and len(self.human_player.hands[0]) == 2: initial_player_hand = self.human_player.hands[0]; is_player_blackjack = calculate_hand_value(initial_player_hand) == 21
 
         if dealer_had_blackjack and not is_player_blackjack:
              print(f"{COLOR_RED}Dealer Blackjack. Round over.{COLOR_RESET}"); time.sleep(2)
@@ -1097,22 +969,22 @@ class BlackjackGame:
 
         if not is_player_blackjack and not dealer_had_blackjack:
             self.player_turn()
-            player_busted_all = all(not h or calculate_hand_value(h) > 21 for h in self.player_hands)
+            player_busted_all = all(not h or calculate_hand_value(h) > 21 for h in self.human_player.hands)
             if not player_busted_all: self.ai_turns(); self.dealer_turn()
             else:
                 print(f"\n{COLOR_RED}All your hands busted or surrendered!{COLOR_RESET}")
-                if any(ai.get('current_bet', 0) > 0 for ai in self.ai_players.values()):
+                if any(ai.current_bet > 0 for ai in self.ai_players):
                      print(f"{COLOR_DIM}Dealer plays for AI...{COLOR_RESET}"); self.dealer_turn()
                 else:
                      print(f"\n{COLOR_MAGENTA}--- Dealer reveals ---{COLOR_RESET}"); time.sleep(1)
                      # Ensure dealer hand has hidden card before updating count
-                     if len(self.dealer_hand) > 0 and self.dealer_hand[0]:
-                         self._update_count(self.dealer_hand[0][2])
+                     if len(self.dealer.hand) > 0:
+                         self._update_count(self.dealer.hand[0])
                      self.display_table(hide_dealer=False); time.sleep(1.5)
 
 
         self.determine_winner()
-        if self.player_chips <= 0: print(f"\n{COLOR_RED}You've run out of chips! Game Over.{COLOR_RESET}"); time.sleep(2.5); return 'game_over'
+        if self.human_player.chips <= 0: print(f"\n{COLOR_RED}You've run out of chips! Game Over.{COLOR_RESET}"); time.sleep(2.5); return 'game_over'
         self.manage_ai_players()
         return True
 
@@ -1127,7 +999,7 @@ class BlackjackGame:
             elif round_result == 'quit':
                 break
             elif round_result is True:
-                print(f"\n{COLOR_YELLOW}Your current chips: {self.player_chips}{COLOR_RESET}")
+                print(f"\n{COLOR_YELLOW}Your current chips: {self.human_player.chips}{COLOR_RESET}")
                 if self.game_mode != GameMode.SOLO and not self.ai_players:
                     print(f"{COLOR_YELLOW}All AI players have left or busted out!{COLOR_RESET}"); input("Press Enter to return to menu..."); break
                 next_round = input(f"Press Enter for next round, or 'q' to return to menu... ").lower()
@@ -1139,12 +1011,15 @@ class BlackjackGame:
 
     def save_game(self):
         """Saves the current game state to a file."""
-        ai_players_serializable = {}
-        for name, data in self.ai_players.items():
-            ai_players_serializable[name] = data.copy()
-            ai_players_serializable[name]['type'] = data['type'].name
+        ai_players_serializable = []
+        for ai_player in self.ai_players:
+            ai_players_serializable.append({
+                "name": ai_player.name,
+                "type": ai_player.ai_type.name,
+                "chips": ai_player.chips
+            })
         state = {
-            "player_chips": self.player_chips,
+            "player_chips": self.human_player.chips,
             "ai_players": ai_players_serializable,
             "session_stats": self.session_stats,
             "game_mode": self.game_mode.name,
@@ -1163,20 +1038,20 @@ class BlackjackGame:
         try:
             if not os.path.exists(SAVE_FILE): print(f"{COLOR_YELLOW}No save file found ({SAVE_FILE}).{COLOR_RESET}"); time.sleep(1.5); return False
             with open(SAVE_FILE, 'r') as f: state =json.load(f)
-            self.player_chips = state.get("player_chips", 100)
-            loaded_ai = state.get("ai_players", {})
-            self.ai_players = {}
-            for name, data in loaded_ai.items():
+            self.human_player.chips = state.get("player_chips", 100)
+            loaded_ai = state.get("ai_players", [])
+            self.ai_players = []
+            for data in loaded_ai:
                  try: ai_type_enum = AIType[data.get('type', 'BASIC')]
-                 except KeyError: ai_type_enum = AIType.BASIC; print(f"{COLOR_RED}Warning: Invalid AI type '{data.get('type')}' loaded for {name}. Defaulting.{COLOR_RESET}")
-                 self.ai_players[name] = {'hand': [], 'type': ai_type_enum, 'chips': data.get('chips', AI_STARTING_CHIPS), 'current_bet': 0}
+                 except KeyError: ai_type_enum = AIType.BASIC; print(f"{COLOR_RED}Warning: Invalid AI type '{data.get('type')}' loaded for {data.get('name')}. Defaulting.{COLOR_RESET}")
+                 self.ai_players.append(AIPlayer(data.get('name'), ai_type_enum, data.get('chips', AI_STARTING_CHIPS)))
             self.session_stats = state.get("session_stats", self._default_stats())
             try: self.game_mode = GameMode[state.get("game_mode", "QUICK_PLAY")]
             except KeyError: print(f"{COLOR_RED}Warning: Invalid game mode '{state.get('game_mode')}' loaded. Defaulting.{COLOR_RESET}"); self.game_mode = GameMode.QUICK_PLAY
             self.settings = state.get("settings", self._default_settings()) # Load settings
             self._create_and_shuffle_deck() # Create new deck based on loaded settings
             print(f"{COLOR_GREEN}Game loaded successfully from {SAVE_FILE}{COLOR_RESET}")
-            print(f"Loaded Mode: {self.game_mode.value}, Player Chips: {self.player_chips}")
+            print(f"Loaded Mode: {self.game_mode.value}, Player Chips: {self.human_player.chips}")
             time.sleep(2); return True
         except (IOError, json.JSONDecodeError, KeyError) as e: print(f"{COLOR_RED}Error loading game: {e}{COLOR_RESET}"); time.sleep(1.5); return False
 
@@ -1231,7 +1106,6 @@ def main():
                  # Start new game: Use current settings, reset stats, reset player chips
                  current_stats = BlackjackGame._default_stats(None)
                  game_instance = BlackjackGame(game_mode=game_mode, settings=current_settings, stats=current_stats)
-                 game_instance.player_chips = 100
                  game_instance.run_game()
                  current_stats = game_instance.session_stats # Update overall stats after game run
 
