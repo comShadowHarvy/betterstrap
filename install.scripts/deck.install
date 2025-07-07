@@ -1,0 +1,163 @@
+#!/bin/sh
+
+
+
+# --- Configuration ---
+
+# Add the Flatpak app IDs for your desired GUI applications here
+FLATPAK_APPS=(
+  "com.valvesoftware.Steam"
+  "org.videolan.VLC"
+  "com.spotify.Client"
+  "org.libreoffice.LibreOffice"
+  "com.discordapp.Discord"
+  "org.signal.Signal"
+  "io.github.philipk.boilr"
+  "chat.revolt.RevoltDesktop"
+  "net.davidotek.pupgui2"
+  "io.github.streetpea.Chiaki4deck"
+  "com.moonlight_stream.Moonlight"
+  "io.github.unknownskl.greenlight"
+)
+
+# Add the package names for your desired CLI applications here
+# Use an associative array to handle different package names across distributions
+declare -A CLI_APPS
+CLI_APPS=(
+  [arch]="neofetch htop git"
+  [fedora]="neofetch htop git"
+  [redhat]="neofetch htop git"
+)
+
+# --- Distribution Detection ---
+
+get_distro() {
+  if [ -f /etc/os-release ]; then
+    . /etc/os-release
+    if [[ "$ID" == "bazzite" || "$ID_LIKE" == *"fedora"* ]]; then
+      echo "fedora"
+    elif [[ "$ID" == "arch" || "$ID_LIKE" == *"arch"* ]]; then
+      echo "arch"
+    elif [[ "$ID" == "rhel" || "$ID" == "centos" || "$ID" == "fedora" ]]; then
+      echo "redhat"
+    else
+      echo "unknown"
+    fi
+  else
+    echo "unknown"
+  fi
+}
+
+# --- Installation Functions ---
+
+install_nix() {
+  echo "--- Checking for Nix Package Manager ---"
+  # Check if the nix command is available in the path
+  if command -v nix &> /dev/null; then
+    echo "Nix is already installed."
+  else
+    echo "Installing Nix Package Manager using the Determinate Systems installer..."
+    echo "This might take a few minutes and may require your password."
+    # Execute the installer command provided by the user
+    curl -fsSL https://install.determinate.systems/nix | sh -s -- install
+    echo "NIX HAS BEEN INSTALLED. You must restart your terminal session for the changes to take effect."
+  fi
+}
+
+install_decky_loader() {
+  echo "--- Installing Decky Loader ---"
+  # Decky Loader is specific to Steam Deck environments (like Bazzite)
+  if [ -d "$HOME/homebrew/services/decky-loader" ]; then
+    echo "Decky Loader appears to be already installed."
+  else
+    echo "Downloading and running Decky Loader installer..."
+    echo "You may be prompted for your password."
+    # This is the official installation command from the Decky Loader GitHub
+    curl -L https://github.com/SteamDeckHomebrew/decky-loader/raw/main/dist/install.sh | sh
+  fi
+}
+
+install_emudeck() {
+    echo "--- Installing EmuDeck ---"
+    # EmuDeck installation is best handled by its own script which provides a GUI.
+    # We will download and execute it.
+    if [ -f "$HOME/Desktop/EmuDeck.desktop" ]; then
+        echo "EmuDeck installer already exists on your Desktop. Please run it from there."
+    else
+        echo "Downloading the EmuDeck installer to your Desktop and running it..."
+        # The official installer command from emudeck.com
+        curl -L https://www.emudeck.com/install.sh | sh
+    fi
+}
+
+
+install_flatpaks() {
+  echo "--- Installing Flatpak Applications ---"
+  for app in "${FLATPAK_APPS[@]}"; do
+    if ! flatpak info "$app" &>/dev/null; then
+      echo "Installing $app..."
+      flatpak install -y flathub "$app"
+    else
+      echo "$app is already installed."
+    fi
+  done
+}
+
+install_cli_apps_arch() {
+  echo "--- Installing CLI Applications for Arch Linux ---"
+  sudo pacman -Syu --noconfirm ${CLI_APPS[arch]}
+}
+
+install_cli_apps_fedora() {
+  echo "--- Installing CLI Applications for Fedora-based Systems ---"
+  # On Bazzite, you might prefer to use Homebrew for some tools.
+  # This example uses rpm-ostree for system-wide installation.
+  sudo rpm-ostree install ${CLI_APPS[fedora]}
+}
+
+install_cli_apps_redhat() {
+  echo "--- Installing CLI Applications for Red Hat-based Systems ---"
+  sudo dnf install -y ${CLI_APPS[redhat]}
+}
+
+
+# --- Main Execution ---
+
+main() {
+  DISTRO=$(get_distro)
+
+  if [[ "$DISTRO" == "unknown" ]]; then
+    echo "Unsupported Linux distribution."
+    exit 1
+  fi
+
+  echo "Detected Distribution: $DISTRO"
+
+  # Install Nix on all supported systems first
+  install_nix
+
+  case "$DISTRO" in
+    "fedora")
+      # Install Deck-specific software
+      install_decky_loader
+      install_emudeck
+      
+      # Then install other apps
+      install_flatpaks
+      install_cli_apps_fedora
+      ;;
+    "arch")
+      install_flatpaks
+      install_cli_apps_arch
+      ;;
+    "redhat")
+      install_flatpaks
+      install_cli_apps_redhat
+      ;;
+  esac
+
+  echo "--- Installation Complete ---"
+  echo "Please note: Some installations like EmuDeck and Nix may require you to follow on-screen instructions or restart your terminal."
+}
+
+main
