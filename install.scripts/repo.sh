@@ -175,7 +175,7 @@ enable_multilib() { log header "Enabling Multilib Repository"; if grep -q "^\s*#
 # --- Main Script Logic ---
 main() {
     # Initial checks
-    [[ "$EUID" -ne 0 ]] && log error "This script must be run with sudo or as root. Example: sudo ./setup.sh" && exit 1
+    
     check_dependencies || exit 1
 
     # --- Step 1: Repository Setup ---

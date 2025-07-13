@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # Script Author: ShadowHarvy
-# Purpose: Simulate a loading screen and run a sequence of custom setup scripts with sudo privileges.
+# Purpose: Simulate a loading screen and run a sequence of custom setup scripts.
 # Disclaimer: Run with caution. Ensure you understand the commands being executed.
 #             This script will execute other scripts and download and run one from the internet.
-# Version: 2.1
+# Version: 2.2
 
 # --- Configuration ---
 AUTHOR="ShadowHarvy"
@@ -84,28 +84,36 @@ progress_bar() {
   echo -n "  ["
   for ((i=0; i<progress_bar_width; i++)); do
     echo -n "#"
-    sleep ".$((sleep_interval_ms / 10))" # sleep takes seconds, so we use decimals
+    sleep ".$(($sleep_interval_ms / 10))" # sleep takes seconds, so we use decimals
   done
   echo -n "] 100%"
   echo -e "\n"
   sleep 0.5
 }
 
-# Function to execute a command with sudo, show its live output, and log status.
-# The script will EXIT if any command fails.
+# Function to execute a command, requesting sudo if needed
 run_command() {
   local cmd_description="$1"
   local cmd="$2"
+  local exec_cmd="$cmd"
+  local sudo_msg=""
+
+  if [[ "$cmd" == sudo* ]]; then
+    read -p "The step '$cmd_description' requires sudo. Grant permission? (y/N): " -r choice
+    echo
+    if [[ ! "$choice" =~ ^[Yy]$ ]]; then
+      log_message "${C_YELLOW}Skipped '$cmd_description' by user decision.${C_RESET}"
+      return
+    fi
+    sudo_msg=" (with sudo)"
+  fi
 
   log_message "${C_BLUE}----------------------------------------------------------------------${C_RESET}"
-  log_message "${C_BOLD}${C_MAGENTA}Executing: $cmd_description (with sudo)${C_RESET}"
-  log_message "${C_BLUE}Command: sudo bash -c \"$cmd\"${C_RESET}"
+  log_message "${C_BOLD}${C_MAGENTA}Executing: $cmd_description$sudo_msg${C_RESET}"
+  log_message "${C_BLUE}Command: $exec_cmd${C_RESET}"
   log_message "${C_BLUE}----------------------------------------------------------------------${C_RESET}"
 
-  # Execute the command with sudo, redirecting stderr to stdout, and tee to the log file.
-  # 'set -o pipefail' ensures that the pipeline's exit status is the status of
-  # the first command to fail, not the last command (tee).
-  if (set -o pipefail; sudo bash -c "$cmd" 2>&1 | tee -a "$LOG_FILE"); then
+  if (set -o pipefail; $exec_cmd 2>&1 | tee -a "$LOG_FILE"); then
     log_message "${C_GREEN}SUCCESS: $cmd_description completed.${C_RESET}"
   else
     local exit_code=$?
@@ -132,7 +140,6 @@ run_remote_script() {
     log_message "${C_BOLD}${C_MAGENTA}Processing Remote Script: $description${C_RESET}"
     log_message "${C_CYAN}Downloading from URL: $url${C_RESET}"
 
-    # Download the script using curl
     if curl -fsSL "$url" -o "$temp_script"; then
         log_message "${C_GREEN}Download successful. Script saved to: $temp_script${C_RESET}"
     else
@@ -146,19 +153,24 @@ run_remote_script() {
     log_message "${C_YELLOW}The script has been downloaded. You can review it before execution."
     log_message "${C_YELLOW}Review command: ${C_BOLD}cat $temp_script${C_RESET}"
     
-    # Ask for user confirmation
-    read -p "Do you want to execute this script with sudo? (y/N): " -r choice
-    echo # Newline
+    read -p "Do you want to execute this script? (y/N): " -r choice
+    echo
 
     if [[ "$choice" =~ ^[Yy]$ ]]; then
+        read -p "Execute with sudo? (y/N): " -r sudo_choice
+        echo
+        
+        local cmd_to_run="bash $temp_script"
+        if [[ "$sudo_choice" =~ ^[Yy]$ ]]; then
+            cmd_to_run="sudo $cmd_to_run"
+        fi
+        
         log_message "${C_CYAN}User approved execution. Running script...${C_RESET}"
-        # Make the script executable and run it via the sudo-enabled run_command function
-        run_command "$description" "bash $temp_script"
+        run_command "$description" "$cmd_to_run"
     else
         log_message "${C_YELLOW}Execution skipped by user.${C_RESET}"
     fi
 
-    # Clean up the temporary file
     rm -f "$temp_script"
     log_message "${C_CYAN}Cleaned up temporary script file.${C_RESET}"
     log_message "${C_BLUE}----------------------------------------------------------------------${C_RESET}"
@@ -170,14 +182,13 @@ run_remote_script() {
 # --- Pre-flight Checks ---
 check_dependencies() {
     local missing=0
-    for cmd in tput curl sudo; do
+    for cmd in tput curl; do # Removed sudo from this check
         if ! command -v "$cmd" &> /dev/null; then
             echo "${C_RED}Error: Required command '$cmd' is not installed.${C_RESET}"
             missing=1
         fi
     done
 
-    # Check local scripts for existence and permissions
     for step in "${STEPS[@]}"; do
         IFS=';' read -r description type command <<< "$step"
         if [[ "$type" == "local" ]] && [[ ! -x "$command" ]]; then
@@ -197,31 +208,20 @@ check_dependencies() {
 
 # 0. Initialization
 clear
-echo "${C_BOLD}${C_CYAN}Custom Linux Setup Script by $AUTHOR (v2.1)${C_RESET}" > "$LOG_FILE" # Overwrite/create log
+echo "${C_BOLD}${C_CYAN}Custom Linux Setup Script by $AUTHOR (v2.2)${C_RESET}" > "$LOG_FILE"
 echo "Log file: $PWD/$LOG_FILE" >> "$LOG_FILE"
 log_message "${C_BLUE}======================================================================${C_RESET}"
 
-# Run dependency checks first
 check_dependencies
 
-# 1. Sudo check and activation
-log_message "${C_BOLD}${C_YELLOW}Requesting sudo privileges for setup tasks...${C_RESET}"
-if ! sudo -v; then
-    log_message "\n${C_RED}ERROR: sudo authentication failed. Aborting.${C_RESET}"
-    exit 1
-fi
-log_message "${C_GREEN}Sudo privileges acquired.${C_RESET}"
-log_message "${C_BLUE}======================================================================${C_RESET}"
-
-
-log_message "${C_BOLD}${C_YELLOW}IMPORTANT: This script will execute the following tasks with root privileges:${C_RESET}"
+log_message "${C_BOLD}${C_YELLOW}IMPORTANT: This script will execute the following tasks. Some may require root privileges:${C_RESET}"
 current_step=1
 for step in "${STEPS[@]}"; do
     IFS=';' read -r description type _ <<< "$step"
     if [[ "$type" != "fake" ]]; then
         log_message "${C_YELLOW}$current_step. $description${C_RESET}"
         ((current_step++))
-    fi
+    }
 done
 log_message "${C_YELLOW}Ensure you trust these sources and scripts before proceeding.${C_RESET}"
 log_message "${C_BLUE}======================================================================${C_RESET}"
