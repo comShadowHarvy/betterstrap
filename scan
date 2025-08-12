@@ -1,0 +1,21 @@
+#!/bin/sh
+
+# Variable for the IP Range
+ip_range="192.168.0.*"
+
+# Check network availability
+echo "Starting Network Scan..."
+nmap -sn $ip_range | grep 'Nmap scan report' >/tmp/nmap-scan.txt
+cat /tmp/nmap-scan.txt
+
+while read line; do
+  if [[ ! $line == *"down"* ]]; then
+    ip=$(echo $line | awk '{print $5}')
+    echo "Scanning IP: $ip..."
+
+    # Nmap quick scan with scripting and service detection
+    nmap -p 1-65535 --script=banner,http-enum,vulscan $ip >/tmp/nmap-result.txt
+
+    cat /tmp/nmap-result.txt
+  fi
+done </tmp/nmap-scan.txt
