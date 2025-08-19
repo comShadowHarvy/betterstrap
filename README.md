@@ -1,48 +1,92 @@
-# Betterstrap Utility Scripts and Tools
+# Betterstrap - Modern Linux System Management
 
-This repository is a collection of scripts, utilities, and small programs for Linux system management, automation, and experimentation. It includes shell scripts, Python utilities, configuration backups, and game prototypes. The tools are organized into folders by category and purpose.
+🚀 **Now Modernized!** This repository has evolved from complex bash scripts to a clean, maintainable **Just** task runner system for Linux system management, automation, and development environment setup.
 
-## Contents
+## ✨ What's New
 
-- **Shell Scripts**: Various `.sh` scripts for system setup, monitoring, git management, USB testing, formatting, and more.
-- **Python Utilities**: Small Python programs for games, scanning, and other utilities.
-- **Jupyter Notebooks**: Simulations and experiments, e.g., bouncing object simulations.
-- **Configuration Backups**: Scripts to backup and restore configuration files.
-- **Security Tools**: Scripts for network scanning, Bluetooth, and security tool installation.
-- **Server Tools**: Scripts and services for server setup and maintenance.
-- **Games**: Simple text-based and graphical games implemented in Python and shell scripts.
-- **Installers**: Scripts to automate the installation of software and development tools.
+### Modern Task Runner System
+- **Just-based commands**: Replace thousands of lines of bash with simple, clear commands
+- **Idempotent operations**: Safe to run multiple times
+- **Better error handling**: Cleaner failures and recovery
+- **Modular approach**: Run only what you need
 
-## Directory Overview
+### Quick Start
+```bash
+# Install the task runner (if needed)
+cargo install just
 
-- `config.backup/` — Backup and restore scripts for configuration files.
-- `git/` — Git repository management scripts.
-- `install.scripts/` — Installers for various tools and environments.
-- `old.need.to.redo/` — Legacy scripts and backups for reference or rework.
-- `scantests/` — Scanning utilities and test scripts.
-- `security/` — Security and network-related scripts.
-- `server/` — Server management scripts and systemd service files.
-- `setupssh/` — SSH setup automation.
-- `sig/` — Image processing and related scripts.
-- `tdarr/` — Scripts related to the Tdarr media transcoding platform.
-- `test.games/` — Game prototypes and experiments.
-- `text.games/` — Text-based games in Python.
+# See all available commands
+just
 
-## Usage
+# Complete system setup
+just setup-complete
 
-Most scripts are designed for Linux and use bash or zsh. To run a script:
-
-```zsh
-./scriptname.sh
+# Individual components
+just setup-ai           # AI/ML environment
+just setup-dev          # Development tools
+just daily-maintenance  # System updates & cleanup
 ```
 
-Or for Python scripts:
+## 📦 What's Included
 
-```zsh
-python3 scriptname.py
+- **System Setup**: Automated Arch Linux configuration, package management, and repository setup
+- **Development Environment**: Complete dev tools installation (languages, editors, containers)
+- **AI/ML Tools**: Ollama, PyTorch, Transformers, and popular AI models
+- **Security Tools**: Penetration testing and security analysis tools (authorized use only)
+- **System Maintenance**: Automated updates, cleanup, and configuration backups
+- **Legacy Support**: All original scripts preserved in `old-install-scripts/`
+
+## 📁 Directory Overview
+
+### Core System
+- `justfile` — **Main task runner** (replaces all old installation scripts)
+- `install.scripts/` — Documentation for the modern system
+- `old-install-scripts/` — **Backup of original bash scripts** (safe to delete after testing)
+- `modern-alternatives/` — Advanced alternatives (Docker, Ansible, Nix)
+
+### Utilities & Tools
+- `config.backup/` — Configuration backup and restore scripts
+- `git/` — Git repository management utilities
+- `security/` — Network scanning and security analysis tools
+- `server/` — Server management and systemd service files
+- `setupssh/` — SSH configuration automation
+
+### Development & Fun
+- `sig/` — Image processing and related scripts
+- `tdarr/` — Media transcoding platform scripts
+- `test.games/` — Game prototypes and experiments
+- `text.games/` — Text-based games in Python
+- `scantests/` — System scanning utilities
+
+## 🚀 Usage
+
+### Modern Task Runner (Recommended)
+```bash
+# See all available commands
+just
+
+# Get detailed help
+just help
+
+# Run specific tasks
+just setup-dev          # Install development tools
+just setup-ai           # Install AI/ML environment
+just daily-maintenance  # Update and clean system
 ```
 
-Some scripts may require root privileges or additional dependencies. Refer to comments within each script for details.
+### Legacy Scripts (if needed)
+Original bash scripts are preserved in `old-install-scripts/`:
+```bash
+cd old-install-scripts
+chmod +x install.sh
+./install.sh
+```
+
+### Python Utilities
+```bash
+python3 text.games/snake_game.py
+python3 sig/image_processor.py
+```
 
 ## Requirements
 

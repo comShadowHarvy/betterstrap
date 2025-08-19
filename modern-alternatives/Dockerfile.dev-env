@@ -1,0 +1,36 @@
+# Modern Alternative: Containerized Development Environment
+FROM archlinux:latest
+
+# Install base packages in one layer
+RUN pacman -Sy --noconfirm \
+    base-devel \
+    git \
+    curl \
+    wget \
+    python \
+    nodejs \
+    npm \
+    docker \
+    && pacman -Scc --noconfirm
+
+# Install development tools
+RUN pacman -S --noconfirm \
+    code \
+    tmux \
+    neovim \
+    zsh \
+    && pacman -Scc --noconfirm
+
+# Install language-specific tools via their official installers
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+RUN curl -sSL https://install.python-poetry.org | python3 -
+
+# Setup non-root user
+RUN useradd -m -s /bin/zsh developer
+USER developer
+WORKDIR /home/developer
+
+# Install user-level tools
+RUN curl -fsSL https://get.oh-my.zsh.sh | sh
+
+ENTRYPOINT ["/bin/zsh"]

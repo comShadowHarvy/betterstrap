@@ -1,0 +1,55 @@
+{
+  "name": "Modern Development Environment",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+  
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "installZsh": true,
+      "installOhMyZsh": true,
+      "username": "vscode"
+    },
+    "ghcr.io/devcontainers/features/git:1": {},
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "3.11"
+    },
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "20"
+    },
+    "ghcr.io/devcontainers/features/rust:1": {}
+  },
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "rust-lang.rust-analyzer", 
+        "ms-vscode.vscode-json",
+        "redhat.vscode-yaml",
+        "ms-azuretools.vscode-docker"
+      ],
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "zsh"
+      }
+    }
+  },
+
+  "postCreateCommand": [
+    "bash",
+    "-c", 
+    "pip install torch transformers numpy pandas jupyter && echo '🚀 Development environment ready!'"
+  ],
+
+  "forwardPorts": [8000, 8080, 3000],
+  "portsAttributes": {
+    "8000": {
+      "label": "Development Server"
+    }
+  },
+
+  "mounts": [
+    "source=${localWorkspaceFolder}/config,target=/workspace/config,type=bind"
+  ],
+
+  "remoteUser": "vscode"
+}

@@ -1,0 +1,80 @@
+---
+# Modern Alternative: Ansible Playbook for System Setup
+# Usage: ansible-playbook -K setup-system.yml
+- name: Configure Development System
+  hosts: localhost
+  connection: local
+  become: yes
+  vars:
+    dev_packages:
+      - git
+      - curl
+      - wget
+      - python
+      - nodejs
+      - npm
+      - code
+      - docker
+      - tmux
+      - neovim
+    
+    ai_tools:
+      - python-pytorch
+      - python-tensorflow
+    
+    security_tools:
+      - nmap
+      - wireshark-qt
+      - metasploit
+
+  tasks:
+    - name: Update package cache
+      package:
+        update_cache: yes
+      when: ansible_os_family == "Archlinux"
+
+    - name: Install development packages
+      package:
+        name: "{{ dev_packages }}"
+        state: present
+
+    - name: Install AI tools (if requested)
+      package:
+        name: "{{ ai_tools }}"
+        state: present
+      when: install_ai_tools | default(false) | bool
+
+    - name: Install security tools (if requested)  
+      package:
+        name: "{{ security_tools }}"
+        state: present
+      when: install_security_tools | default(false) | bool
+      
+    - name: Setup Docker service
+      systemd:
+        name: docker
+        enabled: yes
+        state: started
+
+    - name: Add user to docker group
+      user:
+        name: "{{ ansible_user }}"
+        groups: docker
+        append: yes
+
+    - name: Install rustup
+      shell: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+      args:
+        creates: ~/.cargo/bin/rustup
+      become: no
+
+    - name: Configure git (example)
+      git_config:
+        name: "{{ item.name }}"
+        value: "{{ item.value }}"
+        scope: global
+      loop:
+        - { name: "init.defaultBranch", value: "main" }
+        - { name: "pull.rebase", value: "false" }
+      become: no
+      when: git_config is defined
