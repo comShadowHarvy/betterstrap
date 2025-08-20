@@ -5,8 +5,12 @@
 set -e
 
 # --- Install Ollama ---
-echo "--- Installing Ollama ---"
-curl -fsSL https://ollama.com/install.sh | sh
+if command -v ollama >/dev/null 2>&1; then
+    echo "--- Ollama is already installed, skipping installation ---"
+else
+    echo "--- Installing Ollama ---"
+    curl -fsSL https://ollama.com/install.sh | sh
+fi
 
 # --- Check if Ollama is running ---
 if ! pgrep -x "ollama" > /dev/null
