@@ -26,13 +26,7 @@ backup_file="/etc/fstab.bak.$timestamp"
 sudo cp /etc/fstab "$backup_file"
 echo "Backup of /etc/fstab created at $backup_file"
 
-# Create the base /share directory if it doesn't exist
-if [ ! -d "/share" ]; then
-  echo "Creating directory: /share"
-  sudo mkdir -p "/share"
-else
-  echo "Directory already exists: /share"
-fi
+# Note: /share will be created as a symlink later in the script
 
 # Loop through each entry, create directories, update /etc/fstab, create symlinks, and mount
 for i in "${!entries[@]}"; do
@@ -64,24 +58,6 @@ for i in "${!entries[@]}"; do
     echo "Symlink already exists: $home_link"
   fi
 
-  # Create additional specific symlinks in /share directory (for USB shares)
-  if [ "$mount_point" == "/mnt/usb_share" ]; then
-    custom_link_path="/share/usb1"
-    if [ ! -L "$custom_link_path" ]; then
-      echo "Creating symlink: $custom_link_path -> $mount_point"
-      sudo ln -s "$mount_point" "$custom_link_path"
-    else
-      echo "Symlink already exists: $custom_link_path"
-    fi
-  elif [ "$mount_point" == "/mnt/usb_share_2" ]; then
-    custom_link_path="/share/usb2"
-    if [ ! -L "$custom_link_path" ]; then
-      echo "Creating symlink: $custom_link_path -> $mount_point"
-      sudo ln -s "$mount_point" "$custom_link_path"
-    else
-      echo "Symlink already exists: $custom_link_path"
-    fi
-  fi
 
   # Mount the directory
   echo "Mounting $mount_point"
@@ -93,30 +69,19 @@ for i in "${!entries[@]}"; do
   fi
 done
 
-# --- NEW: Map /share/trans to ~/temp ---
-echo "Setting up /share/trans link..."
+# --- NEW: Create unified /share symlink to hass_share mount ---
+echo "Setting up unified /share link to server share..."
 
-# Ensure ~/temp directory exists
-temp_dir="$HOME/temp" # This is the target directory
-if [ ! -d "$temp_dir" ]; then
-  echo "Creating directory: $temp_dir"
-  mkdir -p "$temp_dir" # No sudo needed for home directory
-else
-  echo "Directory already exists: $temp_dir"
+# Remove existing /share directory or symlink if it exists
+if [ -e "/share" ] || [ -L "/share" ]; then
+  echo "Removing existing /share directory/symlink"
+  sudo rm -rf "/share"
 fi
 
-# Define the custom link name
-custom_trans_link_name="/share/trans" # This is the link you will access
-
-# Create the symbolic link /share/trans pointing to ~/temp if it doesn't exist
-# Note: /share directory should have been created earlier in the script
-if [ ! -L "$custom_trans_link_name" ]; then
-  echo "Creating symlink: $custom_trans_link_name -> $temp_dir"
-  # $temp_dir is the target, $custom_trans_link_name is the name of the link itself
-  sudo ln -s "$temp_dir" "$custom_trans_link_name"
-else
-  echo "Symlink already exists: $custom_trans_link_name"
-fi
+# Create single symlink /share -> /mnt/hass_share
+echo "Creating symlink: /share -> /mnt/hass_share"
+sudo ln -s "/mnt/hass_share" "/share"
+echo "Unified /share symlink created - now /share/trans, /share/metube, etc. point to server folders"
 # --- END NEW ---
 
 echo "All tasks completed! Directories created, /etc/fstab updated, symlinks established, and shares mounted."
