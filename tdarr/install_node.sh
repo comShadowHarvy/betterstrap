@@ -10,6 +10,7 @@ TDARR_VERSION="2.47.01"  # Set to match your server version
 CONTAINER_NAME="tdarr-node"
 SHARE_PATH="/share"  # Path to your SMB share mount
 TRANS_PATH="/share/trans"  # Path for temporary/working files
+ENABLE_GPU=true  # Enable GPU acceleration for encoding
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -40,6 +41,10 @@ while [[ $# -gt 0 ]]; do
       TRANS_PATH="$2"
       shift 2
       ;;
+    --no-gpu)
+      ENABLE_GPU=false
+      shift
+      ;;
     -h|--help)
       echo "Usage: $0 [OPTIONS]"
       echo "Options:"
@@ -49,6 +54,7 @@ while [[ $# -gt 0 ]]; do
       echo "  --tdarr-version VER    Tdarr Node version (default: 2.47.01)"
       echo "  --share-path PATH      Path to SMB share mount (default: /share)"
       echo "  --trans-path PATH      Path for temp/working files (default: /share/trans)"
+      echo "  --no-gpu               Disable GPU acceleration (default: enabled)"
       echo "  -h, --help             Show this help message"
       exit 0
       ;;
@@ -81,6 +87,74 @@ check_docker() {
   echo "✅ Docker is installed and running"
 }
 
+# Function to check and install GPU support
+check_gpu_support() {
+  if [ "$ENABLE_GPU" != "true" ]; then
+    echo "⚠️  GPU acceleration disabled"
+    return 0
+  fi
+  
+  local gpu_found=false
+  local gpu_types=""
+  
+  # Check for NVIDIA GPU
+  if lspci | grep -i nvidia >/dev/null 2>&1; then
+    gpu_found=true
+    gpu_types="NVIDIA"
+    
+    # Check if nvidia-smi works
+    if ! command -v nvidia-smi >/dev/null 2>&1; then
+      echo "❌ NVIDIA GPU detected but drivers not installed."
+      echo "   For Arch Linux: sudo pacman -S nvidia nvidia-utils"
+      ENABLE_GPU=false
+      return 1
+    fi
+    
+    # Check if NVIDIA Container Toolkit is installed
+    if ! pacman -Q nvidia-container-toolkit >/dev/null 2>&1; then
+      echo "🔧 Installing NVIDIA Container Toolkit..."
+      sudo pacman -S nvidia-container-toolkit --noconfirm
+      
+      echo "🔧 Configuring Docker for NVIDIA runtime..."
+      sudo nvidia-ctk runtime configure --runtime=docker
+      
+      echo "🔄 Restarting Docker daemon..."
+      sudo systemctl restart docker
+      sleep 3
+    fi
+  fi
+  
+  # Check for Intel GPU
+  if lspci | grep -i "intel.*graphics" >/dev/null 2>&1; then
+    gpu_found=true
+    if [ -n "$gpu_types" ]; then
+      gpu_types="$gpu_types + Intel"
+    else
+      gpu_types="Intel"
+    fi
+    
+    # Check if Intel media driver is installed
+    if ! pacman -Q intel-media-driver >/dev/null 2>&1; then
+      echo "🔧 Installing Intel GPU drivers..."
+      sudo pacman -S intel-media-driver libva-utils --noconfirm
+    fi
+  fi
+  
+  # Check if any GPU render devices exist
+  if [ ! -d "/dev/dri" ] || [ -z "$(ls -A /dev/dri/render* 2>/dev/null)" ]; then
+    echo "⚠️  No GPU render devices found at /dev/dri"
+    gpu_found=false
+  fi
+  
+  if [ "$gpu_found" = "false" ]; then
+    echo "⚠️  No supported GPUs detected, disabling GPU acceleration"
+    ENABLE_GPU=false
+    return 0
+  fi
+  
+  echo "✅ GPU acceleration ready ($gpu_types)"
+}
+
 # Function to stop and remove existing container
 cleanup_existing_container() {
   if docker ps -a --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
@@ -98,10 +172,14 @@ echo "Node Name: $NODE_NAME"
 echo "Tdarr Version: $TDARR_VERSION"
 echo "Share Path: $SHARE_PATH"
 echo "Temp Path: $TRANS_PATH"
+echo "GPU Acceleration: $ENABLE_GPU"
 echo ""
 
 # Check Docker installation
 check_docker
+
+# Check GPU support
+check_gpu_support
 
 # Verify share paths exist
 echo "📁 Checking share paths..."
@@ -167,18 +245,52 @@ docker pull "haveagitgat/tdarr_node:$TDARR_VERSION"
 
 # Start the container
 echo "🚀 Starting Tdarr Node container..."
-docker run -d \
-  --name "$CONTAINER_NAME" \
-  --restart unless-stopped \
-  -v "$TRANS_PATH:/tmp" \
-  -v "$SHARE_PATH:/media" \
-  -v "$HOME/Tdarr/configs:/app/configs" \
-  -e serverIP="$SERVER_IP" \
-  -e serverPort="$SERVER_PORT" \
-  -e nodeName="$NODE_NAME" \
-  -e internalNode=true \
-  -e inContainer=true \
-  "haveagitgat/tdarr_node:$TDARR_VERSION"
+
+# Build Docker command with conditional GPU support
+DOCKER_CMD="docker run -d \\
+  --name $CONTAINER_NAME \\
+  --restart unless-stopped"
+
+# Add GPU support if enabled
+if [ "$ENABLE_GPU" = "true" ]; then
+  # Add NVIDIA GPU support
+  if lspci | grep -i nvidia >/dev/null 2>&1; then
+    DOCKER_CMD="$DOCKER_CMD \\
+  --gpus all"
+  fi
+  
+  # Add Intel GPU support (DRI devices for VA-API)
+  if [ -d "/dev/dri" ]; then
+    DOCKER_CMD="$DOCKER_CMD \\
+  --device /dev/dri:/dev/dri"
+  fi
+  
+  echo "🎥 Multi-GPU acceleration enabled"
+fi
+
+# Add remaining parameters
+DOCKER_CMD="$DOCKER_CMD \\
+  -v $TRANS_PATH:/tmp \\
+  -v $SHARE_PATH:/media \\
+  -v $HOME/Tdarr/configs:/app/configs \\
+  -e serverIP=$SERVER_IP \\
+  -e serverPort=$SERVER_PORT \\
+  -e nodeName=$NODE_NAME \\
+  -e internalNode=true \\
+  -e inContainer=true"
+
+# Add Intel GPU environment variables if Intel GPU detected
+if [ "$ENABLE_GPU" = "true" ] && lspci | grep -i "intel.*graphics" >/dev/null 2>&1; then
+  DOCKER_CMD="$DOCKER_CMD \\
+  -e LIBVA_DRIVER_NAME=iHD"
+fi
+
+# Add the image name
+DOCKER_CMD="$DOCKER_CMD \\
+  haveagitgat/tdarr_node:$TDARR_VERSION"
+
+# Execute the command
+eval "$DOCKER_CMD"
 
 # Wait a moment for container to start
 echo "⏳ Waiting for container to initialize..."
@@ -209,6 +321,7 @@ echo "   Node Name: $NODE_NAME"
 echo "   Server URL: $SERVER_URL"
 echo "   Tdarr Version: $TDARR_VERSION"
 echo "   Container Name: $CONTAINER_NAME"
+echo "   GPU Acceleration: $ENABLE_GPU"
 echo "   Config File: $HOME/Tdarr/configs/Tdarr_Node_Config.json"
 echo "   Share Path: $SHARE_PATH → /media (in container)"
 echo "   Temp Path: $TRANS_PATH → /tmp (in container)"

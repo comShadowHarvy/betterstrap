@@ -1,0 +1,126 @@
+# Examples of GPU-enabled Docker containers
+# Usage: docker compose -f gpu-examples.yml up [service-name]
+
+version: '3.8'
+
+services:
+  # Example 1: Winboat with GPU access
+  winboat-gpu:
+    image: ghcr.io/linuxserver/winbox
+    container_name: winboat-gpu
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=America/New_York
+      - LIBVA_DRIVER_NAME=iHD
+    volumes:
+      - /path/to/winboat/config:/config
+    ports:
+      - 3000:3000
+    devices:
+      - /dev/dri:/dev/dri  # Intel GPU access
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]  # NVIDIA GPU access
+    restart: unless-stopped
+
+  # Example 2: FFmpeg with dual GPU support
+  ffmpeg-gpu:
+    image: jrottenberg/ffmpeg:latest
+    container_name: ffmpeg-gpu
+    environment:
+      - LIBVA_DRIVER_NAME=iHD
+    volumes:
+      - /share:/media
+    devices:
+      - /dev/dri:/dev/dri
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    command: |
+      -hwaccel vaapi -hwaccel_device /dev/dri/renderD128 -i /media/input.mp4 
+      -c:v h264_vaapi -b:v 2M /media/output_intel.mp4
+    restart: "no"
+
+  # Example 3: Jellyfin with hardware transcoding
+  jellyfin-gpu:
+    image: linuxserver/jellyfin:latest
+    container_name: jellyfin-gpu
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=America/New_York
+      - NVIDIA_VISIBLE_DEVICES=all
+      - LIBVA_DRIVER_NAME=iHD
+    volumes:
+      - /path/to/jellyfin/config:/config
+      - /share:/media
+    ports:
+      - 8096:8096
+    devices:
+      - /dev/dri:/dev/dri
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped
+
+  # Example 4: OBS Studio with GPU encoding
+  obs-gpu:
+    image: ghcr.io/linuxserver/obs:latest
+    container_name: obs-gpu
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=America/New_York
+      - LIBVA_DRIVER_NAME=iHD
+    volumes:
+      - /path/to/obs/config:/config
+    ports:
+      - 3001:3000
+    devices:
+      - /dev/dri:/dev/dri
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped
+
+  # Example 5: Plex with hardware transcoding
+  plex-gpu:
+    image: linuxserver/plex:latest
+    container_name: plex-gpu
+    network_mode: host
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - VERSION=docker
+      - NVIDIA_VISIBLE_DEVICES=all
+      - LIBVA_DRIVER_NAME=iHD
+    volumes:
+      - /path/to/plex/config:/config
+      - /share:/media
+    devices:
+      - /dev/dri:/dev/dri
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped

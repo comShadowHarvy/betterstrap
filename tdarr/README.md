@@ -31,15 +31,17 @@ This script installs and configures a Tdarr Node using Docker, replacing the pre
 | `--tdarr-version VER` | Tdarr Node version | `2.47.01` |
 | `--share-path PATH` | SMB share mount path | `/share` |
 | `--trans-path PATH` | Temp/working files path | `/share/trans` |
+| `--no-gpu` | Disable GPU acceleration | enabled by default |
 | `-h, --help` | Show help message | - |
 
 ## What the Script Does
 
 1. **Verifies** Docker installation and share paths
-2. **Creates** Tdarr configuration with path translators
-3. **Pulls** the correct Tdarr Node Docker image
-4. **Starts** the container with proper volume mappings
-5. **Configures** automatic restart on boot
+2. **Detects** NVIDIA GPU and installs Container Toolkit if needed
+3. **Creates** Tdarr configuration with path translators
+4. **Pulls** the correct Tdarr Node Docker image
+5. **Starts** the container with GPU acceleration and proper volume mappings
+6. **Configures** automatic restart on boot
 
 ## Path Mapping
 
@@ -49,6 +51,30 @@ The script configures path translation between server and node:
 - **Host**: `/share/trans` → **Container**: `/tmp`
 
 This allows the server to send `/share/...` paths while the node accesses them at `/media/...`.
+
+## GPU Acceleration
+
+The script automatically detects and enables **both NVIDIA and Intel GPUs** for maximum performance:
+
+### Multi-GPU Support
+- **NVIDIA GPUs**: NVENC (H.264/H.265) hardware encoding
+- **Intel GPUs**: QuickSync (H.264/H.265/AV1) hardware encoding  
+- **Dual GPU**: Can use both simultaneously for parallel encoding
+- **Auto-detection**: Scans for all available GPU hardware
+- **Auto-install**: Installs required drivers and toolkits
+- **Non-blocking**: GPUs remain available for other applications
+
+### Supported Hardware
+- **NVIDIA**: GTX 1050+, RTX series (NVENC support)
+- **Intel**: 7th gen+ processors with integrated graphics (QuickSync)
+- **Hybrid systems**: Laptops with both Intel + NVIDIA GPUs
+
+### Features
+- **Parallel encoding**: Multiple streams on different GPUs
+- **Load balancing**: Tdarr can distribute work across GPUs
+- **Power efficiency**: Intel GPU often more power-efficient
+- **Fallback support**: Gracefully handles missing drivers
+- **Override**: Use `--no-gpu` to disable if needed
 
 ## Management Commands
 
