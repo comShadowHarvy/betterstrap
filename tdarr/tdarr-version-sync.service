@@ -1,0 +1,33 @@
+[Unit]
+Description=Tdarr Version Synchronization Service
+Documentation=https://github.com/HaveAGitGat/Tdarr
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=me
+Group=me
+Environment=HOME=/home/me
+Environment=TDARR_SERVER_IP=192.168.1.210
+Environment=TDARR_SERVER_PORT=8266
+Environment=TDARR_CONTAINER_NAME=tdarr-node
+Environment=TDARR_NODE_NAME=omarchy-node
+Environment=TDARR_SHARE_PATH=/share
+Environment=TDARR_TRANS_PATH=/share/trans
+Environment=TDARR_LOG_FILE=/var/log/tdarr-version-sync.log
+ExecStart=/home/me/betterstrap/tdarr/sync_tdarr_version.sh
+StandardOutput=journal
+StandardError=journal
+TimeoutStartSec=300
+Restart=no
+
+# Create log directory
+ExecStartPre=/usr/bin/mkdir -p /var/log
+ExecStartPre=/usr/bin/touch /var/log/tdarr-version-sync.log
+ExecStartPre=/usr/bin/chown me:me /var/log/tdarr-version-sync.log
+
+[Install]
+WantedBy=multi-user.target

@@ -11,6 +11,7 @@ CONTAINER_NAME="tdarr-node"
 SHARE_PATH="/share"  # Path to your SMB share mount
 TRANS_PATH="/share/trans"  # Path for temporary/working files
 ENABLE_GPU=true  # Enable GPU acceleration for encoding
+AUTO_UPDATE=false  # Enable automatic version checking
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -45,6 +46,10 @@ while [[ $# -gt 0 ]]; do
       ENABLE_GPU=false
       shift
       ;;
+    --auto-update)
+      AUTO_UPDATE=true
+      shift
+      ;;
     -h|--help)
       echo "Usage: $0 [OPTIONS]"
       echo "Options:"
@@ -55,6 +60,7 @@ while [[ $# -gt 0 ]]; do
       echo "  --share-path PATH      Path to SMB share mount (default: /share)"
       echo "  --trans-path PATH      Path for temp/working files (default: /share/trans)"
       echo "  --no-gpu               Disable GPU acceleration (default: enabled)"
+      echo "  --auto-update          Check server version and update if needed"
       echo "  -h, --help             Show this help message"
       exit 0
       ;;
@@ -173,6 +179,7 @@ echo "Tdarr Version: $TDARR_VERSION"
 echo "Share Path: $SHARE_PATH"
 echo "Temp Path: $TRANS_PATH"
 echo "GPU Acceleration: $ENABLE_GPU"
+echo "Auto Update: $AUTO_UPDATE"
 echo ""
 
 # Check Docker installation
@@ -180,6 +187,30 @@ check_docker
 
 # Check GPU support
 check_gpu_support
+
+# Check server version and update TDARR_VERSION if auto-update enabled
+if [ "$AUTO_UPDATE" = "true" ]; then
+  echo "🔄 Auto-update enabled, checking server version..."
+  if command -v curl >/dev/null 2>&1; then
+    SERVER_VERSION=$(timeout 10 curl -s "http://$SERVER_IP:$SERVER_PORT/api/v2/status" 2>/dev/null | \
+      grep -o '"version":"[^"]*"' | cut -d'"' -f4 || echo "")
+    if [ -n "$SERVER_VERSION" ]; then
+      if [ "$SERVER_VERSION" != "$TDARR_VERSION" ]; then
+        echo "📋 Version mismatch detected!"
+        echo "   Script default: $TDARR_VERSION"
+        echo "   Server version: $SERVER_VERSION"
+        echo "   Updating to match server: $SERVER_VERSION"
+        TDARR_VERSION="$SERVER_VERSION"
+      else
+        echo "✅ Version matches server: $TDARR_VERSION"
+      fi
+    else
+      echo "⚠️  Could not retrieve server version, using: $TDARR_VERSION"
+    fi
+  else
+    echo "⚠️  curl not available, cannot check server version"
+  fi
+fi
 
 # Verify share paths exist
 echo "📁 Checking share paths..."
