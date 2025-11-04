@@ -9,9 +9,12 @@ NODE_NAME="${HOSTNAME}-node"
 TDARR_VERSION="2.47.01"  # Set to match your server version
 CONTAINER_NAME="tdarr-node"
 SHARE_PATH="/share"  # Path to your SMB share mount
-TRANS_PATH="/share/trans"  # Path for temporary/working files
+TRANS_PATH="$HOME/temp/trans"  # Path for temporary/working files
 ENABLE_GPU=true  # Enable GPU acceleration for encoding
 AUTO_UPDATE=false  # Enable automatic version checking
+WORKER_MEMORY=4096  # Memory limit per worker in MB (default: 4GB)
+MAX_WORKERS=1  # Maximum number of concurrent workers (reduced due to hardcoded 16GB per worker)
+CONTAINER_MEMORY=14g  # Total container memory limit
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -247,6 +250,10 @@ cat > "$HOME/Tdarr/configs/Tdarr_Node_Config.json" << EOF
     {
       "server": "$SHARE_PATH",
       "node": "/media"
+    },
+    {
+      "server": "/share/trans",
+      "node": "/tmp"
     }
   ],
   "maxLogSizeMB": 10,
@@ -315,6 +322,10 @@ if [ "$ENABLE_GPU" = "true" ] && lspci | grep -i "intel.*graphics" >/dev/null 2>
   DOCKER_CMD="$DOCKER_CMD \\
   -e LIBVA_DRIVER_NAME=iHD"
 fi
+
+# Add worker limit (memory is hardcoded at 16GB per worker, so limit workers to 1)
+DOCKER_CMD="$DOCKER_CMD \\
+  -e ffmpegWorkerLimit=$MAX_WORKERS"
 
 # Add the image name
 DOCKER_CMD="$DOCKER_CMD \\

@@ -38,8 +38,8 @@ log() {
         *)       color="$NC" ;;
     esac
     
-    # Print to console with color
-    echo -e "${color}[$timestamp] [$level] $message${NC}"
+    # Print to stderr with color (avoid polluting stdout for command substitution)
+    echo -e "${color}[$timestamp] [$level] $message${NC}" >&2
     
     # Log to file without color
     echo "[$timestamp] [$level] $message" >> "$LOG_FILE"
