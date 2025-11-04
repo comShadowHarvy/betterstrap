@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  tdarr-node:
+    image: haveagitgat/tdarr_node:2.49.01
+    container_name: tdarr-node
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      - serverIP=192.168.1.210
+      - serverPort=8266
+      - nodeName=omarchy-node
+      - PUID=1000
+      - PGID=1000
+    volumes:
+      # Media files - mounted as /share to match server paths
+      - /mnt/hass_share:/share:rw
+      # Transcode temp directory - on shared storage so server can access
+      - /mnt/hass_share/trans:/tmp:rw
+      # Node configuration
+      - /home/me/Tdarr/configs:/app/configs:rw
