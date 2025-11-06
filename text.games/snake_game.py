@@ -63,6 +63,9 @@ class Config:
     ENHANCED_VISUALS = True  # Use enhanced visual elements
     SHOW_POWER_UP_EFFECTS = True  # Show visual effects for power-ups
     COLOR_CYCLING = True  # Enable color cycling for visual effects
+    
+    # Debug settings
+    DEBUG_INTEGRITY = True  # Enable body integrity checks to prevent invisible collision bugs
 
 
 # =============================================================================
@@ -418,6 +421,65 @@ class Snake:
         self.consecutive_moves = 0  # Count of moves in same direction
         self.territory_center = None  # For territorial strategy
     
+    def _rebuild_body_set(self):
+        """Rebuild body_set from body to ensure synchronization"""
+        self.body_set = set(self.body)
+    
+    def _assert_no_duplicates(self):
+        """Assert that body has no duplicate positions"""
+        if len(self.body) != len(set(self.body)):
+            if Config.DEBUG_INTEGRITY:
+                # Find duplicates for debugging
+                seen = set()
+                duplicates = []
+                for pos in self.body:
+                    if pos in seen:
+                        duplicates.append(pos)
+                    seen.add(pos)
+                raise ValueError(f"Snake {self.id} has duplicate positions in body: {duplicates}")
+    
+    def validate_body_integrity(self, strict=True):
+        """Validate that body and body_set are properly synchronized.
+        
+        This ensures:
+        - No duplicate positions in body
+        - body_set equals set(body)
+        - If strict, head is at body[0] and is in body_set
+        
+        Returns True if valid, raises ValueError if invalid when DEBUG_INTEGRITY is enabled.
+        """
+        if not Config.DEBUG_INTEGRITY:
+            return True
+            
+        if not self.body:
+            # Empty body is valid (dead snake)
+            if len(self.body_set) != 0:
+                raise ValueError(f"Snake {self.id}: body is empty but body_set has {len(self.body_set)} items")
+            return True
+        
+        # Check for duplicates
+        expected_set = set(self.body)
+        if len(self.body) != len(expected_set):
+            self._assert_no_duplicates()  # This will raise with details
+        
+        # Check body_set matches expected_set
+        if self.body_set != expected_set:
+            missing = expected_set - self.body_set
+            extra = self.body_set - expected_set
+            raise ValueError(
+                f"Snake {self.id}: body_set mismatch. "
+                f"Body len={len(self.body)}, Set len={len(self.body_set)}. "
+                f"Missing from set: {missing}. Extra in set: {extra}"
+            )
+        
+        if strict:
+            # Check head is properly positioned
+            head = self.body[0]
+            if head not in self.body_set:
+                raise ValueError(f"Snake {self.id}: head {head} not in body_set")
+        
+        return True
+    
     def next_head(self, new_dir=None):
         """Calculate the position of the next head"""
         if not self.body:  # Check if body is empty
@@ -429,7 +491,14 @@ class Snake:
         return (head[0] + dx, head[1] + dy)
     
     def move(self, foods, other_snakes_positions, power_ups, game_state):
-        """Move the snake by updating its direction and position"""
+        """Move the snake by updating its direction and position.
+        
+        CRITICAL: The new head is added to body exactly ONCE, and only AFTER all
+        collision and teleportation checks pass. This prevents phantom positions
+        from being added to body_set.
+        
+        Returns: The final head position after the move, or None if the snake died.
+        """
         # Check if snake has a body
         if not self.body:
             return None
@@ -490,51 +559,93 @@ class Snake:
                 self.choose_direction(foods, other_snakes_positions, power_ups, game_state)
                 self.last_ai_update = current_time
         
-        # Get the new head position
-        new_head = self.next_head()
+        # Calculate the intended next head position
+        # IMPORTANT: Do NOT add this to body or body_set yet!
+        intended_head = self.next_head()
+        if intended_head is None:
+            return None
         
-        # Check for obstacles before inserting to avoid stale/duplicate positions
-        # (this way we don't insert a head when teleporting)
+        # Check if this position has an obstacle that might teleport us
+        final_head = intended_head
         for obstacle in game_state.obstacles:
-            if new_head == obstacle.position:
+            if intended_head == obstacle.position:
                 effect = obstacle.get_effect()
                 if "teleport" in effect and effect["teleport"]:
-                    # Teleport case - don't add the initial head position
-                    # The actual teleport is handled in GameState.check_obstacle_collision
-                    # We'll just return the current head position
-                    return self.body[0]
+                    teleport_dest = effect["teleport"]
+                    
+                    # Verify the teleport destination is safe
+                    # Check bounds
+                    if not (0 < teleport_dest[0] < game_state.width - 1 and 
+                            0 < teleport_dest[1] < game_state.height - 1):
+                        # Destination out of bounds, don't teleport - snake will die
+                        break
+                    
+                    # Check if destination has another snake
+                    destination_blocked = teleport_dest in other_snakes_positions
+                    
+                    # Check if destination has a deadly obstacle
+                    if not destination_blocked:
+                        for other_obstacle in game_state.obstacles:
+                            if other_obstacle.position == teleport_dest:
+                                other_effect = other_obstacle.get_effect()
+                                if other_effect.get("deadly", False):
+                                    destination_blocked = True
+                                    break
+                    
+                    # Only use teleport destination if it's safe
+                    if not destination_blocked:
+                        final_head = teleport_dest
+                    # Otherwise, snake enters wormhole and dies (final_head stays as wormhole position)
+                    break
         
-        # Add the new head
-        self.body.insert(0, new_head)
-        self.body_set.add(new_head)
+        # Now build the new body with the final head position
+        # This is the ONLY place where the head is added
+        new_body = [final_head] + self.body
         
-        # Ensure body_set and body are in sync - this helps prevent the random death bug
-        if len(self.body_set) != len(set(self.body)):
-            # Resync if needed
-            self.body_set = set(self.body)
+        # Rebuild body_set from the new body to guarantee synchronization
+        self.body = new_body
+        self._rebuild_body_set()
         
-        return new_head
+        # Validate integrity in debug mode
+        if Config.DEBUG_INTEGRITY:
+            try:
+                self.validate_body_integrity()
+            except ValueError as e:
+                # Log but don't crash - force a rebuild to recover
+                print(f"WARNING: Snake {self.id} integrity check failed in move(): {e}")
+                self._rebuild_body_set()
+        
+        return final_head
     
     def remove_tail(self):
-        """Remove the snake's tail (last segment) safely"""
+        """Remove the snake's tail (last segment) safely.
+        
+        This method maintains the invariant that body_set == set(body).
+        After removal, body_set is rebuilt to guarantee synchronization.
+        """
         if not self.body:
             return
-            
-        tail = self.body.pop()
         
-        # Check if the tail position exists elsewhere in the body
-        # (to handle cases where the snake has overlapping segments)
-        tail_also_in_body = tail in self.body
+        # Remove the last segment
+        self.body.pop()
         
-        # Only remove from body_set if this is the only occurrence of this position
-        if not tail_also_in_body and tail in self.body_set:
-            self.body_set.remove(tail)
-        elif not tail_also_in_body:
-            # Tail should be in body_set but isn't - resync the entire body_set
-            self.body_set = set(self.body)
+        # Rebuild body_set from body to ensure perfect synchronization
+        # This prevents any desynchronization bugs
+        self._rebuild_body_set()
+        
+        # Validate integrity in debug mode
+        if Config.DEBUG_INTEGRITY:
+            try:
+                self.validate_body_integrity(strict=False)
+            except ValueError as e:
+                print(f"WARNING: Snake {self.id} integrity check failed in remove_tail(): {e}")
+                self._rebuild_body_set()
     
     def gets_longer(self, food_type):
-        """Snake gets longer based on the food type"""
+        """Snake gets longer based on the food type.
+        
+        This method maintains body integrity by rebuilding body_set after growth.
+        """
         if not self.body:  # Check if body is empty
             return
             
@@ -550,7 +661,17 @@ class Snake:
         tail = self.body[-1]
         for _ in range(length_gain - 1):
             self.body.append(tail)
-            self.body_set.add(tail)
+        
+        # Rebuild body_set to ensure synchronization
+        self._rebuild_body_set()
+        
+        # Validate integrity in debug mode
+        if Config.DEBUG_INTEGRITY:
+            try:
+                self.validate_body_integrity(strict=False)
+            except ValueError as e:
+                print(f"WARNING: Snake {self.id} integrity check failed in gets_longer(): {e}")
+                self._rebuild_body_set()
     
     def add_power_up(self, power_up_type):
         """Add a power-up to the snake"""
@@ -2332,11 +2453,13 @@ class GameState:
                                 if not snake.has_power_up(PowerUpType.INVINCIBILITY) and not snake.has_power_up(PowerUpType.GHOST):
                                     # Snake hit acid, eliminate it
                                     snake.alive = False
-                                    self.drop_snake_as_food(snake)
                                     
                                     # Record death order for scoring
-                                    self.death_order.append(snake)
-                                    snake.death_order = len(self.death_order)
+                                    snake.death_order = self.death_counter
+                                    self.death_counter += 1
+                                    
+                                    # Drop snake as food after recording death
+                                    self.drop_snake_as_food(snake)
             
             # Update the acid trails list
             self.acid_trails = active_trails
@@ -2436,12 +2559,41 @@ class GameState:
             # Remove tail if didn't eat
             if not ate_food:
                 snake.remove_tail()
+            
+            # Validate snake integrity after all modifications
+            if Config.DEBUG_INTEGRITY and snake.alive:
+                try:
+                    snake.validate_body_integrity()
+                except ValueError as e:
+                    # Log the error but don't crash the game
+                    # In a real scenario, you'd use proper logging
+                    print(f"Integrity check failed for Snake {snake.id}: {e}")
+                    # Force a resync to recover
+                    snake._rebuild_body_set()
+        
+        # Final validation pass for all alive snakes
+        if Config.DEBUG_INTEGRITY:
+            for snake in self.snakes:
+                if snake.alive and snake.body:
+                    try:
+                        snake.validate_body_integrity()
+                    except ValueError as e:
+                        print(f"Final check failed for Snake {snake.id}: {e}")
+                        # Force a resync to recover
+                        snake._rebuild_body_set()
         
         # Check if game is over
         self.check_game_over()
         
     def check_obstacle_collision(self, snake, head_pos):
-        """Check if snake has collided with an obstacle and handle effects"""
+        """Check if snake has collided with an obstacle and handle effects.
+        
+        IMPORTANT: This method does NOT mutate snake.body or snake.body_set.
+        Teleportation is handled in Snake.move() before the head is added.
+        This method only applies power-up effects and returns collision status.
+        
+        Returns: True if the snake hit a deadly obstacle, False otherwise.
+        """
         for obstacle in self.obstacles:
             if head_pos == obstacle.position:
                 effect = obstacle.get_effect()
@@ -2451,45 +2603,8 @@ class GameState:
                     self.kill_snake(snake)
                     return True
                 
-                # Handle teleport (wormhole)
-                if "teleport" in effect and effect["teleport"]:
-                    # Teleport the snake to the linked position
-                    new_pos = effect["teleport"]
-                    
-                    # Verify new position is valid to prevent death after teleport
-                    if (0 < new_pos[0] < self.width - 1 and 
-                        0 < new_pos[1] < self.height - 1):
-                        
-                        # Ensure the teleport destination isn't deadly
-                        position_is_safe = True
-                        
-                        # Check if destination has a snake
-                        for other_snake in self.snakes:
-                            if other_snake is not snake and other_snake.alive:
-                                if new_pos in other_snake.body_set:
-                                    position_is_safe = False
-                                    break
-                        
-                        # Check if destination has a deadly obstacle
-                        for other_obstacle in self.obstacles:
-                            if other_obstacle is not obstacle and other_obstacle.position == new_pos:
-                                other_effect = other_obstacle.get_effect()
-                                if other_effect.get("deadly", False):
-                                    position_is_safe = False
-                                    break
-                        
-                        # Only teleport if destination is safe
-                        if position_is_safe:
-                            # Update head position in both body list and set
-                            snake.body[0] = new_pos
-                            
-                            # Remove old head position from set if it exists
-                            if head_pos in snake.body_set:
-                                snake.body_set.remove(head_pos)
-                                
-                            # Add new head position to set
-                            snake.body_set.add(new_pos)
-                            return True
+                # Note: Teleport is now handled in Snake.move() BEFORE head insertion
+                # This prevents phantom positions from being added
                 
                 # Handle speed effects (swamp, energy field)
                 if "speed_multiplier" in effect:
