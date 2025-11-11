@@ -47,6 +47,8 @@ declare -A INTERACTIVE_MODEL_CHOICES=(
   ["11"]="llama3:70b;Meta - Extremely powerful, general purpose (70B);70000"
   ["12"]="command-r:35b;Cohere - Enterprise grade, RAG optimized (35B);35000"
   ["13"]="command-r-plus:104b;Cohere - Flagship, RAG & Tool Use (104B);104000"
+  ["14"]="huihui_ai/gpt-oss-abliterated:latest;OpenAI GPT-OSS - Reasoning & agentic tasks (20B);20000"
+  ["15"]="huihui_ai/huihui-moe-abliterated:latest;Huihui MoE - Efficient MoE architecture (12B);12000"
 
   # Coding Models
   ["20"]="codellama:7b;Meta - Code generation (7B);7000"
@@ -61,9 +63,11 @@ declare -A INTERACTIVE_MODEL_CHOICES=(
   ["31"]="gemma:2b;Google - Small & efficient (2B);2500"
   ["32"]="tinyllama:1.1b;TinyLlama - Extremely small footprint (1.1B);1500"
   ["33"]="qwen:1.8b-chat;Alibaba - Very small multilingual chat (1.8B);2000"
+  ["34"]="granite4:latest;IBM - Instruction following & tool-calling (3B);3000"
 
   # Multimodal Models (Vision + Text)
   ["M1"]="llava:7b;LLaVA - Vision and text model (7B);7500" # RAM includes vision components
+  ["M2"]="huihui_ai/granite3.2-vision-abliterated:latest;IBM Granite Vision - Visual document understanding (2B);3000"
 
   # Multilingual Models
   ["L1"]="aya:8b;Cohere - Broad multilingual coverage (8B, 100+ lang);8000"
@@ -662,13 +666,13 @@ choose_model() {
       echo -e "\n${BOLD}General Purpose / Chat Models (Small to Medium):${NC}"
       for k in {"1","2","3","4","5","6","7"}; do [[ -v INTERACTIVE_MODEL_CHOICES["$k"] ]] && printf "  ${YELLOW}%2s)${NC} %-25s (%s; RAM: ~%sGB)\n" "$k" "${INTERACTIVE_MODEL_CHOICES[$k]%%;*}" "$(echo "${INTERACTIVE_MODEL_CHOICES[$k]}" | cut -d';' -f2)" "$((${INTERACTIVE_MODEL_CHOICES[$k]##*;} / 1000))"; done
       echo -e "\n${BOLD}High Performance Chat Models:${NC}"
-      for k in {"10","11","12","13"}; do [[ -v INTERACTIVE_MODEL_CHOICES["$k"] ]] && printf "  ${YELLOW}%2s)${NC} %-25s (%s; RAM: ~%sGB)\n" "$k" "${INTERACTIVE_MODEL_CHOICES[$k]%%;*}" "$(echo "${INTERACTIVE_MODEL_CHOICES[$k]}" | cut -d';' -f2)" "$((${INTERACTIVE_MODEL_CHOICES[$k]##*;} / 1000))"; done
+      for k in {"10","11","12","13","14","15"}; do [[ -v INTERACTIVE_MODEL_CHOICES["$k"] ]] && printf "  ${YELLOW}%2s)${NC} %-25s (%s; RAM: ~%sGB)\n" "$k" "${INTERACTIVE_MODEL_CHOICES[$k]%%;*}" "$(echo "${INTERACTIVE_MODEL_CHOICES[$k]}" | cut -d';' -f2)" "$((${INTERACTIVE_MODEL_CHOICES[$k]##*;} / 1000))"; done
       echo -e "\n${BOLD}Coding Models:${NC}"
       for k in {"20","21","22","23","24","25"}; do [[ -v INTERACTIVE_MODEL_CHOICES["$k"] ]] && printf "  ${YELLOW}%2s)${NC} %-25s (%s; RAM: ~%sGB)\n" "$k" "${INTERACTIVE_MODEL_CHOICES[$k]%%;*}" "$(echo "${INTERACTIVE_MODEL_CHOICES[$k]}" | cut -d';' -f2)" "$((${INTERACTIVE_MODEL_CHOICES[$k]##*;} / 1000))"; done
       echo -e "\n${BOLD}Small & Efficient Models:${NC}"
-      for k in {"30","31","32","33"}; do [[ -v INTERACTIVE_MODEL_CHOICES["$k"] ]] && printf "  ${YELLOW}%2s)${NC} %-25s (%s; RAM: ~%sGB)\n" "$k" "${INTERACTIVE_MODEL_CHOICES[$k]%%;*}" "$(echo "${INTERACTIVE_MODEL_CHOICES[$k]}" | cut -d';' -f2)" "$((${INTERACTIVE_MODEL_CHOICES[$k]##*;} / 1000))"; done
+      for k in {"30","31","32","33","34"}; do [[ -v INTERACTIVE_MODEL_CHOICES["$k"] ]] && printf "  ${YELLOW}%2s)${NC} %-25s (%s; RAM: ~%sGB)\\n" "$k" "${INTERACTIVE_MODEL_CHOICES[$k]%%;*}" "$(echo "${INTERACTIVE_MODEL_CHOICES[$k]}" | cut -d';' -f2)" "$((${INTERACTIVE_MODEL_CHOICES[$k]##*;} / 1000))"; done
       echo -e "\n${BOLD}Multimodal Models (Vision + Text):${NC}"
-      for k in {"M1"}; do [[ -v INTERACTIVE_MODEL_CHOICES["$k"] ]] && printf "  ${YELLOW}%2s)${NC} %-25s (%s; RAM: ~%sGB)\n" "$k" "${INTERACTIVE_MODEL_CHOICES[$k]%%;*}" "$(echo "${INTERACTIVE_MODEL_CHOICES[$k]}" | cut -d';' -f2)" "$((${INTERACTIVE_MODEL_CHOICES[$k]##*;} / 1000))"; done
+      for k in {"M1","M2"}; do [[ -v INTERACTIVE_MODEL_CHOICES["$k"] ]] && printf "  ${YELLOW}%2s)${NC} %-25s (%s; RAM: ~%sGB)\\n" "$k" "${INTERACTIVE_MODEL_CHOICES[$k]%%;*}" "$(echo "${INTERACTIVE_MODEL_CHOICES[$k]}" | cut -d';' -f2)" "$((${INTERACTIVE_MODEL_CHOICES[$k]##*;} / 1000))"; done
       echo -e "\n${BOLD}Multilingual Models:${NC}"
       for k in {"L1"}; do [[ -v INTERACTIVE_MODEL_CHOICES["$k"] ]] && printf "  ${YELLOW}%2s)${NC} %-25s (%s; RAM: ~%sGB)\n" "$k" "${INTERACTIVE_MODEL_CHOICES[$k]%%;*}" "$(echo "${INTERACTIVE_MODEL_CHOICES[$k]}" | cut -d';' -f2)" "$((${INTERACTIVE_MODEL_CHOICES[$k]##*;} / 1000))"; done
       echo -e "\n${BOLD}DeepSeek Original Series (for reference):${NC}"
