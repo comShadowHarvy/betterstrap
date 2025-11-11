@@ -64,6 +64,7 @@ declare -A INTERACTIVE_MODEL_CHOICES=(
   ["32"]="tinyllama:1.1b;TinyLlama - Extremely small footprint (1.1B);1500"
   ["33"]="qwen:1.8b-chat;Alibaba - Very small multilingual chat (1.8B);2000"
   ["34"]="granite4:latest;IBM - Instruction following & tool-calling (3B);3000"
+  ["35"]="huihui_ai/huihui-moe-abliterated:5b;Huihui MoE - Efficient MoE small (5B);5000"
 
   # Multimodal Models (Vision + Text)
   ["M1"]="llava:7b;LLaVA - Vision and text model (7B);7500" # RAM includes vision components
@@ -670,7 +671,7 @@ choose_model() {
       echo -e "\n${BOLD}Coding Models:${NC}"
       for k in {"20","21","22","23","24","25"}; do [[ -v INTERACTIVE_MODEL_CHOICES["$k"] ]] && printf "  ${YELLOW}%2s)${NC} %-25s (%s; RAM: ~%sGB)\n" "$k" "${INTERACTIVE_MODEL_CHOICES[$k]%%;*}" "$(echo "${INTERACTIVE_MODEL_CHOICES[$k]}" | cut -d';' -f2)" "$((${INTERACTIVE_MODEL_CHOICES[$k]##*;} / 1000))"; done
       echo -e "\n${BOLD}Small & Efficient Models:${NC}"
-      for k in {"30","31","32","33","34"}; do [[ -v INTERACTIVE_MODEL_CHOICES["$k"] ]] && printf "  ${YELLOW}%2s)${NC} %-25s (%s; RAM: ~%sGB)\\n" "$k" "${INTERACTIVE_MODEL_CHOICES[$k]%%;*}" "$(echo "${INTERACTIVE_MODEL_CHOICES[$k]}" | cut -d';' -f2)" "$((${INTERACTIVE_MODEL_CHOICES[$k]##*;} / 1000))"; done
+      for k in {"30","31","32","33","34","35"}; do [[ -v INTERACTIVE_MODEL_CHOICES["$k"] ]] && printf "  ${YELLOW}%2s)${NC} %-25s (%s; RAM: ~%sGB)\\n" "$k" "${INTERACTIVE_MODEL_CHOICES[$k]%%;*}" "$(echo "${INTERACTIVE_MODEL_CHOICES[$k]}" | cut -d';' -f2)" "$((${INTERACTIVE_MODEL_CHOICES[$k]##*;} / 1000))"; done
       echo -e "\n${BOLD}Multimodal Models (Vision + Text):${NC}"
       for k in {"M1","M2"}; do [[ -v INTERACTIVE_MODEL_CHOICES["$k"] ]] && printf "  ${YELLOW}%2s)${NC} %-25s (%s; RAM: ~%sGB)\\n" "$k" "${INTERACTIVE_MODEL_CHOICES[$k]%%;*}" "$(echo "${INTERACTIVE_MODEL_CHOICES[$k]}" | cut -d';' -f2)" "$((${INTERACTIVE_MODEL_CHOICES[$k]##*;} / 1000))"; done
       echo -e "\n${BOLD}Multilingual Models:${NC}"
