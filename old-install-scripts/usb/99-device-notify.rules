@@ -1,0 +1,12 @@
+# Notify when a partition appears (covers most USB sticks and HDD/SSD partitions)
+ACTION=="add", SUBSYSTEM=="block", ENV{DEVTYPE}=="partition", KERNEL!="loop*", KERNEL!="ram*", KERNEL!="zram*", KERNEL!="dm-*", RUN+="/usr/bin/runuser -u {{USERNAME}} -- /usr/local/bin/notify-device-added.sh %E{DEVNAME}"
+
+# Notify when a whole disk with a filesystem appears and has no partitions (superfloppy-style)
+ACTION=="add", SUBSYSTEM=="block", ENV{DEVTYPE}=="disk", ENV{ID_FS_USAGE}=="filesystem", KERNEL!="loop*", KERNEL!="ram*", KERNEL!="zram*", KERNEL!="dm-*", RUN+="/usr/bin/runuser -u {{USERNAME}} -- /usr/local/bin/notify-device-added.sh %E{DEVNAME}"
+
+# Optional: notify on any newly added USB device (keyboards, mice, hubs, etc.)
+ACTION=="add", SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", RUN+="/usr/bin/runuser -u {{USERNAME}} -- /usr/local/bin/notify-usb-device.sh %E{DEVPATH}"
+
+# If you want to restrict to USB storage only, uncomment USB filter on the block rules:
+# ACTION=="add", SUBSYSTEM=="block", ENV{DEVTYPE}=="partition", ENV{ID_BUS}=="usb", KERNEL!="loop*", KERNEL!="ram*", KERNEL!="zram*", KERNEL!="dm-*", RUN+="/usr/bin/runuser -u {{USERNAME}} -- /usr/local/bin/notify-device-added.sh %E{DEVNAME}"
+# ACTION=="add", SUBSYSTEM=="block", ENV{DEVTYPE}=="disk", ENV{ID_FS_USAGE}=="filesystem", ENV{ID_BUS}=="usb", KERNEL!="loop*", KERNEL!="ram*", KERNEL!="zram*", KERNEL!="dm-*", RUN+="/usr/bin/runuser -u {{USERNAME}} -- /usr/local/bin/notify-device-added.sh %E{DEVNAME}"
