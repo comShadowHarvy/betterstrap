@@ -347,7 +347,7 @@ setup_ssh_config() {
 Host *
     AddKeysToAgent yes
     IdentityFile ~/.ssh/id_ed25519
-    PubkeyAcceptedAlgorithms ssh-ed25519,ssh-ed25519-sk,ecdsa-sha2-nistp256,ecdsa-sha2-nistp256-sk
+    PubkeyAcceptedAlgorithms ssh-ed25519,sk-ssh-ed25519@openssh.com,ecdsa-sha2-nistp256,sk-ecdsa-sha2-nistp256@openssh.com
     HostKeyAlgorithms ssh-ed25519,ecdsa-sha2-nistp256
     PreferredAuthentications publickey,keyboard-interactive,password
 # END Betterstrap YubiKey
