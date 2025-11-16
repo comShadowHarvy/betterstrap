@@ -20,7 +20,7 @@ set -Eeo pipefail
 # =============================================================================
 
 # Tdarr configuration
-readonly TDARR_IMAGE="haveagitgat/tdarr_node:2.49.01"
+readonly TDARR_IMAGE="haveagitgat/tdarr_node:latest"
 readonly SERVER_IP="192.168.1.210"
 readonly SERVER_PORT="8266"
 readonly PUID="1000"

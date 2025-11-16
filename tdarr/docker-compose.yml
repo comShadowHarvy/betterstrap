@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   tdarr-node:
-    image: haveagitgat/tdarr_node:2.49.01
+    image: haveagitgat/tdarr_node:latest
     container_name: tdarr-node
     network_mode: host
     restart: unless-stopped
@@ -19,3 +19,15 @@ services:
       - /mnt/hass_share/trans:/tmp:rw
       # Node configuration
       - /home/me/Tdarr/configs:/app/configs:rw
+
+  watchtower:
+    image: containrrr/watchtower:latest
+    container_name: watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_INCLUDE_RESTARTING=true
+      - WATCHTOWER_POLL_INTERVAL=86400  # Check daily (24 hours)
+    command: tdarr-node  # Only monitor the tdarr-node container
