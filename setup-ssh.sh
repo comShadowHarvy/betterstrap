@@ -41,6 +41,16 @@ log() {
     echo -e "${color}[$level]${NC} $message"
 }
 
+# Detect WSL
+detect_wsl() {
+    if grep -qEi "(Microsoft|WSL)" /proc/version &>/dev/null; then
+        IS_WSL=true
+        log "INFO" "WSL (Windows Subsystem for Linux) detected"
+    else
+        IS_WSL=false
+    fi
+}
+
 # Detect distribution
 detect_distribution() {
     if [ ! -f /etc/os-release ]; then
@@ -164,27 +174,70 @@ install_openssh() {
 enable_ssh_service() {
     log "INFO" "Enabling SSH service..."
     
-    if systemctl is-enabled "$SSH_SERVICE" &>/dev/null; then
-        log "INFO" "SSH service already enabled"
+    # WSL doesn't use systemd by default in WSL1, or may have limited systemd in WSL2
+    if [ "$IS_WSL" = true ]; then
+        # Try systemctl first (WSL2 with systemd)
+        if command -v systemctl &>/dev/null && systemctl is-system-running &>/dev/null 2>&1; then
+            log "INFO" "Using systemd (WSL2 with systemd enabled)"
+            
+            if systemctl is-enabled "$SSH_SERVICE" &>/dev/null 2>&1; then
+                log "INFO" "SSH service already enabled"
+            else
+                sudo systemctl enable "$SSH_SERVICE" 2>/dev/null || true
+                log "SUCCESS" "SSH service enabled"
+            fi
+            
+            if systemctl is-active "$SSH_SERVICE" &>/dev/null 2>&1; then
+                log "INFO" "SSH service already running"
+            else
+                sudo systemctl start "$SSH_SERVICE" 2>/dev/null || true
+                log "SUCCESS" "SSH service started"
+            fi
+        else
+            # WSL1 or WSL2 without systemd - use service command
+            log "INFO" "Using service command (WSL without systemd)"
+            sudo service "$SSH_SERVICE" start 2>/dev/null || true
+            log "SUCCESS" "SSH service started"
+        fi
+        
+        # Verify SSH is actually listening
+        if sudo ss -tlnp 2>/dev/null | grep -q ":22 "; then
+            log "SUCCESS" "SSH server is listening on port 22"
+        else
+            log "ERROR" "SSH server is not listening. Trying manual start..."
+            sudo /usr/sbin/sshd 2>/dev/null || sudo $(which sshd) 2>/dev/null || true
+            sleep 2
+            if sudo ss -tlnp 2>/dev/null | grep -q ":22 "; then
+                log "SUCCESS" "SSH server started manually"
+            else
+                log "ERROR" "Failed to start SSH server"
+                exit 1
+            fi
+        fi
     else
-        sudo systemctl enable "$SSH_SERVICE"
-        log "SUCCESS" "SSH service enabled"
-    fi
-    
-    if systemctl is-active "$SSH_SERVICE" &>/dev/null; then
-        log "INFO" "SSH service already running"
-    else
-        sudo systemctl start "$SSH_SERVICE"
-        log "SUCCESS" "SSH service started"
-    fi
-    
-    # Verify service is running
-    if systemctl is-active "$SSH_SERVICE" &>/dev/null; then
-        log "SUCCESS" "SSH service is running"
-    else
-        log "ERROR" "Failed to start SSH service"
-        sudo systemctl status "$SSH_SERVICE"
-        exit 1
+        # Regular Linux (non-WSL)
+        if systemctl is-enabled "$SSH_SERVICE" &>/dev/null; then
+            log "INFO" "SSH service already enabled"
+        else
+            sudo systemctl enable "$SSH_SERVICE"
+            log "SUCCESS" "SSH service enabled"
+        fi
+        
+        if systemctl is-active "$SSH_SERVICE" &>/dev/null; then
+            log "INFO" "SSH service already running"
+        else
+            sudo systemctl start "$SSH_SERVICE"
+            log "SUCCESS" "SSH service started"
+        fi
+        
+        # Verify service is running
+        if systemctl is-active "$SSH_SERVICE" &>/dev/null; then
+            log "SUCCESS" "SSH service is running"
+        else
+            log "ERROR" "Failed to start SSH service"
+            sudo systemctl status "$SSH_SERVICE"
+            exit 1
+        fi
     fi
 }
 
@@ -194,6 +247,20 @@ get_network_info() {
     
     # Get username
     USERNAME="$USER"
+    
+    # WSL-specific information
+    if [ "$IS_WSL" = true ]; then
+        echo -e "${YELLOW}⚠ WSL Detected${NC}"
+        echo ""
+        echo -e "${CYAN}Windows Host IP (for connecting FROM Windows):${NC}"
+        if command -v ip &>/dev/null; then
+            WIN_HOST_IP=$(ip route show | grep -i default | awk '{print $3}')
+            if [ -n "$WIN_HOST_IP" ]; then
+                echo -e "  ${GREEN}$WIN_HOST_IP${NC} (Windows host)"
+            fi
+        fi
+        echo ""
+    fi
     
     # Get all IP addresses (excluding loopback)
     echo -e "${CYAN}Available IP Addresses:${NC}"
@@ -288,6 +355,7 @@ main() {
         exit 1
     fi
     
+    detect_wsl
     detect_distribution
     install_openssh
     enable_ssh_service
@@ -296,6 +364,15 @@ main() {
     
     print_header "Setup Complete!"
     echo -e "${GREEN}✓${NC} SSH server is running and ready for connections"
+    
+    if [ "$IS_WSL" = true ]; then
+        echo ""
+        echo -e "${YELLOW}WSL Notes:${NC}"
+        echo -e "  • WSL IP changes on each boot - check IP with: ${CYAN}ip addr${NC}"
+        echo -e "  • From Windows: ${CYAN}ssh $USERNAME@localhost${NC} (if using WSL2 with mirrored networking)"
+        echo -e "  • SSH may need to be manually restarted: ${CYAN}sudo service ssh start${NC}"
+        echo -e "  • For WSL1: Connect from Windows using the WSL IP address shown above"
+    fi
     echo ""
 }
 
