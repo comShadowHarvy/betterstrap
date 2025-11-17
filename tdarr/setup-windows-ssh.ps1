@@ -216,7 +216,7 @@ if ([string]::IsNullOrEmpty($wslIp)) {
     Write-Success "Direct WSL SSH configured!"
     Write-Info "Connect to WSL directly using:"
     if ($ipAddresses.Count -gt 0) {
-        Write-Host "  ssh <WSL_USERNAME>@$($ipAddresses[0]) -p 2222" -ForegroundColor Green
+        Write-Host "  ssh `<WSL_USERNAME`>@$($ipAddresses[0]) -p 2222" -ForegroundColor Green
     }
     Write-Warning "Note: WSL IP changes on restart. You'll need to update the port proxy rule."
 }
