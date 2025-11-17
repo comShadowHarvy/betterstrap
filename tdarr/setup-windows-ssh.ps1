@@ -152,8 +152,9 @@ if ($ipAddresses.Count -gt 0) {
     Write-Host "  ssh $currentUser@$primaryIp" -ForegroundColor Green
     Write-Host "`n"
 } else {
-    Write-Host "  ssh $currentUser@<WINDOWS_IP>" -ForegroundColor Green
-    Write-Host "  (Replace <WINDOWS_IP> with your Windows machine's IP address)`n" -ForegroundColor Gray
+    Write-Host "  ssh $currentUser@`<WINDOWS_IP`>" -ForegroundColor Green
+    Write-Host "  (Replace `<WINDOWS_IP`> with your Windows machine's IP address)" -ForegroundColor Gray
+    Write-Host "`n"
 }
 
 Write-Host "After SSH login, enter WSL by running:" -ForegroundColor Cyan
@@ -221,4 +222,4 @@ if ([string]::IsNullOrEmpty($wslIp)) {
 }
 #>
 
-Write-Host "Script completed successfully!`n" -ForegroundColor Cyan
+Write-Host "`nScript completed successfully!" -ForegroundColor Cyan
