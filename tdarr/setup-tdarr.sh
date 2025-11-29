@@ -8,8 +8,9 @@
 # Features:
 # - Auto-detects and installs Docker (preferred) or Podman
 # - Configures autofs for SMB share mounting
-# - Creates Docker Compose configuration
+# - Creates Docker Compose configuration with WUD (What's Up Docker)
 # - Installs and configures lazydocker for management
+# - Monitors container updates with WUD web UI
 # - Handles SELinux, OSTree, and read-only filesystems
 # =============================================================================
 
@@ -675,6 +676,10 @@ setup_directories() {
     mkdir -p "$TDARR_CONFIGS"
     log "INFO" "Created Tdarr config directory at $TDARR_CONFIGS"
     
+    # Create WUD data directory
+    mkdir -p "$TDARR_BASE/wud"
+    log "INFO" "Created WUD data directory at $TDARR_BASE/wud"
+    
     # Ensure ownership
     chown -R "$USER":"$USER" "$TDARR_BASE" "$TDARR_CONFIGS" 2>/dev/null || true
     
@@ -825,6 +830,21 @@ services:
       - $TDARR_MOUNTS/hass_share/trans:/tmp:rw
       # Node configuration
       - $TDARR_CONFIGS:/app/configs:rw
+    labels:
+      - "wud.tag.include=^\\\\d+\\\\.\\\\d+\\\\.\\\\d+$"
+      - "wud.watch=true"
+
+  wud:
+    image: fmartinou/whats-up-docker:latest
+    container_name: wud
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - WUD_LOG_LEVEL=info
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - $TDARR_BASE/wud:/store
 EOF
     
     log "SUCCESS" "Docker Compose file created at $COMPOSE_FILE"
@@ -957,11 +977,17 @@ print_summary() {
         echo ""
     fi
     
+    echo -e "${CYAN}🔔 What's Up Docker (WUD) - Update Monitor:${NC}"
+    echo -e "   Web UI:    ${YELLOW}http://localhost:3000${NC}"
+    echo -e "   Purpose:   Monitor Tdarr container for image updates"
+    echo ""
+    
     echo -e "${CYAN}🌐 Next Steps:${NC}"
     echo -e "   1. Check that Tdarr node appears in server UI:"
     echo -e "      ${YELLOW}http://$SERVER_IP:8265${NC}"
     echo -e "   2. Look for node: ${YELLOW}$NODE_NAME${NC}"
     echo -e "   3. Verify mounts: ${YELLOW}ls $TDARR_MOUNTS/hass_share${NC}"
+    echo -e "   4. Monitor updates at: ${YELLOW}http://localhost:3000${NC}"
     echo ""
     
     log "SUCCESS" "Setup completed successfully!"
