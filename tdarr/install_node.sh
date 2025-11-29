@@ -307,9 +307,11 @@ if [ "$ENABLE_GPU" = "true" ]; then
 fi
 
 # Add remaining parameters
+# Note: Using :rslave bind propagation on SHARE_PATH to properly handle CIFS/NFS mounts
+# This ensures Docker can see subdirectories within network-mounted shares
 DOCKER_CMD="$DOCKER_CMD \\
   -v $TRANS_PATH:/tmp \\
-  -v $SHARE_PATH:/media \\
+  -v $SHARE_PATH:/media:rslave \\
   -v $HOME/Tdarr/configs:/app/configs \\
   -e serverIP=$SERVER_IP \\
   -e serverPort=$SERVER_PORT \\
