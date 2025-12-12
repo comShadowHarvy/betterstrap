@@ -1,23 +1,34 @@
 import random
 import time
 import os
-import sys  # Needed for flushing output in fast mode
-import json  # For saving/loading settings
+import sys
+import json
 from typing import List, Optional, Tuple
 from functools import total_ordering
+from dataclasses import dataclass, asdict
+from enum import Enum
+from pathlib import Path
 
 # --- Game Configuration ---
-DEFAULT_MAX_ROUNDS = 2000  # Default if no setting found
-SETTINGS_FILE = "war_settings.json"  # File to store settings
-WAR_FACE_DOWN_CARDS = 3  # Number of face-down cards in war
-MIN_CARDS_FOR_WAR = 4  # Minimum cards needed to participate in war
+DEFAULT_MAX_ROUNDS = 2000
+SETTINGS_FILE = Path("war_settings.json")
+WAR_FACE_DOWN_CARDS = 3
+MIN_CARDS_FOR_WAR = 4
+
+# Timing constants (in seconds)
+TITLE_LINE_DELAY = 0.1
+TITLE_PAUSE = 2.0
+LOADING_DELAY = 0.1
+NORMAL_CARD_DELAY = 1.0
+WAR_START_DELAY = 2.0
+ROUND_END_DELAY = 3.5
 
 # Define card suits, ranks, and their values
 SUITS = ["Hearts", "Diamonds", "Clubs", "Spades"]
 SUIT_SYMBOLS = {"Hearts": "♥", "Diamonds": "♦", "Clubs": "♣", "Spades": "♠"}
 RANKS = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"]
+RANK_NAMES = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "Jack", "Queen", "King", "Ace"]
 VALUES = {rank: i + 2 for i, rank in enumerate(RANKS)}
-DISPLAY_RANKS = {"2": "2", "3": "3", "4": "4", "5": "5", "6": "6", "7": "7", "8": "8", "9": "9", "10": "10", "J": "J", "Q": "Q", "K": "K", "A": "A"}
 
 # ASCII representation for a face-down card
 FACE_DOWN_CARD = (
@@ -29,7 +40,13 @@ FACE_DOWN_CARD = (
     "│░░░░░░░░░│\n"
     "└─────────┘"
 )
-DEALING_CARD_PLACEHOLDER = "🂠" # Unicode playing card back
+DEALING_CARD_PLACEHOLDER = "🂠"
+
+
+class GameMode(Enum):
+    """Enum for game speed modes."""
+    NORMAL = "normal"
+    FAST = "fast"
 
 # --- Flavor Text ---
 PLAYER_WINS_COMMENTS = [
@@ -55,18 +72,18 @@ def clear_screen() -> None:
     """Clears the terminal screen."""
     os.system('cls' if os.name == 'nt' else 'clear')
 
-def get_game_mode() -> bool:
+def get_game_mode() -> GameMode:
     """Gets the desired game mode (Normal or Fast).
     
     Returns:
-        bool: True for fast mode, False for normal mode
+        GameMode: The selected game mode
     """
     while True:
         mode = input("Choose game speed (Normal / Fast): ").strip().lower()
         if mode in ['normal', 'n']:
-            return False  # Not fast mode
+            return GameMode.NORMAL
         elif mode in ['fast', 'f']:
-            return True  # Is fast mode
+            return GameMode.FAST
         else:
             print("Invalid choice. Please enter 'Normal' or 'Fast'.")
 
@@ -88,10 +105,10 @@ def display_title_screen() -> None:
     ]
     for line in title_lines:
         print(line)
-        sys.stdout.flush()  # Ensure the line is printed immediately
-        time.sleep(0.1)  # Small delay between lines for animation effect
+        sys.stdout.flush()
+        time.sleep(TITLE_LINE_DELAY)
 
-    time.sleep(2)  # Pause longer after the full title is displayed
+    time.sleep(TITLE_PAUSE)
 
 
 def display_loading_screen() -> None:
@@ -104,72 +121,56 @@ def display_loading_screen() -> None:
     print("Loading Settings & Graphics...")
     load_chars = ['|', '/', '-', '\\']
     for i in range(15):
-        print(f"[{load_chars[i % len(load_chars)]}] ", end='\r')  # Use end='\r' to overwrite line
-        time.sleep(0.1)
+        print(f"[{load_chars[i % len(load_chars)]}] ", end='\r')
+        time.sleep(LOADING_DELAY)
     print("[OK]      ")  # Print OK and spaces to clear loading chars
     time.sleep(1)
     clear_screen()
 
 
 # --- Settings Class ---
+@dataclass
 class Settings:
     """Manages game settings, including saving/loading via JSON."""
-    def __init__(self):
-        # Default values
-        self.player_name = "Player"
-        self.use_ascii_art = True
-        self.show_flavor_text = True
-        self.clear_screen_enabled = True
-        self.shuffle_won_cards = True
-        self.max_rounds = DEFAULT_MAX_ROUNDS # Use default initially
-        self.autoplay = False # Default to requiring Enter press
+    player_name: str = "Player"
+    use_ascii_art: bool = True
+    show_flavor_text: bool = True
+    clear_screen_enabled: bool = True
+    shuffle_won_cards: bool = True
+    max_rounds: int = DEFAULT_MAX_ROUNDS
+    autoplay: bool = False
 
-        self._load_settings() # Load settings from file, overwriting defaults if successful
+    def __post_init__(self) -> None:
+        """Load settings from file after initialization."""
+        self._load_settings()
 
-    def _load_settings(self):
+    def _load_settings(self) -> None:
         """Loads settings from the JSON file."""
+        if not SETTINGS_FILE.exists():
+            return
+        
         try:
-            with open(SETTINGS_FILE, 'r', encoding='utf-8') as f:
+            with SETTINGS_FILE.open('r', encoding='utf-8') as f:
                 loaded_data = json.load(f)
                 # Update attributes safely, keeping defaults if keys are missing
-                self.player_name = loaded_data.get('player_name', self.player_name)
-                self.use_ascii_art = loaded_data.get('use_ascii_art', self.use_ascii_art)
-                self.show_flavor_text = loaded_data.get('show_flavor_text', self.show_flavor_text)
-                self.clear_screen_enabled = loaded_data.get('clear_screen_enabled', self.clear_screen_enabled)
-                self.shuffle_won_cards = loaded_data.get('shuffle_won_cards', self.shuffle_won_cards)
-                self.max_rounds = loaded_data.get('max_rounds', self.max_rounds)
-                self.autoplay = loaded_data.get('autoplay', self.autoplay)
-                # print(f"Settings loaded from {SETTINGS_FILE}") # Optional confirmation
+                for key, value in loaded_data.items():
+                    if hasattr(self, key):
+                        setattr(self, key, value)
 
-        except FileNotFoundError:
-            print(f"Settings file ({SETTINGS_FILE}) not found. Using defaults.")
-            # No need to do anything, defaults are already set
         except (json.JSONDecodeError, TypeError) as e:
-            print(f"Error reading settings file ({e}). Using defaults.")
-            # Don't recursively call __init__, file is corrupt so defaults already set
+            print(f"Error reading settings file: {e}. Using defaults.")
         except Exception as e:
-            print(f"An unexpected error occurred loading settings ({e}). Using defaults.")
-            # Don't recursively call __init__, use existing defaults
+            print(f"Unexpected error loading settings: {e}. Using defaults.")
 
-    def _save_settings(self):
+    def _save_settings(self) -> None:
         """Saves the current settings to the JSON file."""
-        settings_data = {
-            'player_name': self.player_name,
-            'use_ascii_art': self.use_ascii_art,
-            'show_flavor_text': self.show_flavor_text,
-            'clear_screen_enabled': self.clear_screen_enabled,
-            'shuffle_won_cards': self.shuffle_won_cards,
-            'max_rounds': self.max_rounds,
-            'autoplay': self.autoplay,
-        }
         try:
-            with open(SETTINGS_FILE, 'w', encoding='utf-8') as f:
-                json.dump(settings_data, f, indent=4) # Use indent for readability
-            # print("Settings saved.") # Optional: confirmation message
+            with SETTINGS_FILE.open('w', encoding='utf-8') as f:
+                json.dump(asdict(self), f, indent=4)
         except IOError as e:
-            print(f"Warning: Could not save settings ({e}).")
+            print(f"Warning: Could not save settings: {e}")
         except Exception as e:
-            print(f"An unexpected error occurred saving settings ({e}).")
+            print(f"Unexpected error saving settings: {e}")
 
 
     def _get_status(self, setting_value: bool) -> str:
@@ -260,7 +261,7 @@ class Card:
     def __init__(self, suit: str, rank: str) -> None:
         self.suit = suit
         self.rank = rank
-        self.display_rank = DISPLAY_RANKS[rank]
+        self.display_rank = rank  # Display rank is just the rank itself
         self.value = VALUES[rank]
         self.suit_symbol = SUIT_SYMBOLS[suit]
 
@@ -280,9 +281,12 @@ class Card:
 
     def simple_str(self) -> str:
         """Returns a simple one-line string representation."""
-        original_ranks_full = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "Jack", "Queen", "King", "Ace"]
-        full_rank_name = original_ranks_full[self.value - 2]
+        full_rank_name = RANK_NAMES[self.value - 2]
         return f"{full_rank_name} of {self.suit}"
+    
+    def __repr__(self) -> str:
+        """Returns a detailed string representation for debugging."""
+        return f"Card({self.suit}, {self.rank}, value={self.value})"
 
     def __lt__(self, other: 'Card') -> bool:
         return self.value < other.value
@@ -297,16 +301,16 @@ class Deck:
     def __init__(self) -> None:
         self.cards: List[Card] = [Card(suit, rank) for suit in SUITS for rank in RANKS]
 
-    def shuffle(self, settings: Settings, is_fast_mode: bool) -> None:
+    def shuffle(self, settings: Settings, mode: GameMode) -> None:
         """Shuffles the deck randomly."""
         if settings.clear_screen_enabled:
             clear_screen()
         print("Shuffling deck...")
-        if not is_fast_mode:
+        if mode == GameMode.NORMAL:
             time.sleep(1)
         random.shuffle(self.cards)
 
-    def deal(self, settings: Settings, player1_name: str, player2_name: str, is_fast_mode: bool) -> Tuple[List[Card], List[Card]]:
+    def deal(self, settings: Settings, player1_name: str, player2_name: str, mode: GameMode) -> Tuple[List[Card], List[Card]]:
         """Deals the entire deck evenly between two players with animation."""
         if settings.clear_screen_enabled:
             clear_screen()
@@ -322,24 +326,26 @@ class Deck:
         for i, card in enumerate(self.cards):
             if i % 2 == 0:
                 hand1.append(card)
-                if not is_fast_mode:
+                if mode == GameMode.NORMAL:
                     p1_display += DEALING_CARD_PLACEHOLDER + " "
-                    if settings.clear_screen_enabled: clear_screen()
+                    if settings.clear_screen_enabled:
+                        clear_screen()
                     print("Dealing...")
                     print(f"{player1_name.ljust(15)}: {p1_display}")
                     print(f"{player2_name.ljust(15)}: {p2_display}")
-                    time.sleep(deal_delay)  # Short pause for dealing effect
+                    time.sleep(deal_delay)
             else:
                 hand2.append(card)
-                if not is_fast_mode:
+                if mode == GameMode.NORMAL:
                     p2_display += DEALING_CARD_PLACEHOLDER + " "
-                    if settings.clear_screen_enabled: clear_screen()
+                    if settings.clear_screen_enabled:
+                        clear_screen()
                     print("Dealing...")
                     print(f"{player1_name.ljust(15)}: {p1_display}")
                     print(f"{player2_name.ljust(15)}: {p2_display}")
-                    time.sleep(deal_delay)  # Short pause for dealing effect
+                    time.sleep(deal_delay)
 
-        if not is_fast_mode:
+        if mode == GameMode.NORMAL:
             if settings.clear_screen_enabled:
                 clear_screen()
             print("Dealing complete!")
@@ -355,6 +361,10 @@ class Player:
     def __init__(self, name: str, hand: List[Card]) -> None:
         self.name = name
         self.hand: List[Card] = list(hand)
+    
+    def __repr__(self) -> str:
+        """Returns a detailed string representation for debugging."""
+        return f"Player(name={self.name}, cards={len(self.hand)})"
 
     def play_card(self) -> Optional[Card]:
         """Removes and returns the top card from the player's hand."""
@@ -438,29 +448,6 @@ def display_single_card(card: Card, player_name: str, settings: Settings, is_war
     else:
         print(card.simple_str())
 
-def display_cards_side_by_side(card1, card2, player1_name, player2_name, settings):
-    """Prints two ASCII cards (or simple text) next to each other based on settings."""
-    # Primarily used for War face-offs now, but kept for potential future use
-    if settings.use_ascii_art:
-        lines1 = str(card1).split('\n')
-        lines2 = str(card2).split('\n')
-        width1 = len(lines1[0])
-        width2 = len(lines2[0])
-
-        header1 = player1_name.center(width1)
-        header2 = player2_name.center(width2)
-
-        print(f"{header1}   {header2}")
-        for i in range(len(lines1)):
-            line1_content = lines1[i] if i < len(lines1) else ' ' * width1
-            line2_content = lines2[i] if i < len(lines2) else ' ' * width2
-            print(f"{line1_content}   {line2_content}")
-    else:
-        # Simple text display if ASCII is off
-        print(f"{player1_name}: {card1.simple_str()}")
-        print(f"{player2_name}: {card2.simple_str()}")
-
-
 def display_face_down_row(count: int, player_name: str, settings: Settings) -> None:
     """Prints a row of face-down cards if ASCII art is enabled."""
     if not settings.use_ascii_art:
@@ -485,7 +472,7 @@ def display_face_down_row(count: int, player_name: str, settings: Settings) -> N
 
 # --- Core Game Logic ---
 def play_war_round(player1: Player, player2: Player, cards_on_table: List[Card], 
-                   stats: GameStats, settings: Settings, is_fast_mode: bool) -> bool:
+                   stats: GameStats, settings: Settings, mode: GameMode) -> bool:
     """Handles a 'War' round, respecting settings.
     
     Returns:
@@ -501,8 +488,8 @@ def play_war_round(player1: Player, player2: Player, cards_on_table: List[Card],
     initial_pot = len(cards_on_table)
     print(f"\nCards initially contested: {initial_pot}")
     print(f"{player1.name}: {player1.cards_left()} cards | {player2.name}: {player2.cards_left()} cards")
-    if not is_fast_mode:
-        time.sleep(2.0)  # Longer pause at start of war
+    if mode == GameMode.NORMAL:
+        time.sleep(WAR_START_DELAY)
 
     min_cards_for_war = MIN_CARDS_FOR_WAR
     p1_cards_left = player1.cards_left()
@@ -511,7 +498,8 @@ def play_war_round(player1: Player, player2: Player, cards_on_table: List[Card],
     # Check if players have enough cards for war
     if p1_cards_left < min_cards_for_war or p2_cards_left < min_cards_for_war:
         print(f"\nNot enough cards for a full War!")
-        if not is_fast_mode: time.sleep(1.5)
+        if mode == GameMode.NORMAL:
+            time.sleep(1.5)
         # Determine winner/loser based on who has fewer cards
         winner, loser = (player2, player1) if p1_cards_left < p2_cards_left else (player1, player2)
         print(f"{loser.name} doesn't have enough cards ({loser.cards_left()} left)!")
@@ -522,92 +510,105 @@ def play_war_round(player1: Player, player2: Player, cards_on_table: List[Card],
         print(f"{winner.name} collects all {len(all_cards)} cards.")
         stats.check_pot(len(all_cards), winner.name)
         # Record win based on who collected cards
-        if winner == player1: stats.record_player_win()
-        else: stats.record_computer_win()
-        if not is_fast_mode: time.sleep(3.5)
-        return False # Game ends
+        if winner == player1:
+            stats.record_player_win()
+        else:
+            stats.record_computer_win()
+        if mode == GameMode.NORMAL:
+            time.sleep(ROUND_END_DELAY)
+        return False
 
     # --- Show Face-Down Cards ---
     print(f"\n{player1.name} places {WAR_FACE_DOWN_CARDS} cards face down...")
-    if not is_fast_mode:
+    if mode == GameMode.NORMAL:
         time.sleep(1)
-    display_face_down_row(WAR_FACE_DOWN_CARDS, player1.name, settings)  # Pass settings
+    display_face_down_row(WAR_FACE_DOWN_CARDS, player1.name, settings)
     war_cards_player1 = [player1.play_card() for _ in range(WAR_FACE_DOWN_CARDS)]
-    if not is_fast_mode:
+    if mode == GameMode.NORMAL:
         time.sleep(1.5)
 
     print(f"\n{player2.name} places {WAR_FACE_DOWN_CARDS} cards face down...")
-    if not is_fast_mode:
+    if mode == GameMode.NORMAL:
         time.sleep(1)
-    display_face_down_row(WAR_FACE_DOWN_CARDS, player2.name, settings)  # Pass settings
+    display_face_down_row(WAR_FACE_DOWN_CARDS, player2.name, settings)
     war_cards_player2 = [player2.play_card() for _ in range(WAR_FACE_DOWN_CARDS)]
-    if not is_fast_mode:
+    if mode == GameMode.NORMAL:
         time.sleep(1.5)
     # --- End Show Face-Down Cards ---
 
     # Add actual cards to pot (filter None in case player ran out exactly)
     cards_on_table.extend([c for c in war_cards_player1 if c])
     cards_on_table.extend([c for c in war_cards_player2 if c])
-    print(f"\nPot size is now {len(cards_on_table)} cards...") # Show growing pot
-    if not is_fast_mode: time.sleep(1.5)
-
+    print(f"\nPot size is now {len(cards_on_table)} cards...")
+    if mode == GameMode.NORMAL:
+        time.sleep(1.5)
 
     print("\nPlaying face-up War cards...")
-    if not is_fast_mode: time.sleep(1.0) # Pause before first card
+    if mode == GameMode.NORMAL:
+        time.sleep(NORMAL_CARD_DELAY)
 
     # Players play the face-up war card
     card1 = player1.play_card()
     if card1:
-        display_single_card(card1, player1.name, settings, is_war_card=True) # Mark as war card
-        if not is_fast_mode: time.sleep(1.0) # Pause between cards
+        display_single_card(card1, player1.name, settings, is_war_card=True)
+        if mode == GameMode.NORMAL:
+            time.sleep(NORMAL_CARD_DELAY)
     else:
         # Handle player 1 running out exactly here
-        if settings.clear_screen_enabled: clear_screen()
+        if settings.clear_screen_enabled:
+            clear_screen()
         print("--- WAR OUTCOME ---")
         print(f"{player1.name} ran out of cards playing the face-up War card!")
-        if not is_fast_mode: time.sleep(1.5)
+        if mode == GameMode.NORMAL:
+            time.sleep(1.5)
         pot_to_add = cards_on_table # Computer gets the table cards
         player2.add_cards(pot_to_add, settings)
         player1.hand = []
         print(f"{player2.name} collects all {len(pot_to_add)} remaining cards.")
         stats.check_pot(len(pot_to_add), player2.name)
         stats.record_computer_win()
-        if not is_fast_mode: time.sleep(3.5)
-        return False # Game ends
+        if mode == GameMode.NORMAL:
+            time.sleep(ROUND_END_DELAY)
+        return False
 
     card2 = player2.play_card()
     if card2:
-        display_single_card(card2, player2.name, settings, is_war_card=True) # Mark as war card
-        if not is_fast_mode: time.sleep(1.5) # Pause after second card
+        display_single_card(card2, player2.name, settings, is_war_card=True)
+        if mode == GameMode.NORMAL:
+            time.sleep(1.5)
     else:
         # Handle player 2 running out exactly here
-        if settings.clear_screen_enabled: clear_screen()
+        if settings.clear_screen_enabled:
+            clear_screen()
         print("--- WAR OUTCOME ---")
         print(f"{player2.name} ran out of cards playing the face-up War card!")
-        if not is_fast_mode: time.sleep(1.5)
+        if mode == GameMode.NORMAL:
+            time.sleep(1.5)
         pot_to_add = cards_on_table + [card1] # Player 1 gets table cards + their own card
         player1.add_cards(pot_to_add, settings)
         player2.hand = []
         print(f"{player1.name} collects all {len(pot_to_add)} remaining cards.")
         stats.check_pot(len(pot_to_add), player1.name)
         stats.record_player_win()
-        if not is_fast_mode: time.sleep(3.5)
-        return False # Game ends
+        if mode == GameMode.NORMAL:
+            time.sleep(ROUND_END_DELAY)
+        return False
 
-    cards_on_table.extend([card1, card2]) # Add face-up cards to pot
+    cards_on_table.extend([card1, card2])
     print(f"\nComparing War cards: {card1.simple_str()} vs {card2.simple_str()}")
-    if not is_fast_mode: time.sleep(1.5)
+    if mode == GameMode.NORMAL:
+        time.sleep(1.5)
 
     # Compare the face-up war cards
     winner = None
     if card1 > card2:
         winner = player1
-        stats.record_player_win() # Record streak
+        stats.record_player_win()
         win_comment = f" {random.choice(PLAYER_WINS_COMMENTS)}" if settings.show_flavor_text else ""
         print(f"\n{player1.name} wins the war round!{win_comment}")
     elif card2 > card1:
         winner = player2
-        stats.record_computer_win() # Record streak
+        stats.record_computer_win()
         win_comment = f" {random.choice(COMPUTER_WINS_COMMENTS)}" if settings.show_flavor_text else ""
         print(f"\n{player2.name} wins the war round!{win_comment}")
     else:
@@ -615,21 +616,22 @@ def play_war_round(player1: Player, player2: Player, cards_on_table: List[Card],
         stats.player_win_streak = 0
         stats.computer_win_streak = 0
         print("\nWar cards are equal! Another War begins...")
-        if not is_fast_mode: time.sleep(2)
-        # Recursively call war, passing current pot, stats, settings
-        return play_war_round(player1, player2, cards_on_table, stats, settings, is_fast_mode)
+        if mode == GameMode.NORMAL:
+            time.sleep(2)
+        return play_war_round(player1, player2, cards_on_table, stats, settings, mode)
 
     # If there was a winner this war round
     if winner:
-        winner.add_cards(cards_on_table, settings) # Add cards respecting settings
+        winner.add_cards(cards_on_table, settings)
         print(f"{winner.name} collects {len(cards_on_table)} cards.")
         stats.check_pot(len(cards_on_table), winner.name)
 
-    if not is_fast_mode: time.sleep(3.5)
-    return True # Indicate war resolved without game ending
+    if mode == GameMode.NORMAL:
+        time.sleep(ROUND_END_DELAY)
+    return True
 
 def sudden_death_war(player1: Player, player2: Player, stats: GameStats, 
-                     settings: Settings, is_fast_mode: bool) -> Optional[Player]:
+                     settings: Settings, mode: GameMode) -> Optional[Player]:
     """Handles the Sudden Death face-off at MAX_ROUNDS.
     
     Returns:
@@ -641,7 +643,8 @@ def sudden_death_war(player1: Player, player2: Player, stats: GameStats,
     print("\n" + "="*10 + f" SUDDEN DEATH! ({sd_comment}) " + "="*10)
     print("Maximum rounds reached! One final card determines the winner!")
     print(f"{player1.name}: {player1.cards_left()} cards | {player2.name}: {player2.cards_left()} cards")
-    if not is_fast_mode: time.sleep(2.5)
+    if mode == GameMode.NORMAL:
+        time.sleep(2.5)
 
     # Play one card each
     card1 = player1.play_card()
@@ -654,20 +657,24 @@ def sudden_death_war(player1: Player, player2: Player, stats: GameStats,
         winner = player2 if not card1 else player1
         loser = player1 if not card1 else player2
         print(f"{loser.name} ran out! {winner.name} wins by default!")
-        if not is_fast_mode: time.sleep(3)
-        # No need to add cards, just declare winner based on who had cards left
-        return winner # Return the winning player object
+        if mode == GameMode.NORMAL:
+            time.sleep(3)
+        return winner
 
     # Display cards sequentially
     print("\nPlaying final cards...")
-    if not is_fast_mode: time.sleep(1.0)
+    if mode == GameMode.NORMAL:
+        time.sleep(NORMAL_CARD_DELAY)
     display_single_card(card1, player1.name, settings)
-    if not is_fast_mode: time.sleep(1.0)
+    if mode == GameMode.NORMAL:
+        time.sleep(NORMAL_CARD_DELAY)
     display_single_card(card2, player2.name, settings)
-    if not is_fast_mode: time.sleep(1.5)
+    if mode == GameMode.NORMAL:
+        time.sleep(1.5)
 
     print(f"\nComparing Sudden Death cards: {card1.simple_str()} vs {card2.simple_str()}")
-    if not is_fast_mode: time.sleep(2.0)
+    if mode == GameMode.NORMAL:
+        time.sleep(2.0)
 
     # Determine winner - winner takes ALL cards from loser
     if card1 > card2:
@@ -675,49 +682,45 @@ def sudden_death_war(player1: Player, player2: Player, stats: GameStats,
         # Give all of player 2's cards (including the one just played) to player 1
         all_loser_cards = player2.hand + [card2]
         player1.add_cards(all_loser_cards, settings)
-        player2.hand = [] # Empty loser's hand
+        player2.hand = []
         print(f"{player1.name} takes all remaining {len(all_loser_cards)} cards from {player2.name}!")
         winner = player1
     elif card2 > card1:
         print(f"\n{player2.name} wins Sudden Death!")
-        # Give all of player 1's cards (including the one just played) to player 2
         all_loser_cards = player1.hand + [card1]
         player2.add_cards(all_loser_cards, settings)
-        player1.hand = [] # Empty loser's hand
+        player1.hand = []
         print(f"{player2.name} takes all remaining {len(all_loser_cards)} cards from {player1.name}!")
         winner = player2
     else:
-        # Tie in sudden death! Extremely rare. Could recurse or declare draw.
-        # For simplicity, let's declare a draw in this unlikely event.
         print("\nSudden Death is a TIE! Unbelievable!")
-        winner = None # Indicate a draw
+        winner = None
 
-    if not is_fast_mode: time.sleep(4.0)
-    return winner # Return the winning player object or None for a draw
+    if mode == GameMode.NORMAL:
+        time.sleep(4.0)
+    return winner
 
 
 def game_loop() -> None:
     """Main function to run the War game."""
     # --- Title and Loading ---
-    display_title_screen() # Animated title
-    display_loading_screen() # Existing loading screen
+    display_title_screen()
+    display_loading_screen()
 
     # --- Initial Setup ---
-    settings = Settings() # Settings object now loads automatically
-    is_fast_mode = get_game_mode() # Ask for speed first
-    settings.configure() # Let user adjust settings, including name, max rounds etc.
+    settings = Settings()
+    mode = get_game_mode()
+    settings.configure()
 
     # --- Game Setup ---
     deck = Deck()
     stats = GameStats()
-    deck.shuffle(settings, is_fast_mode) # Pass settings
-    # Pass player names to deal for animated display
-    hand1, hand2 = deck.deal(settings, settings.player_name, "Computer", is_fast_mode)
-    # Use the name from settings
+    deck.shuffle(settings, mode)
+    hand1, hand2 = deck.deal(settings, settings.player_name, "Computer", mode)
     player1 = Player(settings.player_name, hand1)
     player2 = Player("Computer", hand2)
 
-    game_over_reason = None # To store how the game ended
+    game_over_reason: Optional[str] = None
 
     # --- Main Game Loop ---
     # Loop condition respects settings.max_rounds (0 means no limit)
@@ -728,25 +731,28 @@ def game_loop() -> None:
         round_num = stats.rounds_played
 
         # --- Display Round Info ---
-        if settings.clear_screen_enabled and not is_fast_mode: clear_screen()
-        print(f"\n====== Round {round_num}{'/' + str(settings.max_rounds) if settings.max_rounds > 0 else ''} ======") # Show max rounds if set
-        # Use player1.name which reflects the chosen name
+        if settings.clear_screen_enabled and mode == GameMode.NORMAL:
+            clear_screen()
+        round_display = f"/{settings.max_rounds}" if settings.max_rounds > 0 else ""
+        print(f"\n====== Round {round_num}{round_display} ======")
         print(f"{player1.name}: {player1.cards_left()} cards | {player2.name}: {player2.cards_left()} cards")
-        print(f"Current Streak: {player1.name} ({stats.player_win_streak}), Computer ({stats.computer_win_streak})") # Show current streaks
+        print(f"Current Streak: {player1.name} ({stats.player_win_streak}), Computer ({stats.computer_win_streak})")
         print("-" * 25)
 
         # Handle input/autoplay based on settings
-        if not is_fast_mode and not settings.autoplay:
+        if mode == GameMode.NORMAL and not settings.autoplay:
             try:
                 input("Press Enter to play card...")
             except KeyboardInterrupt:
-                if settings.clear_screen_enabled: clear_screen()
-                print("\nExiting game."); return
-        elif not is_fast_mode and settings.autoplay:
+                if settings.clear_screen_enabled:
+                    clear_screen()
+                print("\nExiting game.")
+                return
+        elif mode == GameMode.NORMAL and settings.autoplay:
             print("Autoplaying...")
-            time.sleep(0.5) # Short delay in autoplay normal mode
-        else: # Fast mode
-            time.sleep(0.01) # Very minimal delay in fast mode
+            time.sleep(0.5)
+        else:
+            time.sleep(0.01)
             sys.stdout.flush()
 
         # --- Play and Display Cards ---
@@ -759,19 +765,23 @@ def game_loop() -> None:
             break
 
         # Display cards sequentially
-        if settings.clear_screen_enabled and not is_fast_mode: clear_screen()
-        print(f"\n====== Round {round_num}{'/' + str(settings.max_rounds) if settings.max_rounds > 0 else ''} Result ======")
+        if settings.clear_screen_enabled and mode == GameMode.NORMAL:
+            clear_screen()
+        print(f"\n====== Round {round_num}{round_display} Result ======")
         print(f"{player1.name}: {player1.cards_left()} cards | {player2.name}: {player2.cards_left()} cards")
         print("-" * 25)
 
         display_single_card(card1, player1.name, settings)
-        if not is_fast_mode: time.sleep(1.0) # Pause between cards
+        if mode == GameMode.NORMAL:
+            time.sleep(NORMAL_CARD_DELAY)
 
         display_single_card(card2, player2.name, settings)
-        if not is_fast_mode: time.sleep(1.5) # Pause after second card
+        if mode == GameMode.NORMAL:
+            time.sleep(1.5)
 
         print(f"\nComparing: {card1.simple_str()} vs {card2.simple_str()}")
-        if not is_fast_mode: time.sleep(1.5)
+        if mode == GameMode.NORMAL:
+            time.sleep(1.5)
 
         cards_on_table.extend([card1, card2])
 
@@ -779,12 +789,12 @@ def game_loop() -> None:
         winner = None
         if card1 > card2:
             winner = player1
-            stats.record_player_win() # Record streak
+            stats.record_player_win()
             win_comment = f" {random.choice(PLAYER_WINS_COMMENTS)}" if settings.show_flavor_text else ""
             print(f"\n{player1.name} wins the round!{win_comment}")
         elif card2 > card1:
             winner = player2
-            stats.record_computer_win() # Record streak
+            stats.record_computer_win()
             win_comment = f" {random.choice(COMPUTER_WINS_COMMENTS)}" if settings.show_flavor_text else ""
             print(f"\n{player2.name} wins the round!{win_comment}")
         else:
@@ -792,21 +802,22 @@ def game_loop() -> None:
             stats.player_win_streak = 0
             stats.computer_win_streak = 0
             print("\nCards are equal!")
-            if not is_fast_mode: time.sleep(1)
-            # War function handles its own logic based on settings
-            war_ongoing = play_war_round(player1, player2, cards_on_table, stats, settings, is_fast_mode)
+            if mode == GameMode.NORMAL:
+                time.sleep(1)
+            war_ongoing = play_war_round(player1, player2, cards_on_table, stats, settings, mode)
             if not war_ongoing:
                 game_over_reason = "Game ended during War."
-                break # Game ended during war
-            continue # Skip normal win processing if war happened
+                break
+            continue
 
         # If there was a winner (not war)
         if winner:
-            winner.add_cards(cards_on_table, settings) # Pass settings
+            winner.add_cards(cards_on_table, settings)
             print(f"{winner.name} collects {len(cards_on_table)} cards.")
             stats.check_pot(len(cards_on_table), winner.name)
 
-        if not is_fast_mode: time.sleep(3.5) # Pause after normal round resolution
+        if mode == GameMode.NORMAL:
+            time.sleep(ROUND_END_DELAY)
 
         # Check if game ended normally by running out of cards
         if not player1.has_cards():
@@ -817,14 +828,15 @@ def game_loop() -> None:
             break
 
     # --- Determine Winner & Show Stats ---
-    if settings.clear_screen_enabled: clear_screen()
+    if settings.clear_screen_enabled:
+        clear_screen()
     print("\n" + "="*15 + " Game Over " + "="*15)
-    if not is_fast_mode: time.sleep(1)
+    if mode == GameMode.NORMAL:
+        time.sleep(1)
 
     # Check if game ended due to MAX_ROUNDS and needs Sudden Death
-    # Ensure max_rounds is set (> 0) before triggering sudden death
     if settings.max_rounds > 0 and stats.rounds_played >= settings.max_rounds and player1.has_cards() and player2.has_cards():
-        sudden_death_winner = sudden_death_war(player1, player2, stats, settings, is_fast_mode)
+        sudden_death_winner = sudden_death_war(player1, player2, stats, settings, mode)
         if sudden_death_winner == player1:
             print(f"\n{player1.name} is the ULTIMATE WINNER after Sudden Death!")
         elif sudden_death_winner == player2:
@@ -861,7 +873,7 @@ def game_loop() -> None:
 
 
     # Display statistics
-    stats.display(player1.name) # Pass player name for display
+    stats.display(player1.name)
 
 
 # --- Start the Game ---
