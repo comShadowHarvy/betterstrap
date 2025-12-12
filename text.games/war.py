@@ -3,15 +3,18 @@ import time
 import os
 import sys
 import json
-from typing import List, Optional, Tuple
+import logging
+from typing import List, Optional, Tuple, NamedTuple
 from functools import total_ordering
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from enum import Enum
 from pathlib import Path
+from contextlib import contextmanager
 
 # --- Game Configuration ---
 DEFAULT_MAX_ROUNDS = 2000
 SETTINGS_FILE = Path("war_settings.json")
+LOG_FILE = Path("war_game.log")
 WAR_FACE_DOWN_CARDS = 3
 MIN_CARDS_FOR_WAR = 4
 
@@ -22,6 +25,13 @@ LOADING_DELAY = 0.1
 NORMAL_CARD_DELAY = 1.0
 WAR_START_DELAY = 2.0
 ROUND_END_DELAY = 3.5
+
+# Setup logging
+logging.basicConfig(
+    filename=LOG_FILE,
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
 
 # Define card suits, ranks, and their values
 SUITS = ["Hearts", "Diamonds", "Clubs", "Spades"]
@@ -48,6 +58,13 @@ class GameMode(Enum):
     NORMAL = "normal"
     FAST = "fast"
 
+
+class RoundResult(NamedTuple):
+    """Result of a single round."""
+    winner: Optional['Player']
+    cards_won: int
+    was_war: bool = False
+
 # --- Flavor Text ---
 PLAYER_WINS_COMMENTS = [
     "Nice one!", "Excellent play!", "You're on fire!", "Too easy!",
@@ -71,6 +88,20 @@ SUDDEN_DEATH_COMMENTS = [
 def clear_screen() -> None:
     """Clears the terminal screen."""
     os.system('cls' if os.name == 'nt' else 'clear')
+
+
+@contextmanager
+def conditional_clear(should_clear: bool):
+    """Context manager for conditional screen clearing."""
+    if should_clear:
+        clear_screen()
+    yield
+
+
+def sleep_if_normal(mode: GameMode, duration: float) -> None:
+    """Sleep for given duration only in normal mode."""
+    if mode == GameMode.NORMAL:
+        time.sleep(duration)
 
 def get_game_mode() -> GameMode:
     """Gets the desired game mode (Normal or Fast).
@@ -114,16 +145,22 @@ def display_title_screen() -> None:
 def display_loading_screen() -> None:
     """Displays a fake loading sequence."""
     clear_screen()
-    print("Initializing Card Shuffler...")
-    time.sleep(0.7)
-    print("Calibrating Randomness Engine...")
-    time.sleep(0.8)
-    print("Loading Settings & Graphics...")
+    loading_steps = [
+        ("Initializing Card Shuffler...", 0.7),
+        ("Calibrating Randomness Engine...", 0.8),
+        ("Loading Settings & Graphics...", 0),
+    ]
+    
+    for message, delay in loading_steps:
+        print(message)
+        if delay:
+            time.sleep(delay)
+    
     load_chars = ['|', '/', '-', '\\']
     for i in range(15):
         print(f"[{load_chars[i % len(load_chars)]}] ", end='\r')
         time.sleep(LOADING_DELAY)
-    print("[OK]      ")  # Print OK and spaces to clear loading chars
+    print("[OK]      ")
     time.sleep(1)
     clear_screen()
 
@@ -255,20 +292,34 @@ class Settings:
                 time.sleep(1)
 
 # --- Game Classes ---
+@dataclass(frozen=True)
 @total_ordering
 class Card:
-    """Represents a single playing card."""
-    def __init__(self, suit: str, rank: str) -> None:
-        self.suit = suit
-        self.rank = rank
-        self.display_rank = rank  # Display rank is just the rank itself
-        self.value = VALUES[rank]
-        self.suit_symbol = SUIT_SYMBOLS[suit]
+    """Represents a single playing card (immutable)."""
+    suit: str
+    rank: str
+    
+    def __post_init__(self) -> None:
+        """Validate card attributes."""
+        if self.suit not in SUITS:
+            raise ValueError(f"Invalid suit: {self.suit}")
+        if self.rank not in RANKS:
+            raise ValueError(f"Invalid rank: {self.rank}")
+    
+    @property
+    def value(self) -> int:
+        """Get the numeric value of the card."""
+        return VALUES[self.rank]
+    
+    @property
+    def suit_symbol(self) -> str:
+        """Get the Unicode symbol for the suit."""
+        return SUIT_SYMBOLS[self.suit]
 
-    def __str__(self):
+    def __str__(self) -> str:
         """Returns a multi-line ASCII string representation of the card."""
-        top_rank = self.display_rank.ljust(2)
-        bottom_rank = self.display_rank.rjust(2)
+        top_rank = self.rank.ljust(2)
+        bottom_rank = self.rank.rjust(2)
         return (
             f"┌─────────┐\n"
             f"│ {top_rank}      │\n"
@@ -283,32 +334,37 @@ class Card:
         """Returns a simple one-line string representation."""
         full_rank_name = RANK_NAMES[self.value - 2]
         return f"{full_rank_name} of {self.suit}"
-    
-    def __repr__(self) -> str:
-        """Returns a detailed string representation for debugging."""
-        return f"Card({self.suit}, {self.rank}, value={self.value})"
 
     def __lt__(self, other: 'Card') -> bool:
+        """Compare cards by value."""
         return self.value < other.value
     
     def __eq__(self, other: object) -> bool:
+        """Check equality by comparing suit and rank."""
         if not isinstance(other, Card):
             return NotImplemented
-        return self.value == other.value
+        return self.suit == other.suit and self.rank == other.rank
+    
+    def __hash__(self) -> int:
+        """Make Card hashable for use in sets/dicts."""
+        return hash((self.suit, self.rank))
 
+@dataclass
 class Deck:
     """Represents a deck of 52 playing cards."""
-    def __init__(self) -> None:
-        self.cards: List[Card] = [Card(suit, rank) for suit in SUITS for rank in RANKS]
+    cards: List[Card] = field(default_factory=lambda: [Card(suit, rank) for suit in SUITS for rank in RANKS])
+    
+    def __len__(self) -> int:
+        """Return the number of cards in the deck."""
+        return len(self.cards)
 
     def shuffle(self, settings: Settings, mode: GameMode) -> None:
         """Shuffles the deck randomly."""
-        if settings.clear_screen_enabled:
-            clear_screen()
-        print("Shuffling deck...")
-        if mode == GameMode.NORMAL:
-            time.sleep(1)
+        with conditional_clear(settings.clear_screen_enabled):
+            print("Shuffling deck...")
+        sleep_if_normal(mode, 1.0)
         random.shuffle(self.cards)
+        logging.info(f"Deck shuffled ({len(self)} cards)")
 
     def deal(self, settings: Settings, player1_name: str, player2_name: str, mode: GameMode) -> Tuple[List[Card], List[Card]]:
         """Deals the entire deck evenly between two players with animation."""
@@ -356,15 +412,16 @@ class Deck:
         return hand1, hand2
 
 
+@dataclass
 class Player:
     """Represents a player in the game."""
-    def __init__(self, name: str, hand: List[Card]) -> None:
-        self.name = name
-        self.hand: List[Card] = list(hand)
+    name: str
+    hand: List[Card] = field(default_factory=list)
     
-    def __repr__(self) -> str:
-        """Returns a detailed string representation for debugging."""
-        return f"Player(name={self.name}, cards={len(self.hand)})"
+    def __post_init__(self) -> None:
+        """Ensure hand is a list copy."""
+        if not isinstance(self.hand, list):
+            self.hand = list(self.hand)
 
     def play_card(self) -> Optional[Card]:
         """Removes and returns the top card from the player's hand."""
@@ -386,23 +443,27 @@ class Player:
         """Returns the number of cards the player has."""
         return len(self.hand)
 
+@dataclass
 class GameStats:
     """Tracks game statistics."""
-    def __init__(self) -> None:
-        self.rounds_played: int = 0
-        self.wars_occurred: int = 0
-        self.max_pot_won: int = 0
-        self.max_pot_winner: str = "No one"
-        self.player_win_streak: int = 0
-        self.computer_win_streak: int = 0
-        self.max_player_streak: int = 0
-        self.max_computer_streak: int = 0
+    rounds_played: int = 0
+    wars_occurred: int = 0
+    max_pot_won: int = 0
+    max_pot_winner: str = "No one"
+    player_win_streak: int = 0
+    computer_win_streak: int = 0
+    max_player_streak: int = 0
+    max_computer_streak: int = 0
 
     def increment_round(self) -> None:
+        """Increment round counter."""
         self.rounds_played += 1
+        logging.debug(f"Round {self.rounds_played} started")
 
     def increment_war(self) -> None:
+        """Increment war counter."""
         self.wars_occurred += 1
+        logging.info(f"War #{self.wars_occurred} started")
 
     def record_player_win(self) -> None:
         """Records a player win and updates streaks."""
@@ -423,6 +484,7 @@ class GameStats:
         if pot_size > self.max_pot_won:
             self.max_pot_won = pot_size
             self.max_pot_winner = winner_name
+            logging.info(f"New max pot: {pot_size} cards won by {winner_name}")
 
     def display(self, player_name: str) -> None:
         """Prints the final game statistics."""
