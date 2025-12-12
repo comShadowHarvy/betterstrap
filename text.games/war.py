@@ -1,12 +1,16 @@
 import random
 import time
 import os
-import sys # Needed for flushing output in fast mode
-import json # For saving/loading settings
+import sys  # Needed for flushing output in fast mode
+import json  # For saving/loading settings
+from typing import List, Optional, Tuple
+from functools import total_ordering
 
 # --- Game Configuration ---
-DEFAULT_MAX_ROUNDS = 2000 # Default if no setting found
-SETTINGS_FILE = "war_settings.json" # File to store settings
+DEFAULT_MAX_ROUNDS = 2000  # Default if no setting found
+SETTINGS_FILE = "war_settings.json"  # File to store settings
+WAR_FACE_DOWN_CARDS = 3  # Number of face-down cards in war
+MIN_CARDS_FOR_WAR = 4  # Minimum cards needed to participate in war
 
 # Define card suits, ranks, and their values
 SUITS = ["Hearts", "Diamonds", "Clubs", "Spades"]
@@ -47,22 +51,26 @@ SUDDEN_DEATH_COMMENTS = [
 
 
 # --- Utility Functions ---
-def clear_screen():
+def clear_screen() -> None:
     """Clears the terminal screen."""
     os.system('cls' if os.name == 'nt' else 'clear')
 
-def get_game_mode():
-    """Gets the desired game mode (Normal or Fast)."""
+def get_game_mode() -> bool:
+    """Gets the desired game mode (Normal or Fast).
+    
+    Returns:
+        bool: True for fast mode, False for normal mode
+    """
     while True:
         mode = input("Choose game speed (Normal / Fast): ").strip().lower()
         if mode in ['normal', 'n']:
-            return False # Not fast mode
+            return False  # Not fast mode
         elif mode in ['fast', 'f']:
-            return True # Is fast mode
+            return True  # Is fast mode
         else:
             print("Invalid choice. Please enter 'Normal' or 'Fast'.")
 
-def display_title_screen():
+def display_title_screen() -> None:
     """Displays the improved ASCII art title screen with animation."""
     clear_screen()
     title_lines = [
@@ -80,13 +88,13 @@ def display_title_screen():
     ]
     for line in title_lines:
         print(line)
-        sys.stdout.flush() # Ensure the line is printed immediately
-        time.sleep(0.1) # Small delay between lines for animation effect
+        sys.stdout.flush()  # Ensure the line is printed immediately
+        time.sleep(0.1)  # Small delay between lines for animation effect
 
-    time.sleep(2) # Pause longer after the full title is displayed
+    time.sleep(2)  # Pause longer after the full title is displayed
 
 
-def display_loading_screen():
+def display_loading_screen() -> None:
     """Displays a fake loading sequence."""
     clear_screen()
     print("Initializing Card Shuffler...")
@@ -96,9 +104,9 @@ def display_loading_screen():
     print("Loading Settings & Graphics...")
     load_chars = ['|', '/', '-', '\\']
     for i in range(15):
-        print(f"[{load_chars[i % len(load_chars)]}] ", end='\r') # Use end='\r' to overwrite line
+        print(f"[{load_chars[i % len(load_chars)]}] ", end='\r')  # Use end='\r' to overwrite line
         time.sleep(0.1)
-    print("[OK]      ") # Print OK and spaces to clear loading chars
+    print("[OK]      ")  # Print OK and spaces to clear loading chars
     time.sleep(1)
     clear_screen()
 
@@ -138,11 +146,10 @@ class Settings:
             # No need to do anything, defaults are already set
         except (json.JSONDecodeError, TypeError) as e:
             print(f"Error reading settings file ({e}). Using defaults.")
-            # Reset to defaults might be needed if file is corrupted
-            self.__init__() # Re-initialize to ensure defaults
+            # Don't recursively call __init__, file is corrupt so defaults already set
         except Exception as e:
             print(f"An unexpected error occurred loading settings ({e}). Using defaults.")
-            self.__init__() # Re-initialize
+            # Don't recursively call __init__, use existing defaults
 
     def _save_settings(self):
         """Saves the current settings to the JSON file."""
@@ -165,11 +172,11 @@ class Settings:
             print(f"An unexpected error occurred saving settings ({e}).")
 
 
-    def _get_status(self, setting_value):
+    def _get_status(self, setting_value: bool) -> str:
         """Returns 'ON' or 'OFF' string for display."""
         return "ON" if setting_value else "OFF"
 
-    def display_menu(self):
+    def display_menu(self) -> None:
         """Displays the settings configuration menu."""
         clear_screen()
         print("╔══════════════════════════════════════════╗")
@@ -189,7 +196,7 @@ class Settings:
         print("╚══════════════════════════════════════════╝")
 
 
-    def configure(self):
+    def configure(self) -> None:
         """Allows the user to toggle settings before starting."""
         needs_save = False
         while True:
@@ -247,9 +254,10 @@ class Settings:
                 time.sleep(1)
 
 # --- Game Classes ---
+@total_ordering
 class Card:
     """Represents a single playing card."""
-    def __init__(self, suit, rank):
+    def __init__(self, suit: str, rank: str) -> None:
         self.suit = suit
         self.rank = rank
         self.display_rank = DISPLAY_RANKS[rank]
@@ -270,39 +278,46 @@ class Card:
             f"└─────────┘"
         )
 
-    def simple_str(self):
+    def simple_str(self) -> str:
         """Returns a simple one-line string representation."""
         original_ranks_full = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "Jack", "Queen", "King", "Ace"]
         full_rank_name = original_ranks_full[self.value - 2]
         return f"{full_rank_name} of {self.suit}"
 
-    def __lt__(self, other): return self.value < other.value
-    def __gt__(self, other): return self.value > other.value
-    def __eq__(self, other): return self.value == other.value
+    def __lt__(self, other: 'Card') -> bool:
+        return self.value < other.value
+    
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Card):
+            return NotImplemented
+        return self.value == other.value
 
 class Deck:
     """Represents a deck of 52 playing cards."""
-    def __init__(self):
-        self.cards = [Card(suit, rank) for suit in SUITS for rank in RANKS]
+    def __init__(self) -> None:
+        self.cards: List[Card] = [Card(suit, rank) for suit in SUITS for rank in RANKS]
 
-    def shuffle(self, settings, is_fast_mode):
+    def shuffle(self, settings: Settings, is_fast_mode: bool) -> None:
         """Shuffles the deck randomly."""
-        if settings.clear_screen_enabled: clear_screen()
+        if settings.clear_screen_enabled:
+            clear_screen()
         print("Shuffling deck...")
-        if not is_fast_mode: time.sleep(1)
+        if not is_fast_mode:
+            time.sleep(1)
         random.shuffle(self.cards)
 
-    def deal(self, settings, player1_name, player2_name, is_fast_mode):
+    def deal(self, settings: Settings, player1_name: str, player2_name: str, is_fast_mode: bool) -> Tuple[List[Card], List[Card]]:
         """Deals the entire deck evenly between two players with animation."""
-        if settings.clear_screen_enabled: clear_screen()
+        if settings.clear_screen_enabled:
+            clear_screen()
         print("Dealing cards...")
         time.sleep(0.5)
 
-        hand1 = []
-        hand2 = []
+        hand1: List[Card] = []
+        hand2: List[Card] = []
         p1_display = ""
         p2_display = ""
-        deal_delay = 0.05 if settings.use_ascii_art else 0.01 # Faster if no art
+        deal_delay = 0.05 if settings.use_ascii_art else 0.01  # Faster if no art
 
         for i, card in enumerate(self.cards):
             if i % 2 == 0:
@@ -313,7 +328,7 @@ class Deck:
                     print("Dealing...")
                     print(f"{player1_name.ljust(15)}: {p1_display}")
                     print(f"{player2_name.ljust(15)}: {p2_display}")
-                    time.sleep(deal_delay) # Short pause for dealing effect
+                    time.sleep(deal_delay)  # Short pause for dealing effect
             else:
                 hand2.append(card)
                 if not is_fast_mode:
@@ -322,82 +337,84 @@ class Deck:
                     print("Dealing...")
                     print(f"{player1_name.ljust(15)}: {p1_display}")
                     print(f"{player2_name.ljust(15)}: {p2_display}")
-                    time.sleep(deal_delay) # Short pause for dealing effect
+                    time.sleep(deal_delay)  # Short pause for dealing effect
 
         if not is_fast_mode:
-             if settings.clear_screen_enabled: clear_screen()
-             print("Dealing complete!")
-             print(f"{player1_name} received {len(hand1)} cards.")
-             print(f"{player2_name} received {len(hand2)} cards.")
-             time.sleep(1.5)
+            if settings.clear_screen_enabled:
+                clear_screen()
+            print("Dealing complete!")
+            print(f"{player1_name} received {len(hand1)} cards.")
+            print(f"{player2_name} received {len(hand2)} cards.")
+            time.sleep(1.5)
 
         return hand1, hand2
 
 
 class Player:
     """Represents a player in the game."""
-    def __init__(self, name, hand):
+    def __init__(self, name: str, hand: List[Card]) -> None:
         self.name = name
-        self.hand = list(hand)
+        self.hand: List[Card] = list(hand)
 
-    def play_card(self):
+    def play_card(self) -> Optional[Card]:
         """Removes and returns the top card from the player's hand."""
         return self.hand.pop(0) if self.hand else None
 
-    def add_cards(self, cards, settings):
+    def add_cards(self, cards: List[Card], settings: Settings) -> None:
         """Adds a list of cards to the bottom of the player's hand."""
-        if not cards: return # Avoid error if passed empty list
+        if not cards:
+            return  # Avoid error if passed empty list
         if settings.shuffle_won_cards:
-            random.shuffle(cards) # Shuffle won cards if setting is ON
+            random.shuffle(cards)  # Shuffle won cards if setting is ON
         self.hand.extend(cards)
 
-    def has_cards(self):
+    def has_cards(self) -> bool:
         """Checks if the player still has cards."""
         return len(self.hand) > 0
 
-    def cards_left(self):
+    def cards_left(self) -> int:
         """Returns the number of cards the player has."""
         return len(self.hand)
 
 class GameStats:
     """Tracks game statistics."""
-    def __init__(self):
-        self.rounds_played = 0
-        self.wars_occurred = 0
-        self.max_pot_won = 0
-        self.max_pot_winner = "No one"
-        self.player_win_streak = 0
-        self.computer_win_streak = 0
-        self.max_player_streak = 0
-        self.max_computer_streak = 0
+    def __init__(self) -> None:
+        self.rounds_played: int = 0
+        self.wars_occurred: int = 0
+        self.max_pot_won: int = 0
+        self.max_pot_winner: str = "No one"
+        self.player_win_streak: int = 0
+        self.computer_win_streak: int = 0
+        self.max_player_streak: int = 0
+        self.max_computer_streak: int = 0
 
-    def increment_round(self):
+    def increment_round(self) -> None:
         self.rounds_played += 1
 
-    def increment_war(self):
+    def increment_war(self) -> None:
         self.wars_occurred += 1
 
-    def record_player_win(self):
+    def record_player_win(self) -> None:
         """Records a player win and updates streaks."""
         self.player_win_streak += 1
-        self.computer_win_streak = 0 # Reset opponent's streak
+        self.computer_win_streak = 0  # Reset opponent's streak
         if self.player_win_streak > self.max_player_streak:
             self.max_player_streak = self.player_win_streak
 
-    def record_computer_win(self):
+    def record_computer_win(self) -> None:
         """Records a computer win and updates streaks."""
         self.computer_win_streak += 1
-        self.player_win_streak = 0 # Reset opponent's streak
+        self.player_win_streak = 0  # Reset opponent's streak
         if self.computer_win_streak > self.max_computer_streak:
             self.max_computer_streak = self.computer_win_streak
 
-    def check_pot(self, pot_size, winner_name):
+    def check_pot(self, pot_size: int, winner_name: str) -> None:
         """Checks if the current pot is the largest won so far."""
         if pot_size > self.max_pot_won:
             self.max_pot_won = pot_size
             self.max_pot_winner = winner_name
 
-    def display(self, player_name):
+    def display(self, player_name: str) -> None:
         """Prints the final game statistics."""
         print("\n--- Game Statistics ---")
         print(f"Total Rounds Played: {self.rounds_played}")
@@ -412,7 +429,7 @@ class GameStats:
 
 
 # --- Display Functions ---
-def display_single_card(card, player_name, settings, is_war_card=False):
+def display_single_card(card: Card, player_name: str, settings: Settings, is_war_card: bool = False) -> None:
     """Displays a single player's card, optionally marking it as a War card."""
     marker = " (WAR!)" if is_war_card else ""
     print(f"\n{player_name} plays{marker}:")
@@ -444,14 +461,15 @@ def display_cards_side_by_side(card1, card2, player1_name, player2_name, setting
         print(f"{player2_name}: {card2.simple_str()}")
 
 
-def display_face_down_row(count, player_name, settings):
+def display_face_down_row(count: int, player_name: str, settings: Settings) -> None:
     """Prints a row of face-down cards if ASCII art is enabled."""
     if not settings.use_ascii_art:
         # If ASCII is off, just print a simple message
         print(f"{player_name} places {count} card(s) face down.")
         return
 
-    if count <= 0: return
+    if count <= 0:
+        return
 
     lines = FACE_DOWN_CARD.split('\n')
     card_width = len(lines[0])
@@ -466,20 +484,27 @@ def display_face_down_row(count, player_name, settings):
         print(row_line.rstrip())
 
 # --- Core Game Logic ---
-def play_war_round(player1, player2, cards_on_table, stats, settings, is_fast_mode):
-    """Handles a 'War' round, respecting settings."""
+def play_war_round(player1: Player, player2: Player, cards_on_table: List[Card], 
+                   stats: GameStats, settings: Settings, is_fast_mode: bool) -> bool:
+    """Handles a 'War' round, respecting settings.
+    
+    Returns:
+        bool: True if war resolved and game continues, False if game ended
+    """
     stats.increment_war()
-    if settings.clear_screen_enabled: clear_screen()
+    if settings.clear_screen_enabled:
+        clear_screen()
 
     war_comment = f" ({random.choice(WAR_COMMENTS)})" if settings.show_flavor_text else ""
-    print("\n" + "="*15 + f" W A R !{war_comment} " + "="*15) # More prominent header
+    print("\n" + "="*15 + f" W A R !{war_comment} " + "="*15)  # More prominent header
 
     initial_pot = len(cards_on_table)
     print(f"\nCards initially contested: {initial_pot}")
     print(f"{player1.name}: {player1.cards_left()} cards | {player2.name}: {player2.cards_left()} cards")
-    if not is_fast_mode: time.sleep(2.0) # Longer pause at start of war
+    if not is_fast_mode:
+        time.sleep(2.0)  # Longer pause at start of war
 
-    min_cards_for_war = 4
+    min_cards_for_war = MIN_CARDS_FOR_WAR
     p1_cards_left = player1.cards_left()
     p2_cards_left = player2.cards_left()
 
@@ -503,17 +528,21 @@ def play_war_round(player1, player2, cards_on_table, stats, settings, is_fast_mo
         return False # Game ends
 
     # --- Show Face-Down Cards ---
-    print(f"\n{player1.name} places 3 cards face down...")
-    if not is_fast_mode: time.sleep(1)
-    display_face_down_row(3, player1.name, settings) # Pass settings
-    war_cards_player1 = [player1.play_card() for _ in range(3)]
-    if not is_fast_mode: time.sleep(1.5)
+    print(f"\n{player1.name} places {WAR_FACE_DOWN_CARDS} cards face down...")
+    if not is_fast_mode:
+        time.sleep(1)
+    display_face_down_row(WAR_FACE_DOWN_CARDS, player1.name, settings)  # Pass settings
+    war_cards_player1 = [player1.play_card() for _ in range(WAR_FACE_DOWN_CARDS)]
+    if not is_fast_mode:
+        time.sleep(1.5)
 
-    print(f"\n{player2.name} places 3 cards face down...")
-    if not is_fast_mode: time.sleep(1)
-    display_face_down_row(3, player2.name, settings) # Pass settings
-    war_cards_player2 = [player2.play_card() for _ in range(3)]
-    if not is_fast_mode: time.sleep(1.5)
+    print(f"\n{player2.name} places {WAR_FACE_DOWN_CARDS} cards face down...")
+    if not is_fast_mode:
+        time.sleep(1)
+    display_face_down_row(WAR_FACE_DOWN_CARDS, player2.name, settings)  # Pass settings
+    war_cards_player2 = [player2.play_card() for _ in range(WAR_FACE_DOWN_CARDS)]
+    if not is_fast_mode:
+        time.sleep(1.5)
     # --- End Show Face-Down Cards ---
 
     # Add actual cards to pot (filter None in case player ran out exactly)
@@ -599,9 +628,15 @@ def play_war_round(player1, player2, cards_on_table, stats, settings, is_fast_mo
     if not is_fast_mode: time.sleep(3.5)
     return True # Indicate war resolved without game ending
 
-def sudden_death_war(player1, player2, stats, settings, is_fast_mode):
-    """Handles the Sudden Death face-off at MAX_ROUNDS."""
-    if settings.clear_screen_enabled: clear_screen()
+def sudden_death_war(player1: Player, player2: Player, stats: GameStats, 
+                     settings: Settings, is_fast_mode: bool) -> Optional[Player]:
+    """Handles the Sudden Death face-off at MAX_ROUNDS.
+    
+    Returns:
+        Optional[Player]: The winning player, or None if it's a draw
+    """
+    if settings.clear_screen_enabled:
+        clear_screen()
     sd_comment = random.choice(SUDDEN_DEATH_COMMENTS)
     print("\n" + "="*10 + f" SUDDEN DEATH! ({sd_comment}) " + "="*10)
     print("Maximum rounds reached! One final card determines the winner!")
@@ -661,7 +696,7 @@ def sudden_death_war(player1, player2, stats, settings, is_fast_mode):
     return winner # Return the winning player object or None for a draw
 
 
-def game_loop():
+def game_loop() -> None:
     """Main function to run the War game."""
     # --- Title and Loading ---
     display_title_screen() # Animated title
