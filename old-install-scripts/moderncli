@@ -1,0 +1,31 @@
+#!/bin/bash
+
+echo "Updating repositories..."
+sudo pacman -Syu
+
+echo "Installing modern CLI replacements..."
+
+# --needed skips packages that are already installed and up to date
+sudo pacman -S --needed \
+    bat \
+    eza \
+    ripgrep \
+    fd \
+    zoxide \
+    procs \
+    btop \
+    dust \
+    duf \
+    gping \
+    git-delta \
+    tealdeer
+
+echo "-----------------------------------------------------"
+echo "Initializing tldr (tealdeer) cache..."
+tldr --update
+
+echo "-----------------------------------------------------"
+echo "INSTALLATION COMPLETE."
+echo "To replace the old commands with these new ones,"
+echo "add the aliases below to your shell config (.bashrc or .zshrc)."
+
