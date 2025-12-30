@@ -1,0 +1,228 @@
+#!/bin/bash
+# =============================================================================
+# Tdarr Setup Script - v6 (Global Config Fix)
+# =============================================================================
+
+set -Eeo pipefail
+
+# =============================================================================
+# CONSTANTS
+# =============================================================================
+
+readonly TDARR_IMAGE="haveagitgat/tdarr_node:latest"
+readonly SERVER_IP="192.168.1.210"
+readonly SERVER_PORT="8266"
+readonly PUID="1000"
+readonly PGID="1000"
+NODE_NAME="$(hostname)-node"
+
+readonly USER_HOME="$HOME"
+readonly TDARR_BASE="$USER_HOME/tdarr"
+readonly TDARR_MOUNTS="$TDARR_BASE/mounts"
+readonly TDARR_CONFIGS="$USER_HOME/Tdarr/configs"
+readonly COMPOSE_FILE="$TDARR_BASE/docker-compose.yml"
+readonly LAZYDOCKER_WRAPPER="$TDARR_BASE/ld.sh"
+readonly LOG_FILE="$TDARR_BASE/setup-tdarr.log"
+readonly BETTERSTRAP_SMB="$USER_HOME/betterstrap/smb.sh"
+
+# CONFIG PATHS
+readonly USER_RCLONE_CONFIG="$USER_HOME/.config/rclone/rclone.conf"
+readonly GLOBAL_RCLONE_CONFIG="/etc/rclone/rclone.conf"
+readonly RCLONE_CACHE="/var/cache/rclone"
+
+readonly AUTOFS_MASTER_DIR="/etc/autofs/auto.master.d"
+readonly AUTOFS_MASTER_FILE="$AUTOFS_MASTER_DIR/tdarr.autofs"
+readonly AUTOFS_MAP="/etc/auto.tdarr"
+readonly SMB_CREDS_FILE="/etc/auto.smb.210"
+
+# Default credentials
+SMB_210_USER="me"
+SMB_210_PASS="Jbean343343343"
+
+# =============================================================================
+# HELPER FUNCTIONS
+# =============================================================================
+
+log() { echo -e "[\e[34m$(date '+%H:%M:%S')\e[0m] $1" | tee -a "$LOG_FILE"; }
+command_exists() { command -v "$1" &> /dev/null; }
+
+# =============================================================================
+# MAIN LOGIC
+# =============================================================================
+
+main() {
+    if [ "$EUID" -eq 0 ]; then echo "Run as normal user, not root."; exit 1; fi
+    mkdir -p "$(dirname "$LOG_FILE")"
+    log "Starting v6 Config Fix..."
+
+    # 1. Base Checks & Installs
+    if ! command_exists rclone; then
+        log "Installing Rclone..."
+        sudo pacman -Sy --needed --noconfirm rclone
+    fi
+
+    # 2. CREATE WRAPPER (Fixes 'unknown command')
+    log "Creating Rclone mount wrapper..."
+    sudo tee /tmp/mount.fuse.rclone > /dev/null << 'EOF'
+#!/bin/bash
+exec /usr/bin/rclone mount "$@"
+EOF
+    sudo chmod +x /tmp/mount.fuse.rclone
+    sudo mv /tmp/mount.fuse.rclone /usr/bin/mount.fuse.rclone
+    if [ ! -f /sbin/mount.fuse.rclone ]; then
+        sudo ln -s /usr/bin/mount.fuse.rclone /sbin/mount.fuse.rclone
+    fi
+
+    # 3. GLOBALIZE CONFIG (Fixes 'Config not found')
+    log "Copying Rclone config to /etc/rclone/..."
+    if [ ! -f "$USER_RCLONE_CONFIG" ]; then
+        log "ERROR: Your user config at $USER_RCLONE_CONFIG is missing!"
+        exit 1
+    fi
+    
+    sudo mkdir -p /etc/rclone
+    sudo cp "$USER_RCLONE_CONFIG" "$GLOBAL_RCLONE_CONFIG"
+    # Set permissions so only root can read it (secure)
+    sudo chmod 600 "$GLOBAL_RCLONE_CONFIG"
+    
+    # 4. MANUAL TEST
+    log "Performing manual mount test..."
+    sudo mkdir -p /tmp/test_drive
+    sudo umount /tmp/test_drive 2>/dev/null || true
+    
+    # We use the NEW global config path
+    if sudo /usr/bin/mount.fuse.rclone \
+        -o config="$GLOBAL_RCLONE_CONFIG",allow_other,uid=1000,gid=1000 \
+        drive: /tmp/test_drive; then
+        log " >> Manual test SUCCESS!"
+        sudo umount /tmp/test_drive
+    else
+        log " >> Manual test FAILED."
+        exit 1
+    fi
+
+    # 5. SMB Setup
+    if [ -f "$BETTERSTRAP_SMB" ] && grep -q "username=me" "$BETTERSTRAP_SMB"; then
+        SMB_210_USER=$(grep -oP '(?<=username=)[^,]+' "$BETTERSTRAP_SMB" | head -1)
+        SMB_210_PASS=$(grep -oP '(?<=password=)[^,]+' "$BETTERSTRAP_SMB" | head -1)
+    fi
+    sudo tee "$SMB_CREDS_FILE" > /dev/null << EOF
+username=$SMB_210_USER
+password=$SMB_210_PASS
+EOF
+    sudo chmod 600 "$SMB_CREDS_FILE"
+
+    # 6. Clean & Prepare Directories
+    log "Stopping Autofs..."
+    sudo systemctl stop autofs 2>/dev/null || true
+    if mountpoint -q "$TDARR_MOUNTS"; then sudo umount -l "$TDARR_MOUNTS"; fi
+    
+    log "Preparing Rclone cache..."
+    sudo mkdir -p "$RCLONE_CACHE"
+    sudo chmod 777 "$RCLONE_CACHE"
+
+    mkdir -p "$TDARR_MOUNTS" "$TDARR_CONFIGS" "$TDARR_BASE/wud"
+    
+    # 7. Configure Autofs
+    if ! grep -q "^user_allow_other" /etc/fuse.conf; then
+        sudo sed -i 's/#user_allow_other/user_allow_other/' /etc/fuse.conf
+    fi
+
+    sudo mkdir -p "$AUTOFS_MASTER_DIR"
+    sudo tee "$AUTOFS_MASTER_FILE" > /dev/null << EOF
+$TDARR_MOUNTS /etc/auto.tdarr --timeout=300,--ghost
+EOF
+
+    log "Generating Map File..."
+    # NOW USING GLOBAL_RCLONE_CONFIG
+    sudo tee "$AUTOFS_MAP" > /dev/null << EOFMAP
+# --- SMB ---
+hass_share  -fstype=cifs,vers=3.1.1,credentials=/etc/auto.smb.210,uid=1000,gid=1000,iocharset=utf8 ://192.168.1.210/share
+hass_media  -fstype=cifs,vers=3.1.1,credentials=/etc/auto.smb.210,uid=1000,gid=1000,iocharset=utf8 ://192.168.1.210/media
+hass_config -fstype=cifs,vers=3.1.1,credentials=/etc/auto.smb.210,uid=1000,gid=1000,iocharset=utf8 ://192.168.1.210/config
+usb_share   -fstype=cifs,vers=3.1.1,guest,uid=1000,gid=1000,iocharset=utf8 ://192.168.1.47/USB-Share
+usb_share_2 -fstype=cifs,vers=3.1.1,guest,uid=1000,gid=1000,iocharset=utf8 ://192.168.1.47/USB-Share-2
+rom_share   -fstype=cifs,vers=3.1.1,guest,uid=1000,gid=1000,iocharset=utf8 ://192.168.1.47/ROM-Share
+
+# --- RCLONE ---
+drive       -fstype=fuse.rclone,config=$GLOBAL_RCLONE_CONFIG,allow_other,uid=1000,gid=1000,cache_dir=$RCLONE_CACHE,log_file=/tmp/rclone-drive.log,log_level=INFO :drive:
+photo       -fstype=fuse.rclone,config=$GLOBAL_RCLONE_CONFIG,allow_other,uid=1000,gid=1000,cache_dir=$RCLONE_CACHE,log_file=/tmp/rclone-photo.log,log_level=INFO :photo:
+EOFMAP
+
+    log "Restarting Autofs..."
+    sudo systemctl restart autofs
+
+    # 8. Wait for Mounts
+    wait_for_mount "drive"
+    wait_for_mount "hass_share"
+
+    # 9. Generate Compose & Start
+    log "Generating Docker Compose..."
+    cat > "$COMPOSE_FILE" << EOF
+version: '3.8'
+services:
+  tdarr-node:
+    image: $TDARR_IMAGE
+    container_name: tdarr-node
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      - serverIP=$SERVER_IP
+      - serverPort=$SERVER_PORT
+      - nodeName=$NODE_NAME
+      - PUID=$PUID
+      - PGID=$PGID
+    volumes:
+      - $TDARR_MOUNTS/hass_share:/share:rw
+      - $TDARR_MOUNTS/hass_share/trans:/tmp:rw
+      - $TDARR_CONFIGS:/app/configs:rw
+      - $TDARR_MOUNTS/drive:/drive:rw
+      - $TDARR_MOUNTS/photo:/photo:rw
+    labels:
+      - "wud.watch=true"
+  wud:
+    image: fmartinou/whats-up-docker:latest
+    container_name: wud
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - $TDARR_BASE/wud:/store
+EOF
+
+    cat > "$LAZYDOCKER_WRAPPER" << EOF
+#!/bin/bash
+export COMPOSE_FILE="$COMPOSE_FILE"
+exec lazydocker
+EOF
+    chmod +x "$LAZYDOCKER_WRAPPER"
+
+    log "Starting Docker..."
+    cd "$TDARR_BASE"
+    if docker compose version &>/dev/null; then CMD="docker compose"; else CMD="docker-compose"; fi
+    $CMD -f "$COMPOSE_FILE" up -d
+    
+    log "SUCCESS! Setup Complete."
+}
+
+wait_for_mount() {
+    local name="$1"
+    local path="$TDARR_MOUNTS/$name"
+    log "Waiting for $name..."
+    for i in {1..10}; do
+        if ls -1q "$path" &>/dev/null; then
+            log " - $name is mounted."
+            return 0
+        fi
+        sleep 2
+    done
+    
+    log "ERROR: $name failed to mount."
+    log " --- SYSTEM LOG DUMP ---"
+    sudo journalctl -u autofs --no-pager -n 20
+    log " -----------------------"
+    exit 1
+}
+
+main "$@"

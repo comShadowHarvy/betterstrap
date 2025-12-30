@@ -1,0 +1,77 @@
+#!/bin/sh
+
+
+# --- Configuration ---
+# Detect the user who called sudo (to get the correct home dir/UID)
+REAL_USER=${SUDO_USER:-$(whoami)}
+REAL_HOME=$(getent passwd "$REAL_USER" | cut -d: -f6)
+REAL_UID=$(id -u "$REAL_USER")
+REAL_GID=$(id -g "$REAL_USER")
+
+# Paths
+RCLONE_CONFIG="$REAL_HOME/.config/rclone/rclone.conf"
+MOUNT_PARENT="$REAL_HOME/tdarr/mounts"
+MAP_FILE="/etc/auto.tdarr"
+MASTER_FILE="/etc/auto.master"
+
+# --- Checks ---
+if [[ $EUID -ne 0 ]]; then
+   echo "Error: This script must be run as root (use sudo)."
+   exit 1
+fi
+
+if [[ ! -f "$RCLONE_CONFIG" ]]; then
+    echo "Warning: Could not find rclone config at $RCLONE_CONFIG"
+    echo "Please ensure your config exists, or edit the script variables."
+    read -p "Press Enter to continue anyway, or Ctrl+C to cancel."
+fi
+
+echo "Setting up Autofs for user: $REAL_USER"
+
+# 1. Install Autofs if missing (Arch specific)
+if ! command -v automount &> /dev/null; then
+    echo "Installing autofs..."
+    pacman -S --needed --noconfirm autofs
+fi
+
+# 2. Create the Rclone mount helper symlink
+# Autofs needs /sbin/mount.fuse.rclone or /usr/bin/mount.fuse.rclone to exist
+if [[ ! -f /usr/bin/mount.fuse.rclone ]]; then
+    echo "Creating rclone mount helper..."
+    ln -s /usr/bin/rclone /usr/bin/mount.fuse.rclone
+fi
+
+# 3. Enable user_allow_other in fuse.conf
+# This allows the root autofs process to mount drives accessible by you
+sed -i 's/#user_allow_other/user_allow_other/' /etc/fuse.conf
+
+# 4. Create the Map File (/etc/auto.tdarr)
+# This defines the specific drives 'drive' and 'photo'
+echo "Creating $MAP_FILE..."
+cat <<EOF > "$MAP_FILE"
+drive -fstype=fuse.rclone,config=$RCLONE_CONFIG,allow_other,uid=$REAL_UID,gid=$REAL_GID :drive:
+photo -fstype=fuse.rclone,config=$RCLONE_CONFIG,allow_other,uid=$REAL_UID,gid=$REAL_GID :photo:
+EOF
+
+# 5. Update Master File (/etc/auto.master)
+# This tells autofs to manage the specific folder
+if ! grep -q "$MAP_FILE" "$MASTER_FILE"; then
+    echo "Adding entry to $MASTER_FILE..."
+    # Format: /path/to/mount/parent  /path/to/map/file  options
+    echo "$MOUNT_PARENT $MAP_FILE --timeout=60" >> "$MASTER_FILE"
+else
+    echo "Entry already exists in $MASTER_FILE."
+fi
+
+# 6. Restart Autofs
+echo "Restarting autofs service..."
+systemctl enable --now autofs
+systemctl restart autofs
+
+echo "------------------------------------------------"
+echo "Done!"
+echo "Your drives are mapped to:"
+echo "  $MOUNT_PARENT/drive"
+echo "  $MOUNT_PARENT/photo"
+echo ""
+echo "Note: The folders may look empty until you 'cd' into them or Tdarr accesses them."

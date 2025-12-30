@@ -1,0 +1,73 @@
+#!/bin/bash
+
+# Configuration
+SERVICE_NAME="rclone-drive.service"
+SERVICE_PATH="$HOME/.config/systemd/user"
+MOUNT_POINT="$HOME/drive"
+RCLONE_REMOTE="drive" # The name you gave the remote in rclone config
+
+echo "Setting up Google Drive mount..."
+
+# 1. Ensure the mount point exists
+if [ ! -d "$MOUNT_POINT" ]; then
+    echo "Creating mount point at $MOUNT_POINT..."
+    mkdir -p "$MOUNT_POINT"
+fi
+
+# 2. Ensure systemd user directory exists
+if [ ! -d "$SERVICE_PATH" ]; then
+    echo "Creating systemd user directory..."
+    mkdir -p "$SERVICE_PATH"
+fi
+
+# 3. Write (or Overwrite) the Service File
+echo "Writing service file to $SERVICE_PATH/$SERVICE_NAME..."
+
+cat <<EOF > "$SERVICE_PATH/$SERVICE_NAME"
+[Unit]
+Description=RClone Mount for Google Drive
+AssertPathIsDirectory=%h/drive
+After=network-online.target
+
+[Service]
+Type=notify
+# Note: %h automatically resolves to your home directory
+ExecStart=/usr/bin/rclone mount $RCLONE_REMOTE: %h/drive \\
+    --vfs-cache-mode full \\
+    --no-modtime \\
+    --stats=0 \\
+    --checkers=16 \\
+    --bwlimit=8500k \\
+    --dir-cache-time=60m \\
+    --log-level INFO \\
+    --log-file /tmp/rclone-drive.log
+ExecStop=/bin/fusermount -u %h/drive
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target
+EOF
+
+# 4. Reload Systemd to see the new file
+echo "Reloading systemd daemon..."
+systemctl --user daemon-reload
+
+# 5. Check status and Restart/Start
+if systemctl --user is-active --quiet "$SERVICE_NAME"; then
+    echo "Service is already running. Restarting it to apply changes..."
+    systemctl --user restart "$SERVICE_NAME"
+else
+    echo "Service is not running. Enabling and starting it..."
+    systemctl --user enable "$SERVICE_NAME"
+    systemctl --user start "$SERVICE_NAME"
+fi
+
+# 6. Final verification
+sleep 2 # Give it a moment to mount
+if mountpoint -q "$MOUNT_POINT"; then
+    echo "✅ Success! Google Drive is mounted at $MOUNT_POINT"
+else
+    echo "❌ Warning: Service started, but mountpoint check failed."
+    echo "Check logs with: journalctl --user -u $SERVICE_NAME -f"
+fi
