@@ -5,7 +5,7 @@ This module defines the Card class and related constants for a card game.
 # --- ANSI Color Codes ---
 COLOR_RESET = "\033[0m"
 COLOR_RED = "\033[91m"       # For Hearts/Diamonds
-COLOR_BLACK = "\033[30m"     # For Clubs/Spades (often default, but explicit)
+COLOR_BLACK = "\033[30m"     # For Clubs/Spades
 COLOR_WHITE_BG = "\033[107m" # White background for cards
 COLOR_GREEN = "\033[92m"     # For wins/positive messages
 COLOR_YELLOW = "\033[93m"    # For warnings/bets
@@ -25,7 +25,6 @@ def get_card_color(suit_name):
     """Determines the color for a card based on its suit."""
     return COLOR_RED if suit_name in ['Hearts', 'Diamonds'] else COLOR_BLACK
 
-# --- Card Class ---
 class Card:
     """Represents a single playing card."""
     def __init__(self, suit_name, rank):
@@ -39,3 +38,14 @@ class Card:
 
     def __str__(self):
         return f"{self.rank}{self.suit_symbol}"
+
+    def is_ace(self):
+        return self.rank == 'A'
+
+    def is_face_card(self):
+        return self.rank in ['J', 'Q', 'K']
+
+    def get_value(self, is_soft=False):
+        if self.is_ace():
+            return 11 if is_soft else 1
+        return self.value
