@@ -3,7 +3,7 @@ Blackjack Game Module
 """
 
 import random
-from card import Card, SUITS, RANKS, VALUES
+from card import Card, SUITS, RANKS, VALUES, COLOR_MAGENTA, COLOR_RESET, COLOR_GREEN
 from player import HumanPlayer, AIPlayer, AIType
 from game_utils import clear_screen, typing_effect, display_card, display_hand
 
