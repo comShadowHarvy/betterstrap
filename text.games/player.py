@@ -3,7 +3,7 @@ This module defines the Player, HumanPlayer, and AIPlayer classes.
 """
 import random
 import enum
-from card import VALUES, Card
+from card import VALUES, Card, COLOR_GREEN, COLOR_RED, COLOR_YELLOW, COLOR_BOLD, COLOR_RESET
 
 class AIType(enum.Enum):
     BASIC = "Basic Strategy"
@@ -14,11 +14,14 @@ class AIType(enum.Enum):
 
 class Player:
     """Base class for a player in the game."""
-    def __init__(self, name, chips=100):
+    def __init__(self, name, chips=1000):
         self.name = name
         self.chips = chips
         self.hands = []
         self.current_bet = 0
+        self.wins = 0
+        self.losses = 0
+        self.ties = 0
 
     def __str__(self):
         return self.name
@@ -57,14 +60,44 @@ class Player:
     def has_blackjack(self):
         return len(self.get_current_hand()) == 2 and self.calculate_hand_value() == 21
 
+    def can_afford_bet(self, amount):
+        return self.chips >= amount
+
+    def place_bet(self, amount):
+        if self.can_afford_bet(amount):
+            self.chips -= amount
+            self.current_bet = amount
+            return True
+        return False
+
+    def win_bet(self, amount):
+        self.chips += amount
+        self.current_bet = 0
+        self.wins += 1
+
+    def lose_bet(self, amount):
+        self.current_bet = 0
+        self.losses += 1
+
+    def tie_bet(self):
+        self.current_bet = 0
+        self.ties += 1
+
 class HumanPlayer(Player):
     """Represents a human player."""
-    def __init__(self, name, chips=100):
+    def __init__(self, name, chips=1000):
         super().__init__(name, chips)
+
+    def display_stats(self):
+        print(f"{self.name} Stats:")
+        print(f"  Chips: {self.chips}")
+        print(f"  Wins: {self.wins}")
+        print(f"  Losses: {self.losses}")
+        print(f"  Ties: {self.ties}")
 
 class AIPlayer(Player):
     """Represents an AI player."""
-    def __init__(self, name, ai_type, chips=100):
+    def __init__(self, name, ai_type, chips=1000):
         super().__init__(name, chips)
         self.ai_type = ai_type
 

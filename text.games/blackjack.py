@@ -3,9 +3,9 @@ Blackjack Game Module
 """
 
 import random
-from card import Card, SUITS, RANKS, VALUES, COLOR_MAGENTA, COLOR_RESET, COLOR_GREEN
+from card import Card, SUITS, RANKS, VALUES, COLOR_MAGENTA, COLOR_RESET, COLOR_GREEN, COLOR_RED, COLOR_YELLOW, COLOR_BOLD
 from player import HumanPlayer, AIPlayer, AIType
-from game_utils import clear_screen, typing_effect, display_card, display_hand
+from game_utils import clear_screen, typing_effect, display_card, display_hand, display_table, get_player_bet, get_player_action, display_game_stats
 
 def create_deck(num_decks=1):
     """Create a deck of cards."""
@@ -22,28 +22,6 @@ def deal_card(deck):
         return None
     return deck.pop()
 
-def display_table(player, dealer, hide_dealer_one=True):
-    """Display the current state of the table."""
-    clear_screen()
-    print("\n" + "="*40)
-    print(f"{COLOR_MAGENTA}CASINO BLACKJACK{COLOR_RESET}")
-    print("="*40)
-
-    print(f"\n{player.name}'s Hand: {player.calculate_hand_value()}")
-    display_hand(player.name, player.get_current_hand())
-
-    print("\nDealer's Hand:")
-    display_hand("Dealer", dealer.get_current_hand(), hide_one=hide_dealer_one)
-    print("="*40 + "\n")
-
-def get_player_action():
-    """Get player's action input."""
-    while True:
-        action = input("What would you like to do? (H)it or (S)tand: ").lower()
-        if action in ['h', 's']:
-            return action
-        print("Please enter 'H' to hit or 'S' to stand.")
-
 def dealer_turn(dealer, deck):
     """Dealer's turn logic."""
     while dealer.calculate_hand_value() < 17:
@@ -52,11 +30,19 @@ def dealer_turn(dealer, deck):
 
 def play_round():
     """Play a single round of blackjack."""
+    # Create and shuffle deck
     deck = create_deck(6)
     random.shuffle(deck)
 
+    # Create players
     player = HumanPlayer("Player")
     dealer = AIPlayer("Dealer", AIType.BASIC)
+
+    # Place bet
+    bet = get_player_bet(player)
+    if not player.place_bet(bet):
+        typing_effect(f"{COLOR_RED}Bet failed! Not enough chips.{COLOR_RESET}")
+        return
 
     # Deal initial cards
     player.add_hand()
@@ -69,42 +55,81 @@ def play_round():
 
     # Check for blackjack
     if player.has_blackjack():
-        typing_effect(f"{player.name} has Blackjack! {player.calculate_hand_value()}")
+        dealer_value = dealer.calculate_hand_value()
+        if dealer_value == 21:
+            # Push
+            typing_effect(f"{COLOR_YELLOW}Both have Blackjack! It's a tie!{COLOR_RESET}")
+            player.tie_bet()
+        else:
+            # Player wins
+            player.win_bet(bet * 2.5)
+            typing_effect(f"{COLOR_GREEN}Blackjack! You win {bet * 2.5} chips!{COLOR_RESET}")
         return
 
     if dealer.has_blackjack():
-        typing_effect(f"Dealer has Blackjack! {dealer.calculate_hand_value()}")
+        # Dealer wins
+        dealer.win_bet(bet)
+        player.lose_bet(bet)
+        typing_effect(f"{COLOR_RED}Dealer has Blackjack! You lose {bet} chips.{COLOR_RESET}")
         return
 
     # Player's turn
     while True:
-        display_table(player, dealer)
+        display_table(player, dealer, bet_amount=bet)
         action = get_player_action()
 
         if action == 's':
             break
 
+        if action == 'd':
+            # Double down logic
+            if not player.can_afford_bet(bet):
+                typing_effect(f"{COLOR_RED}Not enough chips to double down!{COLOR_RESET}")
+                continue
+
+            player.place_bet(bet)
+            player.add_card(deal_card(deck))
+            typing_effect(f"{COLOR_YELLOW}Doubled down! Added {bet} more chips.{COLOR_RESET}")
+            break
+
         player.add_card(deal_card(deck))
         if player.is_bust():
-            typing_effect(f"{player.name} busts with {player.calculate_hand_value()}")
+            # Player busts
+            dealer.win_bet(bet)
+            player.lose_bet(bet)
+            typing_effect(f"{COLOR_RED}Bust! You lose {bet} chips.{COLOR_RESET}")
             return
 
     # Dealer's turn
     dealer_value = dealer_turn(dealer, deck)
-    display_table(player, dealer, hide_dealer_one=False)
+    display_table(player, dealer, hide_dealer_one=False, bet_amount=bet)
 
     # Determine the winner
     player_value = player.calculate_hand_value()
     dealer_value = dealer.calculate_hand_value()
 
     if player_value > 21:
-        typing_effect(f"Dealer wins! {dealer_value} > {player_value}")
-    elif dealer_value > 21 or player_value > dealer_value:
-        typing_effect(f"{player.name} wins! {player_value} > {dealer_value}")
+        # Player busts
+        dealer.win_bet(bet)
+        player.lose_bet(bet)
+        typing_effect(f"{COLOR_RED}Dealer wins! You bust with {player_value}.{COLOR_RESET}")
+    elif dealer_value > 21:
+        # Dealer busts
+        player.win_bet(bet * 2)
+        typing_effect(f"{COLOR_GREEN}Dealer busts! You win {bet * 2} chips!{COLOR_RESET}")
+    elif player_value > dealer_value:
+        # Player wins
+        player.win_bet(bet * 2)
+        typing_effect(f"{COLOR_GREEN}You win! {player_value} > {dealer_value}. You win {bet * 2} chips!{COLOR_RESET}")
     elif dealer_value > player_value:
-        typing_effect(f"Dealer wins! {dealer_value} > {player_value}")
+        # Dealer wins
+        dealer.win_bet(bet)
+        player.lose_bet(bet)
+        typing_effect(f"{COLOR_RED}Dealer wins! {dealer_value} > {player_value}. You lose {bet} chips.{COLOR_RESET}")
     else:
-        typing_effect(f"It's a tie! {player_value} = {dealer_value}")
+        # Tie
+        player.tie_bet()
+        typing_effect(f"{COLOR_YELLOW}It's a tie! {player_value} = {dealer_value}.{COLOR_RESET}")
 
 def main():
     """Main game loop."""
@@ -115,6 +140,7 @@ def main():
         play_round()
 
         if input("\nPlay another round? (Y/N): ").lower() != 'y':
+            display_game_stats(HumanPlayer("Player"), AIPlayer("Dealer", AIType.BASIC))
             typing_effect(f"{COLOR_GREEN}Thanks for playing!{COLOR_RESET}")
             break
 
