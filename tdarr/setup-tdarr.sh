@@ -160,7 +160,7 @@ detect_distribution() {
     
     # Detect distribution
     case "$ID" in
-        arch)
+        arch|cachyos|endeavouros|garuda)
             DISTRO="arch"
             PKG_MANAGER="pacman"
             ;;
