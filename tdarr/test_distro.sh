@@ -1,21 +1,22 @@
 #!/bin/bash
 
-# Create a modified version of setup-tdarr.sh that uses a variable for os-release
-# AND disables the main execution at the end
+# Create a modified version of setup-tdarr.sh:
+# 1. Use variable for os-release
 sed 's|/etc/os-release|"$TEST_OS_RELEASE"|g' /home/mw/git/betterstrap/tdarr/setup-tdarr.sh > /tmp/setup-tdarr-test.sh
 
-# Comment out the main execution line
+# 2. Disable main execution
 sed -i 's/^main "$@"/# main "$@"/g' /tmp/setup-tdarr-test.sh
 
-# Mock functions to avoid side effects
-log() { echo "LOG: $*"; }
-print_section() { echo "SECTION: $*"; }
-command_exists() { return 1; } # Fail extra checks
-error_handler() { echo "Error at $1"; }
+# 3. Change log file path to tmp
+sed -i 's|readonly LOG_FILE=.*|readonly LOG_FILE="/tmp/setup-tdarr-test.log"|g' /tmp/setup-tdarr-test.sh
 
-# Source the modified script functions (we only need detect_distribution)
+# Mock functions to avoid side effects
+# We need to define them AFTER sourcing if we want to override, but readonly vars need to be changed in source.
+# The log function is defined in the script, so if we want to override it, we must do it AFTER sourcing.
+# But since we fixed LOG_FILE, the original log function should work.
+
 clean_up() {
-    rm -f /tmp/os-release-mock /tmp/setup-tdarr-test.sh
+    rm -f /tmp/os-release-mock /tmp/setup-tdarr-test.sh /tmp/setup-tdarr-test.log
 }
 trap clean_up EXIT
 
@@ -33,6 +34,10 @@ run_test() {
     # Run detection
     (
         source /tmp/setup-tdarr-test.sh
+        
+        # Override error handler to not exit the subshell immediately on simple failures if we want to handle them
+        # But for this test, we expect success.
+        
         detect_distribution
         
         if [ "$DISTRO" == "$expected_distro" ] && [ "$PKG_MANAGER" == "$expected_pkg" ]; then
