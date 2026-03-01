@@ -1,0 +1,182 @@
+#!/bin/bash
+
+# Set default values for variables
+DEFAULT_LINES=20
+
+# Define a function to clear the screen
+clear_screen() {
+  # Clear the screen using ANSI escape codes
+  printf "\033[2J\033[H"
+}
+
+# Define a function to display usage information
+display_usage() {
+  echo "Usage: $0 [number_of_lines]"
+  echo ""
+  echo "Real-time kernel message monitor with color-coded severity levels."
+  echo ""
+  echo "Arguments:"
+  echo "  number_of_lines    Number of lines to display (default: $DEFAULT_LINES)"
+  echo ""
+  echo "Options:"
+  echo "  -h, --help         Show this help message"
+  echo ""
+  echo "Color Legend:"
+  echo -e "  ${BRIGHT_RED}CRITICAL/ALERT${NC}     - System critical errors"
+  echo -e "  ${RED}ERROR${NC}              - Error conditions"
+  echo -e "  ${BRIGHT_YELLOW}WARNING${NC}            - Warning conditions"
+  echo -e "  ${YELLOW}NOTICE${NC}             - Normal but significant"
+  echo -e "  ${GREEN}INFO${NC}               - Informational messages"
+  echo -e "  ${BLUE}DEBUG${NC}              - Debug-level messages"
+  echo -e "  ${PURPLE}USB/DEVICE${NC}         - Hardware device events"
+  echo -e "  ${CYAN}NETWORK${NC}            - Network-related events"
+  echo -e "  ${WHITE}OTHER${NC}              - General kernel messages"
+  echo ""
+  echo "Examples:"
+  echo "  $0                 # Show last $DEFAULT_LINES lines"
+  echo "  $0 50              # Show last 50 lines"
+  echo ""
+  echo "Controls:"
+  echo "  Ctrl+C             Stop monitoring and exit"
+}
+
+# Define a function to check dependencies
+check_dependencies() {
+  local missing_deps=()
+  required_commands=("dmesg" "tail" "awk" "sudo")
+
+  for cmd in "${required_commands[@]}"; do
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+      missing_deps+=("$cmd")
+    fi
+  done
+
+  if [ ${#missing_deps[@]} -ne 0 ]; then
+    echo "Error: Missing required dependencies:"
+    for dep in "${missing_deps[@]}"; do
+      echo "  - $dep"
+    done
+    echo "Please install missing dependencies and try again."
+    exit 1
+  fi
+}
+
+# Define a function to validate input
+validate_input() {
+  local lines="$1"
+
+  if ! [[ "$lines" =~ ^[0-9]+$ ]]; then
+    echo "Error: Number of lines must be an integer"
+    display_usage
+    return 1
+  fi
+
+  if [ "$lines" -lt 1 ]; then
+    echo "Warning: Number of lines must be at least 1"
+    read -p "Continue? (y/N): " -n 1 -r
+    echo
+
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+      echo "Operation cancelled"
+      exit 0
+    fi
+  fi
+
+  return 0
+}
+
+# Define a function to display kernel messages with color coding
+display_kernel_messages() {
+  local lines="$1"
+
+  # Clear the screen
+  clear_screen
+
+  # Display last '$lines' kernel messages
+  sudo dmesg | tail -n "$lines" | while read line; do
+    echo "$line"
+  done
+
+  # Wait for user input to stop monitoring
+  read -p "Press Ctrl+C to exit, or press Enter to continue..." -n 1 -r
+}
+
+# Define a function to monitor kernel messages in polling mode
+monitor_kernel_messages_polling() {
+  local lines="$1"
+
+  # Display kernel messages without color coding
+  while true; do
+    clear_screen
+    sudo dmesg | tail -n "$lines" | while read line; do
+      echo "$line"
+    done
+
+    # Wait for user input to stop monitoring
+    read -p "Press Ctrl+C to exit, or press Enter to continue..." -n 1 -r
+
+    if [ $? -ne 0 ]; then
+      break
+    fi
+
+    sleep 1
+  done
+}
+
+# Define a function to monitor kernel messages in modern dmesg --follow mode
+monitor_kernel_messages_follow() {
+  local lines="$1"
+
+  # Display kernel messages with color coding using modern dmesg --follow mode
+  while true; do
+    clear_screen
+    sudo dmesg --follow | tail -n "$lines" | while read line; do
+      echo "$line"
+    done
+
+    # Wait for user input to stop monitoring
+    read -p "Press Ctrl+C to exit, or press Enter to continue..." -n 1 -r
+
+    if [ $? -ne 0 ]; then
+      break
+    fi
+
+    sleep 1
+  done
+}
+
+# Main function
+main() {
+  # Check for help flag
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    display_usage
+    return 0
+  fi
+
+  # Check dependencies
+  check_dependencies
+
+  # Validate input if provided
+  if [ $# -gt 0 ]; then
+    validate_input "$1"
+  fi
+
+  # Test sudo access
+  if ! sudo -n dmesg >/dev/null 2>&1; then
+    echo "Error: Unable to access kernel messages with sudo"
+    exit 1
+  fi
+
+  # Clear the screen
+  clear_screen
+
+  # Choose monitoring method based on dmesg capabilities
+  if sudo dmesg --follow >/dev/null 2>&1; then
+    monitor_kernel_messages_follow "$DEFAULT_LINES"
+  else
+    monitor_kernel_messages_polling "$DEFAULT_LINES"
+  fi
+}
+
+# Execute main function
+main "$@"

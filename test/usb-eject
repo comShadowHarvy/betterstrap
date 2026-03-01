@@ -1,0 +1,150 @@
+#!/usr/bin/env python3
+"""USB device ejector with helpful error messages."""
+
+import subprocess
+import sys
+import os
+import re
+
+def get_block_devices():
+    """Get list of removable USB block devices."""
+    try:
+        result = subprocess.run(
+            ["lsblk", "-dno", "NAME,SIZE,TRAN,MODEL", "-e", "7"],
+            capture_output=True, text=True
+        )
+        devices = []
+        for line in result.stdout.strip().split('\n'):
+            parts = line.split(None, 3)
+            if len(parts) >= 2:
+                name = parts[0]
+                size = parts[1]
+                transport = parts[2] if len(parts) > 2 else ""
+                model = parts[3] if len(parts) > 3 else ""
+                if transport in ("usb", "sata", "scsi") or "usb" in model.lower():
+                    devices.append({
+                        "name": name,
+                        "path": f"/dev/{name}",
+                        "size": size,
+                        "model": model.strip()
+                    })
+        return devices
+    except FileNotFoundError:
+        return []
+
+def get_mounted_partitions(device_name):
+    """Get list of mounted partitions for a device."""
+    try:
+        result = subprocess.run(
+            ["mount"],
+            capture_output=True, text=True
+        )
+        parts = []
+        for line in result.stdout.split('\n'):
+            if f"/dev/{device_name}" in line and "type" in line:
+                parts.append(line.split()[0])
+        return parts
+    except Exception:
+        return []
+
+def get_device_users(device_path):
+    """Find processes using the device."""
+    try:
+        result = subprocess.run(
+            ["lsof", device_path],
+            capture_output=True, text=True
+        )
+        lines = result.stdout.strip().split('\n')
+        if len(lines) > 1:
+            return lines[1:]
+        return []
+    except FileNotFoundError:
+        return []
+
+def eject_device(device):
+    """Attempt to eject a device and return result with explanation."""
+    device_path = device["path"]
+    device_name = device["name"]
+
+    mounted_parts = get_mounted_partitions(device_name)
+    if mounted_parts:
+        print(f"Unmounting {len(mounted_parts)} partition(s)...")
+        for part in mounted_parts:
+            result = subprocess.run(
+                ["udisksctl", "unmount", "-b", part],
+                capture_output=True, text=True
+            )
+            if result.returncode != 0:
+                return False, f"Failed to unmount {part}: {result.stderr.strip()}"
+
+    result = subprocess.run(
+        ["udisksctl", "unmount", "-b", device_path],
+        capture_output=True, text=True
+    )
+    if result.returncode != 0 and "not mounted" not in result.stderr.lower():
+        pass
+
+    result = subprocess.run(
+        ["udisksctl", "power-off", "-b", device_path],
+        capture_output=True, text=True
+    )
+
+    if result.returncode == 0:
+        return True, "Ejected successfully"
+
+    stderr = result.stderr.lower()
+    if "not authorized" in stderr:
+        return False, "Permission denied. Run with sudo or check udisks2 permissions."
+    if "busy" in stderr or "device is busy" in stderr:
+        users = get_device_users(device_path)
+        if users:
+            return False, f"Device is in use by processes:\n" + "\n".join(users)
+        mounts = subprocess.run(["mount"], capture_output=True, text=True)
+        mounted_parts = [l for l in mounts.stdout.split('\n') if f"/dev/{device_name}" in l]
+        if mounted_parts:
+            return False, f"Device has mounted partitions:\n" + "\n".join(f"  {m}" for m in mounted_parts) + "\nUnmount them first."
+        return False, "Device is busy but couldn't identify the cause."
+    if "no such device" in stderr:
+        return False, "Device not found. It may have already been removed."
+
+    return False, f"Unknown error: {result.stderr.strip()}"
+
+def main():
+    devices = get_block_devices()
+
+    if not devices:
+        print("No removable USB devices found.")
+        sys.exit(0)
+
+    if len(sys.argv) < 2:
+        print("Usage: usb-eject <device-number|device-name>")
+        print("\nAvailable devices:")
+        for i, dev in enumerate(devices):
+            print(f"  [{i}] {dev['path']} {dev['size']} {dev['model']}")
+        sys.exit(1)
+
+    target = sys.argv[1]
+
+    if target.isdigit() and int(target) < len(devices):
+        device = devices[int(target)]
+    else:
+        device = next((d for d in devices if d["name"] == target or d["path"] == target), None)
+
+    if not device:
+        print(f"Device '{target}' not found.")
+        print("\nAvailable devices:")
+        for i, dev in enumerate(devices):
+            print(f"  [{i}] {dev['path']} {dev['size']} {dev['model']}")
+        sys.exit(1)
+
+    print(f"Ejecting {device['path']} ({device['model']})...")
+    success, message = eject_device(device)
+
+    if success:
+        print(f"[OK] {message}")
+    else:
+        print(f"[FAIL] {message}")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
