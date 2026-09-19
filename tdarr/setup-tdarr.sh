@@ -21,7 +21,8 @@ set -Eeo pipefail
 # =============================================================================
 
 # Tdarr configuration
-readonly TDARR_IMAGE="haveagitgat/tdarr_node:latest"
+readonly TDARR_IMAGE="docker.io/haveagitgat/tdarr_node:latest"
+readonly WUD_IMAGE="docker.io/fmartinou/whats-up-docker:latest"
 readonly SERVER_IP="192.168.1.210"
 readonly SERVER_PORT="8266"
 readonly PUID="1000"
@@ -61,6 +62,10 @@ SMB_210_PASS="Jbean343343343"
 # Script options
 START_NOW=false
 NO_START=false
+CLI_ENGINE=""
+PODMAN_SOCKET=""
+SKIP_MOUNTS=false
+IGNORE_MOUNT_FAILURES=false
 
 # Terminal colors
 readonly RED='\033[0;31m'
@@ -248,15 +253,128 @@ detect_distribution() {
 # CONTAINER ENGINE DETECTION AND INSTALLATION
 # =============================================================================
 
+is_real_docker() {
+    if ! command_exists docker; then
+        return 1
+    fi
+    # Check if docker binary is podman emulation (e.g. podman-docker)
+    local ver_info
+    ver_info=$(docker --version 2>&1 || true)
+    if echo "$ver_info" | grep -qi "podman"; then
+        return 1
+    fi
+    if docker info 2>&1 | grep -qiE "podman|buildah"; then
+        return 1
+    fi
+    return 0
+}
+
+resolve_podman_socket() {
+    local sock=""
+    if command_exists podman; then
+        sock=$(podman info --format '{{.Host.RemoteSocket.Path}}' 2>/dev/null || echo "")
+    fi
+    if [ -z "$sock" ] || [ ! -S "$sock" ]; then
+        local user_sock="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/podman/podman.sock"
+        if [ -S "$user_sock" ]; then
+            sock="$user_sock"
+        elif [ -S "/run/podman/podman.sock" ]; then
+            sock="/run/podman/podman.sock"
+        elif [ -S "/var/run/docker.sock" ]; then
+            sock="/var/run/docker.sock"
+        else
+            sock="$user_sock"
+        fi
+    fi
+    echo "$sock"
+}
+
 detect_container_engine() {
     print_section "Detecting container engine..."
     
-    # Check if Docker is already installed
-    if command_exists docker && docker info &>/dev/null 2>&1; then
-        ENGINE="docker"
-        log "INFO" "Docker already installed and running"
+    # 1. Check if user specified engine via CLI or environment
+    if [ -n "$CLI_ENGINE" ]; then
+        case "$CLI_ENGINE" in
+            docker)
+                ENGINE="docker"
+                log "INFO" "Using Docker (specified by CLI flag)"
+                ;;
+            podman)
+                ENGINE="podman"
+                log "INFO" "Using Podman (specified by CLI flag)"
+                ;;
+            *)
+                log "WARN" "Unknown engine '$CLI_ENGINE' specified, falling back to auto-detection"
+                ;;
+        esac
+    elif [ -n "$CONTAINER_ENGINE" ]; then
+        case "$CONTAINER_ENGINE" in
+            docker)
+                ENGINE="docker"
+                log "INFO" "Using Docker (from CONTAINER_ENGINE environment variable)"
+                ;;
+            podman)
+                ENGINE="podman"
+                log "INFO" "Using Podman (from CONTAINER_ENGINE environment variable)"
+                ;;
+            *)
+                log "WARN" "Unknown CONTAINER_ENGINE '$CONTAINER_ENGINE', falling back to auto-detection"
+                ;;
+        esac
+    fi
+    
+    # 2. Auto-detection if not explicitly forced
+    if [ -z "$ENGINE" ]; then
+        local has_real_docker=false
+        local has_podman=false
         
-        # Check for compose
+        if is_real_docker; then
+            has_real_docker=true
+        fi
+        if command_exists podman; then
+            has_podman=true
+        fi
+        
+        if [ "$has_podman" = true ] && [ "$has_real_docker" = false ]; then
+            ENGINE="podman"
+            log "INFO" "Podman detected (no native Docker installation found)"
+        elif [ "$has_podman" = true ] && [ "$has_real_docker" = true ]; then
+            # Both installed: check which daemon or socket is actively running
+            if systemctl is-active --quiet docker 2>/dev/null; then
+                ENGINE="docker"
+                log "INFO" "Docker service is active, using Docker over Podman"
+            elif systemctl --user is-active --quiet podman.socket 2>/dev/null || systemctl is-active --quiet podman.socket 2>/dev/null; then
+                ENGINE="podman"
+                log "INFO" "Podman socket is active, using Podman over Docker"
+            elif ! groups "$USER" 2>/dev/null | grep -q '\<docker\>' && [ "$EUID" -ne 0 ]; then
+                ENGINE="podman"
+                log "INFO" "User is not in docker group; preferring rootless Podman over Docker"
+            else
+                ENGINE="docker"
+                log "INFO" "Both Docker and Podman found; defaulting to Docker"
+            fi
+        elif [ "$has_real_docker" = true ]; then
+            ENGINE="docker"
+            log "INFO" "Docker installed and detected"
+        else
+            ENGINE=""
+            COMPOSE_CMD=""
+            log "INFO" "No container engine detected, will install container engine"
+        fi
+    fi
+    
+    # 3. Detect compose command based on selected engine
+    if [ "$ENGINE" = "podman" ]; then
+        if command_exists podman-compose; then
+            COMPOSE_CMD="podman-compose"
+        elif podman compose version &>/dev/null 2>&1; then
+            COMPOSE_CMD="podman compose"
+        else
+            log "WARN" "podman-compose not found, will install"
+            COMPOSE_CMD=""
+        fi
+        PODMAN_SOCKET="$(resolve_podman_socket)"
+    elif [ "$ENGINE" = "docker" ]; then
         if docker compose version &>/dev/null 2>&1; then
             COMPOSE_CMD="docker compose"
         elif command_exists docker-compose; then
@@ -265,25 +383,9 @@ detect_container_engine() {
             log "WARN" "Docker Compose not found, will install"
             COMPOSE_CMD=""
         fi
-        
-    # Check if Podman is already installed
-    elif command_exists podman; then
-        ENGINE="podman"
-        log "INFO" "Podman already installed"
-        
-        if command_exists podman-compose; then
-            COMPOSE_CMD="podman-compose"
-        else
-            log "WARN" "podman-compose not found, will install"
-            COMPOSE_CMD=""
-        fi
-    else
-        ENGINE=""
-        COMPOSE_CMD=""
-        log "INFO" "No container engine detected, will install Docker"
     fi
     
-    export ENGINE COMPOSE_CMD
+    export ENGINE COMPOSE_CMD PODMAN_SOCKET
 }
 
 install_docker_arch() {
@@ -479,8 +581,27 @@ install_container_engine() {
                 fi
                 ;;
             podman)
-                pip3 install --user podman-compose
-                COMPOSE_CMD="podman-compose"
+                case "$DISTRO" in
+                    arch|steamos)
+                        sudo pacman -Sy --needed --noconfirm podman-compose 2>/dev/null || pip3 install --user podman-compose
+                        ;;
+                    debian|ubuntu)
+                        sudo apt-get install -y podman-compose 2>/dev/null || pip3 install --user podman-compose
+                        ;;
+                    fedora|bazzite)
+                        sudo dnf install -y podman-compose 2>/dev/null || pip3 install --user podman-compose
+                        ;;
+                    *)
+                        pip3 install --user podman-compose
+                        ;;
+                esac
+                if command_exists podman-compose; then
+                    COMPOSE_CMD="podman-compose"
+                elif podman compose version &>/dev/null 2>&1; then
+                    COMPOSE_CMD="podman compose"
+                else
+                    COMPOSE_CMD="podman-compose"
+                fi
                 ;;
         esac
     fi
@@ -609,20 +730,38 @@ enable_services() {
         if ! groups "$USER" | grep -q '\<docker\>'; then
             sudo usermod -aG docker "$USER"
             log "WARN" "Added $USER to docker group - re-login required for rootless access"
-            log "INFO" "Attempting to apply group change in current session..."
-            # Try to apply group change
-            if ! newgrp docker &>/dev/null; then
-                log "WARN" "Could not apply group change in current session"
-            fi
         fi
     fi
     
     # Enable Podman socket if using Podman
     if [ "$ENGINE" = "podman" ]; then
-        if systemctl --user list-unit-files | grep -q podman.socket; then
-            systemctl --user enable --now podman.socket 2>/dev/null || true
-            log "INFO" "Podman socket enabled"
+        # Ensure default search registry is configured for Podman to prevent short-name pull failures
+        local user_containers_dir="$USER_HOME/.config/containers"
+        local user_registries_conf="$user_containers_dir/registries.conf"
+        if [ ! -f /etc/containers/registries.conf ] && [ ! -f "$user_registries_conf" ]; then
+            mkdir -p "$user_containers_dir"
+            cat > "$user_registries_conf" << 'EOFREG'
+unqualified-search-registries = ["docker.io"]
+EOFREG
+            log "INFO" "Configured default search registry (docker.io) in $user_registries_conf"
         fi
+
+        # Enable user lingering so user sockets and rootless containers survive logout
+        if command_exists loginctl; then
+            loginctl enable-linger "$USER" 2>/dev/null || true
+        fi
+
+        if systemctl --user list-unit-files 2>/dev/null | grep -q podman.socket; then
+            systemctl --user enable --now podman.socket 2>/dev/null || true
+            log "INFO" "Podman user socket enabled and started"
+        elif [ "$EUID" -eq 0 ] || command_exists sudo; then
+            sudo systemctl enable --now podman.socket 2>/dev/null || true
+            log "INFO" "Podman system socket enabled and started"
+        fi
+
+        # Refresh socket path
+        PODMAN_SOCKET="$(resolve_podman_socket)"
+        log "INFO" "Podman socket configured: $PODMAN_SOCKET"
     fi
 }
 
@@ -745,6 +884,24 @@ EOFMAP
 validate_mounts() {
     print_section "Validating SMB mounts..."
     
+    # Check if CIFS filesystem support is available or loadable
+    if ! grep -q cifs /proc/filesystems 2>/dev/null; then
+        if ! sudo modprobe cifs &>/dev/null; then
+            if [ ! -d "/lib/modules/$(uname -r)" ]; then
+                log "ERROR" "Kernel module directory /lib/modules/$(uname -r) not found!"
+                log "ERROR" "Your kernel was upgraded (running $(uname -r), installed: $(ls /lib/modules 2>/dev/null | tr '\n' ' '))."
+                log "ERROR" "The CIFS filesystem driver cannot be loaded until the system is rebooted."
+                log "ERROR" "Please reboot your system (sudo reboot) and re-run this script."
+                log "WARN" "Alternatively, run with --skip-mounts or --ignore-mount-failures to proceed without live mounts."
+                if [ "$IGNORE_MOUNT_FAILURES" != true ]; then
+                    exit 1
+                fi
+            else
+                log "WARN" "Could not load CIFS kernel module via modprobe"
+            fi
+        fi
+    fi
+    
     local failed_mounts=()
     local successful_mounts=()
     
@@ -781,14 +938,18 @@ validate_mounts() {
         log "WARN" "You can continue, but Tdarr may not have access to all shares"
         
         if [ ${#successful_mounts[@]} -eq 0 ]; then
-            log "ERROR" "No mounts succeeded. Cannot continue."
-            
-            if prompt_yes_no "Roll back autofs configuration?" "y"; then
-                sudo rm -f "$AUTOFS_MASTER_FILE" "$AUTOFS_MAP"
-                sudo systemctl restart autofs
-                log "INFO" "Autofs configuration rolled back"
+            if [ "$IGNORE_MOUNT_FAILURES" = true ]; then
+                log "WARN" "No mounts succeeded, but continuing setup (--ignore-mount-failures specified)"
+            else
+                log "ERROR" "No mounts succeeded. Cannot continue."
+                
+                if prompt_yes_no "Roll back autofs configuration?" "y"; then
+                    sudo rm -f "$AUTOFS_MASTER_FILE" "$AUTOFS_MAP"
+                    sudo systemctl restart autofs
+                    log "INFO" "Autofs configuration rolled back"
+                fi
+                exit 1
             fi
-            exit 1
         fi
     else
         log "SUCCESS" "All mounts validated successfully!"
@@ -806,9 +967,56 @@ validate_mounts() {
 # =============================================================================
 
 generate_compose_file() {
-    print_section "Generating Docker Compose file..."
+    print_section "Generating Compose file..."
     
-    cat > "$COMPOSE_FILE" << EOF
+    local config_selinux=""
+    if [ "$IS_SELINUX" = true ]; then
+        config_selinux=",z"
+    fi
+
+    if [ "$ENGINE" = "podman" ]; then
+        local socket_to_mount="${PODMAN_SOCKET:-/run/user/$(id -u)/podman/podman.sock}"
+        cat > "$COMPOSE_FILE" << EOF
+version: '3.8'
+
+services:
+  tdarr-node:
+    image: $TDARR_IMAGE
+    container_name: tdarr-node
+    network_mode: host
+    restart: unless-stopped
+    userns_mode: keep-id
+    environment:
+      - serverIP=$SERVER_IP
+      - serverPort=$SERVER_PORT
+      - nodeName=$NODE_NAME
+      - PUID=$PUID
+      - PGID=$PGID
+    volumes:
+      # Media files - mounted as /share to match server paths
+      - $TDARR_MOUNTS/hass_share:/share:rw
+      # Transcode temp directory - on shared storage so server can access
+      - $TDARR_MOUNTS/hass_share/trans:/tmp:rw
+      # Node configuration
+      - $TDARR_CONFIGS:/app/configs:rw$config_selinux
+    labels:
+      - "wud.tag.include=^\\\\d+\\\\.\\\\d+\\\\.\\\\d+$"
+      - "wud.watch=true"
+
+  wud:
+    image: $WUD_IMAGE
+    container_name: wud
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - WUD_LOG_LEVEL=info
+      - WUD_WATCHER_LOCAL_SOCKET=/var/run/docker.sock
+    volumes:
+      - $socket_to_mount:/var/run/docker.sock:ro
+      - $TDARR_BASE/wud:/store$config_selinux
+EOF
+    else
+        cat > "$COMPOSE_FILE" << EOF
 version: '3.8'
 
 services:
@@ -829,13 +1037,13 @@ services:
       # Transcode temp directory - on shared storage so server can access
       - $TDARR_MOUNTS/hass_share/trans:/tmp:rw
       # Node configuration
-      - $TDARR_CONFIGS:/app/configs:rw
+      - $TDARR_CONFIGS:/app/configs:rw$config_selinux
     labels:
       - "wud.tag.include=^\\\\d+\\\\.\\\\d+\\\\.\\\\d+$"
       - "wud.watch=true"
 
   wud:
-    image: fmartinou/whats-up-docker:latest
+    image: $WUD_IMAGE
     container_name: wud
     restart: unless-stopped
     ports:
@@ -844,10 +1052,11 @@ services:
       - WUD_LOG_LEVEL=info
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      - $TDARR_BASE/wud:/store
+      - $TDARR_BASE/wud:/store$config_selinux
 EOF
+    fi
     
-    log "SUCCESS" "Docker Compose file created at $COMPOSE_FILE"
+    log "SUCCESS" "Compose file created at $COMPOSE_FILE (for $ENGINE)"
     log "INFO" "Node name: $NODE_NAME"
     log "INFO" "Server: $SERVER_IP:$SERVER_PORT"
 }
@@ -859,11 +1068,17 @@ EOF
 create_lazydocker_wrapper() {
     print_section "Creating lazydocker wrapper..."
     
+    local docker_host_export=""
+    if [ "$ENGINE" = "podman" ] && [ -n "$PODMAN_SOCKET" ]; then
+        docker_host_export="export DOCKER_HOST=\"unix://$PODMAN_SOCKET\""
+    fi
+    
     cat > "$LAZYDOCKER_WRAPPER" << EOF
 #!/bin/bash
 # Lazydocker wrapper for Tdarr management
 
 export COMPOSE_FILE="$COMPOSE_FILE"
+$docker_host_export
 
 if ! command -v lazydocker &> /dev/null; then
     echo "Error: lazydocker is not installed"
@@ -891,29 +1106,44 @@ start_tdarr_container() {
         sleep 3
     }
     
+    # Ensure podman socket is running if using Podman
+    if [ "$ENGINE" = "podman" ]; then
+        systemctl --user start podman.socket 2>/dev/null || true
+    fi
+    
     # Pull image
     log "INFO" "Pulling Tdarr image: $TDARR_IMAGE"
+    local docker_bin="docker"
+    local compose_bin="$COMPOSE_CMD"
+    if [ "$ENGINE" = "docker" ] && ! docker info &>/dev/null 2>&1; then
+        if sudo docker info &>/dev/null 2>&1; then
+            log "WARN" "Docker socket requires root in current session (re-login needed); using sudo for startup"
+            docker_bin="sudo docker"
+            compose_bin="sudo $COMPOSE_CMD"
+        fi
+    fi
+
     if [ "$ENGINE" = "docker" ]; then
-        docker pull "$TDARR_IMAGE"
+        $docker_bin pull "$TDARR_IMAGE"
     else
         podman pull "$TDARR_IMAGE"
     fi
     
     # Start with compose
-    log "INFO" "Starting Tdarr with: $COMPOSE_CMD"
+    log "INFO" "Starting Tdarr with: $compose_bin"
     cd "$TDARR_BASE"
-    $COMPOSE_CMD -f "$COMPOSE_FILE" up -d
+    $compose_bin -f "$COMPOSE_FILE" up -d
     
     # Wait for container to start
     sleep 5
     
     # Check status
     if [ "$ENGINE" = "docker" ]; then
-        if docker ps --format '{{.Names}}' | grep -q "^tdarr-node$"; then
+        if $docker_bin ps --format '{{.Names}}' | grep -q "^tdarr-node$"; then
             log "SUCCESS" "Tdarr container started successfully!"
         else
             log "ERROR" "Tdarr container failed to start"
-            docker logs tdarr-node --tail 20
+            $docker_bin logs tdarr-node --tail 20 2>&1 || true
             exit 1
         fi
     else
@@ -921,7 +1151,7 @@ start_tdarr_container() {
             log "SUCCESS" "Tdarr container started successfully!"
         else
             log "ERROR" "Tdarr container failed to start"
-            podman logs tdarr-node --tail 20
+            podman logs tdarr-node --tail 20 2>&1 || true
             exit 1
         fi
     fi
@@ -937,6 +1167,9 @@ print_summary() {
     echo -e "${GREEN}✓${NC} Distribution: ${CYAN}$DISTRO${NC}"
     echo -e "${GREEN}✓${NC} Container Engine: ${CYAN}$ENGINE${NC}"
     echo -e "${GREEN}✓${NC} Compose Command: ${CYAN}$COMPOSE_CMD${NC}"
+    if [ "$ENGINE" = "podman" ] && [ -n "$PODMAN_SOCKET" ]; then
+        echo -e "${GREEN}✓${NC} Podman Socket:   ${CYAN}$PODMAN_SOCKET${NC}"
+    fi
     [ "$IS_SELINUX" = true ] && echo -e "${YELLOW}⚠${NC} SELinux: ${CYAN}Enforcing${NC}"
     [ "$IS_OSTREE" = true ] && echo -e "${YELLOW}⚠${NC} OSTree: ${CYAN}Detected${NC}"
     echo ""
@@ -959,7 +1192,11 @@ print_summary() {
     if command_exists lazydocker; then
         echo -e "${CYAN}🐳 Lazydocker (TUI Management):${NC}"
         echo -e "   ${YELLOW}$LAZYDOCKER_WRAPPER${NC}"
-        echo -e "   or: ${YELLOW}cd $TDARR_BASE && lazydocker${NC}"
+        if [ "$ENGINE" = "podman" ] && [ -n "$PODMAN_SOCKET" ]; then
+            echo -e "   or: ${YELLOW}DOCKER_HOST=unix://$PODMAN_SOCKET lazydocker${NC}"
+        else
+            echo -e "   or: ${YELLOW}cd $TDARR_BASE && lazydocker${NC}"
+        fi
         echo ""
     fi
     
@@ -970,7 +1207,7 @@ print_summary() {
     echo -e "              ↳ ${YELLOW}$TDARR_MOUNTS/hass_share${NC} (host)"
     echo ""
     
-    if ! groups "$USER" | grep -q '\<docker\>' && [ "$ENGINE" = "docker" ]; then
+    if ! id -Gn 2>/dev/null | grep -qw docker && [ "$ENGINE" = "docker" ]; then
         echo -e "${YELLOW}⚠ IMPORTANT:${NC} You were added to the docker group."
         echo -e "  You need to ${RED}log out and log back in${NC} for this to take effect."
         echo -e "  Or run: ${YELLOW}newgrp docker${NC}"
@@ -1007,6 +1244,11 @@ USAGE:
 OPTIONS:
     --up, --start-now       Start Tdarr container immediately after setup
     --no-start              Complete setup but don't start the container
+    --podman                Force use of Podman as container engine
+    --docker                Force use of Docker as container engine
+    --engine <engine>       Specify container engine (docker or podman)
+    --skip-mounts           Skip autofs SMB configuration and mount validation
+    --ignore-mount-failures Continue setup even if SMB mounts fail
     --help, -h              Show this help message
 
 DESCRIPTION:
@@ -1020,6 +1262,8 @@ EXAMPLES:
     $0                      # Interactive setup with prompt to start
     $0 --start-now          # Setup and start immediately
     $0 --no-start           # Setup only, don't start container
+    $0 --podman             # Explicitly use Podman
+    $0 --docker             # Explicitly use Docker
 
 EOF
     exit 0
@@ -1034,6 +1278,31 @@ parse_args() {
                 ;;
             --no-start)
                 NO_START=true
+                shift
+                ;;
+            --podman)
+                CLI_ENGINE="podman"
+                shift
+                ;;
+            --docker)
+                CLI_ENGINE="docker"
+                shift
+                ;;
+            --engine)
+                if [ -n "$2" ]; then
+                    CLI_ENGINE="$2"
+                    shift 2
+                else
+                    echo "Error: --engine requires an argument"
+                    exit 1
+                fi
+                ;;
+            --skip-mounts)
+                SKIP_MOUNTS=true
+                shift
+                ;;
+            --ignore-mount-failures)
+                IGNORE_MOUNT_FAILURES=true
                 shift
                 ;;
             --help|-h)
@@ -1080,12 +1349,17 @@ main() {
     
     # Configuration phase
     enable_services
-    setup_smb_credentials
-    setup_directories
-    configure_autofs
-    
-    # Validation phase
-    validate_mounts
+    if [ "$SKIP_MOUNTS" = false ]; then
+        setup_smb_credentials
+        setup_directories
+        configure_autofs
+        
+        # Validation phase
+        validate_mounts
+    else
+        log "INFO" "Skipping SMB mount configuration (--skip-mounts specified)"
+        setup_directories
+    fi
     
     # Generation phase
     generate_compose_file
