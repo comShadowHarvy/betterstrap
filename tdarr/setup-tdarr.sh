@@ -6,8 +6,8 @@
 # Supports: Arch Linux, Debian, Ubuntu, Fedora, SteamOS, and Bazzite
 # 
 # Features:
-# - Auto-detects and installs Docker (preferred) or Podman
-# - Configures autofs for SMB share mounting
+# - Auto-detects installed Docker or Podman, or determines recommended engine to install
+# - Configures on-demand SMB share mounting via systemd automount or autofs
 # - Creates Docker Compose configuration with WUD (What's Up Docker)
 # - Installs and configures lazydocker for management
 # - Monitors container updates with WUD web UI
@@ -64,6 +64,8 @@ START_NOW=false
 NO_START=false
 CLI_ENGINE=""
 PODMAN_SOCKET=""
+MOUNT_METHOD=""
+CLI_MOUNT_METHOD=""
 SKIP_MOUNTS=false
 IGNORE_MOUNT_FAILURES=false
 
@@ -147,6 +149,17 @@ prompt_yes_no() {
     response=${response:-$default}
     
     [[ "$response" =~ ^[Yy]$ ]]
+}
+
+escape_systemd_path() {
+    local p="$1"
+    if command_exists systemd-escape; then
+        systemd-escape --path "$p"
+    else
+        local clean="${p#/}"
+        clean="${clean%/}"
+        echo "${clean//\//-}"
+    fi
 }
 
 # =============================================================================
@@ -337,7 +350,10 @@ detect_container_engine() {
         
         if [ "$has_podman" = true ] && [ "$has_real_docker" = false ]; then
             ENGINE="podman"
-            log "INFO" "Podman detected (no native Docker installation found)"
+            log "INFO" "Podman is already installed (Docker not found) - using Podman"
+        elif [ "$has_real_docker" = true ] && [ "$has_podman" = false ]; then
+            ENGINE="docker"
+            log "INFO" "Docker is already installed (Podman not found) - using Docker"
         elif [ "$has_podman" = true ] && [ "$has_real_docker" = true ]; then
             # Both installed: check which daemon or socket is actively running
             if systemctl is-active --quiet docker 2>/dev/null; then
@@ -346,6 +362,15 @@ detect_container_engine() {
             elif systemctl --user is-active --quiet podman.socket 2>/dev/null || systemctl is-active --quiet podman.socket 2>/dev/null; then
                 ENGINE="podman"
                 log "INFO" "Podman socket is active, using Podman over Docker"
+            elif [ -t 0 ]; then
+                echo ""
+                echo -e "${YELLOW}Both Docker and Podman are installed on this system.${NC}"
+                if prompt_yes_no "Use Docker (Y) or Podman (n)?" "y"; then
+                    ENGINE="docker"
+                else
+                    ENGINE="podman"
+                fi
+                log "INFO" "User selected container engine: $ENGINE"
             elif ! groups "$USER" 2>/dev/null | grep -q '\<docker\>' && [ "$EUID" -ne 0 ]; then
                 ENGINE="podman"
                 log "INFO" "User is not in docker group; preferring rootless Podman over Docker"
@@ -353,13 +378,39 @@ detect_container_engine() {
                 ENGINE="docker"
                 log "INFO" "Both Docker and Podman found; defaulting to Docker"
             fi
-        elif [ "$has_real_docker" = true ]; then
-            ENGINE="docker"
-            log "INFO" "Docker installed and detected"
         else
-            ENGINE=""
-            COMPOSE_CMD=""
-            log "INFO" "No container engine detected, will install container engine"
+            # Neither installed: detect which should be used based on distro/environment
+            local recommended_engine="docker"
+            if [ "$IS_OSTREE" = true ] || [ "$DISTRO" = "bazzite" ] || [ "$DISTRO" = "steamos" ]; then
+                recommended_engine="podman"
+                log "INFO" "OSTree/immutable distribution detected: recommending Podman"
+            else
+                recommended_engine="docker"
+                log "INFO" "Standard distribution detected: recommending Docker"
+            fi
+
+            if [ -t 0 ]; then
+                echo ""
+                echo -e "${YELLOW}No container engine (Docker or Podman) is currently installed.${NC}"
+                echo -e "Detected recommendation for ${CYAN}$DISTRO${NC}: ${GREEN}$recommended_engine${NC}"
+                if [ "$recommended_engine" = "docker" ]; then
+                    if prompt_yes_no "Install recommended engine: Docker? (Choose 'n' for Podman)" "y"; then
+                        ENGINE="docker"
+                    else
+                        ENGINE="podman"
+                    fi
+                else
+                    if prompt_yes_no "Install recommended engine: Podman? (Choose 'n' for Docker)" "y"; then
+                        ENGINE="podman"
+                    else
+                        ENGINE="docker"
+                    fi
+                fi
+                log "INFO" "Selected container engine to install: $ENGINE"
+            else
+                ENGINE="$recommended_engine"
+                log "INFO" "Non-interactive: using recommended container engine to install: $ENGINE"
+            fi
         fi
     fi
     
@@ -386,6 +437,67 @@ detect_container_engine() {
     fi
     
     export ENGINE COMPOSE_CMD PODMAN_SOCKET
+}
+
+# =============================================================================
+# MOUNT METHOD SELECTION
+# =============================================================================
+
+ask_mount_method() {
+    if [ "$SKIP_MOUNTS" = true ]; then
+        MOUNT_METHOD="none"
+        return
+    fi
+    
+    if [ -n "$CLI_MOUNT_METHOD" ]; then
+        case "$CLI_MOUNT_METHOD" in
+            autofs)
+                MOUNT_METHOD="autofs"
+                log "INFO" "Using autofs for SMB shares (specified by CLI flag)"
+                return
+                ;;
+            systemd|systemd-automount)
+                MOUNT_METHOD="systemd"
+                log "INFO" "Using systemd automount for SMB shares (specified by CLI flag)"
+                return
+                ;;
+            *)
+                log "WARN" "Unknown mount method '$CLI_MOUNT_METHOD' specified, will prompt"
+                ;;
+        esac
+    fi
+    
+    print_section "Selecting SMB mount method..."
+    echo -e "How would you like to mount the SMB shares on-demand?"
+    echo -e "  ${GREEN}1)${NC} ${CYAN}systemd automount${NC} (Recommended: native systemd on-demand automount units)"
+    echo -e "  ${GREEN}2)${NC} ${CYAN}autofs${NC} (Traditional autofs daemon and map files)"
+    echo ""
+    
+    if [ -t 0 ]; then
+        while true; do
+            read -p "Use autofs or systemd automount? [1=systemd / 2=autofs] (default: 1): " -r choice
+            choice="${choice:-1}"
+            case "$choice" in
+                1|[Ss]|[Ss][Yy][Ss][Tt][Ee][Mm][Dd]*)
+                    MOUNT_METHOD="systemd"
+                    break
+                    ;;
+                2|[Aa]|[Aa][Uu][Tt][Oo][Ff][Ss]*)
+                    MOUNT_METHOD="autofs"
+                    break
+                    ;;
+                *)
+                    echo "Invalid choice. Please select 1 (systemd) or 2 (autofs)."
+                    ;;
+            esac
+        done
+    else
+        MOUNT_METHOD="systemd"
+        log "INFO" "Non-interactive shell: defaulting to systemd automount"
+    fi
+    
+    log "INFO" "Selected mount method: $MOUNT_METHOD"
+    export MOUNT_METHOD
 }
 
 install_docker_arch() {
@@ -630,36 +742,54 @@ install_base_packages() {
             # Install cifs-utils from official repos
             sudo pacman -Sy --needed --noconfirm cifs-utils
             
-            # Install autofs from AUR if not already installed
-            if ! command_exists automount && ! pacman -Q autofs &>/dev/null; then
-                log "INFO" "Installing autofs from AUR..."
-                if command_exists yay; then
-                    yay -S --needed --noconfirm autofs
-                elif command_exists paru; then
-                    paru -S --needed --noconfirm autofs
+            # Install autofs only if autofs mount method was chosen
+            if [ "$MOUNT_METHOD" = "autofs" ]; then
+                if ! command_exists automount && ! pacman -Q autofs &>/dev/null; then
+                    log "INFO" "Installing autofs from AUR..."
+                    if command_exists yay; then
+                        yay -S --needed --noconfirm autofs
+                    elif command_exists paru; then
+                        paru -S --needed --noconfirm autofs
+                    else
+                        log "WARN" "No AUR helper found (yay/paru). Please install autofs manually:"
+                        log "WARN" "  yay -S autofs   OR   paru -S autofs"
+                        log "WARN" "Then re-run this script."
+                        exit 1
+                    fi
                 else
-                    log "WARN" "No AUR helper found (yay/paru). Please install autofs manually:"
-                    log "WARN" "  yay -S autofs   OR   paru -S autofs"
-                    log "WARN" "Then re-run this script."
-                    exit 1
+                    log "INFO" "autofs already installed"
                 fi
-            else
-                log "INFO" "autofs already installed"
             fi
             ;;
         debian|ubuntu)
             sudo apt-get update
-            sudo apt-get install -y autofs cifs-utils
+            if [ "$MOUNT_METHOD" = "autofs" ]; then
+                sudo apt-get install -y autofs cifs-utils
+            else
+                sudo apt-get install -y cifs-utils
+            fi
             ;;
         fedora)
-            sudo dnf install -y autofs cifs-utils
+            if [ "$MOUNT_METHOD" = "autofs" ]; then
+                sudo dnf install -y autofs cifs-utils
+            else
+                sudo dnf install -y cifs-utils
+            fi
             ;;
         bazzite)
             if [ "$IS_OSTREE" = true ]; then
-                sudo rpm-ostree install -y autofs cifs-utils
+                if [ "$MOUNT_METHOD" = "autofs" ]; then
+                    sudo rpm-ostree install -y autofs cifs-utils
+                else
+                    sudo rpm-ostree install -y cifs-utils
+                fi
                 log "WARN" "OSTree layering applied, reboot required"
             else
-                sudo dnf install -y autofs cifs-utils
+                if [ "$MOUNT_METHOD" = "autofs" ]; then
+                    sudo dnf install -y autofs cifs-utils
+                else
+                    sudo dnf install -y cifs-utils
+                fi
             fi
             ;;
     esac
@@ -715,11 +845,7 @@ install_lazydocker() {
 # =============================================================================
 
 enable_services() {
-    print_section "Enabling services..."
-    
-    # Enable autofs
-    sudo systemctl enable --now autofs
-    log "INFO" "autofs service enabled and started"
+    print_section "Enabling container services..."
     
     # Enable Docker if using Docker
     if [ "$ENGINE" = "docker" ]; then
@@ -826,11 +952,124 @@ setup_directories() {
 }
 
 # =============================================================================
-# AUTOFS CONFIGURATION
+# MOUNT CONFIGURATION (AUTOFS AND SYSTEMD AUTOMOUNT)
 # =============================================================================
+
+configure_systemd_automount() {
+    print_section "Configuring systemd automount for SMB shares..."
+    
+    # Stop and disable autofs if running, remove tdarr autofs master config
+    if [ -f "$AUTOFS_MASTER_FILE" ]; then
+        log "INFO" "Removing autofs tdarr configuration to prevent conflicts..."
+        sudo rm -f "$AUTOFS_MASTER_FILE" "$AUTOFS_MAP"
+        if systemctl is-active --quiet autofs 2>/dev/null; then
+            sudo systemctl restart autofs 2>/dev/null || true
+        fi
+    fi
+    sudo systemctl disable autofs 2>/dev/null || true
+    
+    local config_selinux=""
+    if [ "$IS_SELINUX" = true ] && [ -n "$SELINUX_CONTEXT" ]; then
+        config_selinux="$SELINUX_CONTEXT"
+    fi
+    
+    local unit_names=()
+    for share_name in "${!SMB_SHARES[@]}"; do
+        local share_info="${SMB_SHARES[$share_name]}"
+        local share_unc="${share_info%|*}"
+        local share_auth="${share_info#*|}"
+        local mount_path="$TDARR_MOUNTS/$share_name"
+        local unit_name
+        unit_name=$(escape_systemd_path "$mount_path")
+        unit_names+=("$unit_name")
+        
+        local mount_opts="vers=3.1.1,uid=$PUID,gid=$PGID,iocharset=utf8,soft,actimeo=1,_netdev,nofail"
+        if [ "$share_auth" = "auth" ]; then
+            mount_opts="credentials=$SMB_CREDS_FILE,$mount_opts"
+        else
+            mount_opts="guest,$mount_opts"
+        fi
+        if [ -n "$config_selinux" ]; then
+            mount_opts="${mount_opts}${config_selinux}"
+        fi
+        
+        # Unmount if currently mounted to allow automount unit binding
+        if mountpoint -q "$mount_path" 2>/dev/null; then
+            sudo umount -l "$mount_path" 2>/dev/null || true
+        fi
+        
+        # 1. Generate .mount unit
+        sudo tee "/etc/systemd/system/${unit_name}.mount" > /dev/null << EOF
+[Unit]
+Description=Tdarr SMB Mount for $share_name
+Requires=network-online.target
+After=network-online.target
+Wants=network-online.target
+
+[Mount]
+What=$share_unc
+Where=$mount_path
+Type=cifs
+Options=$mount_opts
+TimeoutSec=15
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+        # 2. Generate .automount unit
+        sudo tee "/etc/systemd/system/${unit_name}.automount" > /dev/null << EOF
+[Unit]
+Description=Tdarr SMB Automount Trigger for $share_name
+Requires=network-online.target
+After=network-online.target
+Wants=network-online.target
+
+[Automount]
+Where=$mount_path
+TimeoutIdleSec=120
+
+[Install]
+WantedBy=multi-user.target
+EOF
+        log "INFO" "Created systemd mount & automount units for $share_name ($unit_name)"
+    done
+    
+    # Reload systemd and enable/start automount units
+    sudo systemctl daemon-reload
+    for unit_name in "${unit_names[@]}"; do
+        sudo systemctl enable --now "${unit_name}.automount"
+    done
+    
+    log "SUCCESS" "Systemd automount units configured and activated"
+}
 
 configure_autofs() {
     print_section "Configuring autofs for SMB shares..."
+    
+    # Stop and disable any existing tdarr systemd automount units to prevent conflicts
+    for share_name in "${!SMB_SHARES[@]}"; do
+        local mount_path="$TDARR_MOUNTS/$share_name"
+        local unit_name
+        unit_name=$(escape_systemd_path "$mount_path")
+        if systemctl is-active --quiet "${unit_name}.automount" 2>/dev/null; then
+            sudo systemctl stop "${unit_name}.automount" 2>/dev/null || true
+        fi
+        if systemctl is-active --quiet "${unit_name}.mount" 2>/dev/null; then
+            sudo systemctl stop "${unit_name}.mount" 2>/dev/null || true
+        fi
+        if [ -f "/etc/systemd/system/${unit_name}.automount" ]; then
+            sudo systemctl disable "${unit_name}.automount" 2>/dev/null || true
+            sudo rm -f "/etc/systemd/system/${unit_name}.automount"
+        fi
+        if [ -f "/etc/systemd/system/${unit_name}.mount" ]; then
+            sudo rm -f "/etc/systemd/system/${unit_name}.mount"
+        fi
+        if mountpoint -q "$mount_path" 2>/dev/null; then
+            sudo umount -l "$mount_path" 2>/dev/null || true
+        fi
+    done
+    sudo systemctl daemon-reload 2>/dev/null || true
     
     # Create auto.master.d directory if it doesn't exist
     sudo mkdir -p "$AUTOFS_MASTER_DIR"
@@ -870,11 +1109,30 @@ EOFMAP
     
     log "INFO" "Created autofs map at $AUTOFS_MAP"
     
-    # Restart autofs to apply changes
+    # Enable and restart autofs to apply changes
+    sudo systemctl enable --now autofs
     sudo systemctl restart autofs
     sleep 2
     
     log "SUCCESS" "Autofs configured and restarted"
+}
+
+configure_mounts() {
+    case "$MOUNT_METHOD" in
+        systemd)
+            configure_systemd_automount
+            ;;
+        autofs)
+            configure_autofs
+            ;;
+        none)
+            log "INFO" "Mount configuration skipped (--skip-mounts)"
+            ;;
+        *)
+            log "WARN" "Unknown mount method '$MOUNT_METHOD', defaulting to systemd automount"
+            configure_systemd_automount
+            ;;
+    esac
 }
 
 # =============================================================================
@@ -943,10 +1201,23 @@ validate_mounts() {
             else
                 log "ERROR" "No mounts succeeded. Cannot continue."
                 
-                if prompt_yes_no "Roll back autofs configuration?" "y"; then
-                    sudo rm -f "$AUTOFS_MASTER_FILE" "$AUTOFS_MAP"
-                    sudo systemctl restart autofs
-                    log "INFO" "Autofs configuration rolled back"
+                if prompt_yes_no "Roll back $MOUNT_METHOD configuration?" "y"; then
+                    if [ "$MOUNT_METHOD" = "autofs" ]; then
+                        sudo rm -f "$AUTOFS_MASTER_FILE" "$AUTOFS_MAP"
+                        sudo systemctl restart autofs 2>/dev/null || true
+                        log "INFO" "Autofs configuration rolled back"
+                    elif [ "$MOUNT_METHOD" = "systemd" ]; then
+                        for failed_share in "${!SMB_SHARES[@]}"; do
+                            local failed_mount_path="$TDARR_MOUNTS/$failed_share"
+                            local failed_unit
+                            failed_unit=$(escape_systemd_path "$failed_mount_path")
+                            sudo systemctl disable --now "${failed_unit}.automount" 2>/dev/null || true
+                            sudo systemctl stop "${failed_unit}.mount" 2>/dev/null || true
+                            sudo rm -f "/etc/systemd/system/${failed_unit}.mount" "/etc/systemd/system/${failed_unit}.automount"
+                        done
+                        sudo systemctl daemon-reload
+                        log "INFO" "Systemd automount configuration rolled back"
+                    fi
                 fi
                 exit 1
             fi
@@ -1164,9 +1435,10 @@ start_tdarr_container() {
 print_summary() {
     print_header "SETUP COMPLETE!"
     
-    echo -e "${GREEN}✓${NC} Distribution: ${CYAN}$DISTRO${NC}"
+    echo -e "${GREEN}✓${NC} Distribution:     ${CYAN}$DISTRO${NC}"
     echo -e "${GREEN}✓${NC} Container Engine: ${CYAN}$ENGINE${NC}"
-    echo -e "${GREEN}✓${NC} Compose Command: ${CYAN}$COMPOSE_CMD${NC}"
+    echo -e "${GREEN}✓${NC} Compose Command:  ${CYAN}$COMPOSE_CMD${NC}"
+    echo -e "${GREEN}✓${NC} Mount Method:     ${CYAN}$MOUNT_METHOD${NC}"
     if [ "$ENGINE" = "podman" ] && [ -n "$PODMAN_SOCKET" ]; then
         echo -e "${GREEN}✓${NC} Podman Socket:   ${CYAN}$PODMAN_SOCKET${NC}"
     fi
@@ -1247,23 +1519,28 @@ OPTIONS:
     --podman                Force use of Podman as container engine
     --docker                Force use of Docker as container engine
     --engine <engine>       Specify container engine (docker or podman)
-    --skip-mounts           Skip autofs SMB configuration and mount validation
+    --autofs                Use autofs for on-demand SMB share mounting
+    --systemd               Use systemd automount for on-demand SMB share mounting
+    --mount-method <method> Specify mount method (systemd or autofs)
+    --skip-mounts           Skip SMB configuration and mount validation
     --ignore-mount-failures Continue setup even if SMB mounts fail
     --help, -h              Show this help message
 
 DESCRIPTION:
     This script sets up a Tdarr transcoding node with:
-    - Docker or Podman container runtime
-    - Autofs-based SMB share mounting
+    - Docker or Podman container runtime (auto-detected or installed)
+    - Systemd automount or autofs on-demand SMB share mounting
     - Lazydocker for easy management
     - Support for Arch, Debian, Ubuntu, Fedora, SteamOS, and Bazzite
 
 EXAMPLES:
-    $0                      # Interactive setup with prompt to start
+    $0                      # Interactive setup with prompts
     $0 --start-now          # Setup and start immediately
     $0 --no-start           # Setup only, don't start container
     $0 --podman             # Explicitly use Podman
     $0 --docker             # Explicitly use Docker
+    $0 --systemd            # Explicitly use systemd automount
+    $0 --autofs             # Explicitly use autofs
 
 EOF
     exit 0
@@ -1294,6 +1571,23 @@ parse_args() {
                     shift 2
                 else
                     echo "Error: --engine requires an argument"
+                    exit 1
+                fi
+                ;;
+            --autofs)
+                CLI_MOUNT_METHOD="autofs"
+                shift
+                ;;
+            --systemd|--systemd-automount)
+                CLI_MOUNT_METHOD="systemd"
+                shift
+                ;;
+            --mount-method)
+                if [ -n "$2" ]; then
+                    CLI_MOUNT_METHOD="$2"
+                    shift 2
+                else
+                    echo "Error: --mount-method requires an argument (systemd or autofs)"
                     exit 1
                 fi
                 ;;
@@ -1341,6 +1635,7 @@ main() {
     # Detection phase
     detect_distribution
     detect_container_engine
+    ask_mount_method
     
     # Installation phase
     install_base_packages
@@ -1352,7 +1647,7 @@ main() {
     if [ "$SKIP_MOUNTS" = false ]; then
         setup_smb_credentials
         setup_directories
-        configure_autofs
+        configure_mounts
         
         # Validation phase
         validate_mounts
