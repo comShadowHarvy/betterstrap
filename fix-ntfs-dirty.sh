@@ -4,21 +4,19 @@
 #
 # Supports: NTFS, exFAT, and VFAT/FAT32
 #
-# Scans system for all external and internal drives/partitions formatted as
-# NTFS, exFAT, or FAT, checks for the volume dirty bit / unclean unmount flag
-# (which causes Linux kernel drivers like ntfs3, exfat, and vfat to refuse
-# read-write mounts, mount read-only, or emit corruption warnings), and safely
-# clears the dirty flag and repairs metadata.
+# Scans system for drives/partitions formatted as NTFS, exFAT, or FAT,
+# checks for the volume dirty bit on-disk (without relying on stale dmesg logs),
+# and safely clears the dirty flag and repairs metadata.
 #
 # Usage:
-#   sudo ./fix-ntfs-dirty.sh [options]
+#   sudo ./fix-drive-dirty.sh [options]
 # =============================================================================
 
 set -Eeuo pipefail
 
 # Script metadata
-readonly SCRIPT_NAME="fix-ntfs-dirty.sh"
-readonly SCRIPT_VERSION="2.0.0"
+readonly SCRIPT_NAME="$(basename "$0")"
+readonly SCRIPT_VERSION="2.1.0"
 
 # Colors for terminal output
 readonly RED='\033[0;31m'
@@ -33,6 +31,9 @@ readonly NC='\033[0m' # No Color
 # Default options
 AUTO_FIX=false
 CHECK_ONLY=false
+FAST_EXFAT=false
+INCLUDE_SYSTEM=false
+DEEP_CHECK=false
 TARGET_DEVICE=""
 TARGET_FSTYPE_FILTER=""
 REMOUNT=true
@@ -109,7 +110,6 @@ check_root() {
 
 detect_package_manager() {
     local tool="$1"
-    local pkg=""
 
     if [ -f /etc/os-release ]; then
         # shellcheck source=/dev/null
@@ -168,6 +168,7 @@ declare -A DEV_UUID=()
 declare -A DEV_SIZE=()
 declare -A DEV_MOUNTPATH=()
 declare -A DEV_IS_DIRTY=()
+declare -A DEV_IS_SYSTEM=()
 
 normalize_fstype() {
     local raw="$1"
@@ -186,6 +187,33 @@ is_supported_fstype() {
         ntfs|exfat|vfat) return 0 ;;
         *) return 1 ;;
     esac
+}
+
+is_system_partition() {
+    local dev="$1"
+    local mount="$2"
+    local label="$3"
+    local parttype="${4:-}"
+
+    # Mounted at critical OS paths
+    case "$mount" in
+        /|/boot|/boot/*|/efi|/efi/*)
+            return 0
+            ;;
+    esac
+
+    # EFI System Partition GUID or MBR type 0xef
+    local pt_lower="${parttype,,}"
+    if [ "$pt_lower" = "c12a7328-f81f-11d2-ba4b-00a0c93ec93b" ] || [ "$pt_lower" = "0xef" ]; then
+        return 0
+    fi
+
+    # Common EFI partition label when unmounted
+    if [ "${label^^}" = "EFI" ]; then
+        return 0
+    fi
+
+    return 1
 }
 
 find_drives() {
@@ -210,11 +238,12 @@ find_drives() {
         fi
 
         local d_name="$TARGET_DEVICE"
-        local d_label d_uuid d_size d_mount
+        local d_label d_uuid d_size d_mount d_parttype
         d_label=$(lsblk -n -o LABEL "$d_name" 2>/dev/null || blkid -o value -s LABEL "$d_name" 2>/dev/null || echo "")
         d_uuid=$(lsblk -n -o UUID "$d_name" 2>/dev/null || blkid -o value -s UUID "$d_name" 2>/dev/null || echo "")
         d_size=$(lsblk -n -o SIZE "$d_name" 2>/dev/null || echo "Unknown")
         d_mount=$(lsblk -n -o MOUNTPOINTS "$d_name" 2>/dev/null | head -n1 || echo "")
+        d_parttype=$(lsblk -n -o PARTTYPE "$d_name" 2>/dev/null || echo "")
 
         DISCOVERED_DEVICES+=("$d_name")
         DEV_FSTYPE["$d_name"]="$norm_fs"
@@ -222,6 +251,7 @@ find_drives() {
         DEV_UUID["$d_name"]="${d_uuid:-<no uuid>}"
         DEV_SIZE["$d_name"]="$d_size"
         DEV_MOUNTPATH["$d_name"]="$d_mount"
+        DEV_IS_SYSTEM["$d_name"]=false
         return
     fi
 
@@ -231,21 +261,28 @@ find_drives() {
             continue
         fi
 
-        local NAME="" FSTYPE="" LABEL="" UUID="" MOUNTPOINTS="" SIZE=""
+        local NAME="" FSTYPE="" LABEL="" UUID="" MOUNTPOINTS="" SIZE="" PARTTYPE=""
         eval "$line"
 
         local norm_fs
         norm_fs=$(normalize_fstype "${FSTYPE:-}")
 
         if is_supported_fstype "$norm_fs"; then
-            # Filter if user requested --ntfs-only or --exfat-only
             if [ -n "$TARGET_FSTYPE_FILTER" ] && [ "$norm_fs" != "$TARGET_FSTYPE_FILTER" ]; then
                 continue
             fi
 
-            # Clean up mountpoint string (handle \x0a if multiple mountpoints)
             local clean_mount
             clean_mount=$(echo -e "${MOUNTPOINTS:-}" | head -n 1)
+
+            local sys_part=false
+            if is_system_partition "$NAME" "$clean_mount" "${LABEL:-}" "${PARTTYPE:-}"; then
+                sys_part=true
+                if [ "$INCLUDE_SYSTEM" = false ]; then
+                    log_info "Skipping system/EFI partition $NAME (${LABEL:-$clean_mount}) — use --include-system to check it"
+                    continue
+                fi
+            fi
 
             DISCOVERED_DEVICES+=("$NAME")
             DEV_FSTYPE["$NAME"]="$norm_fs"
@@ -253,66 +290,35 @@ find_drives() {
             DEV_UUID["$NAME"]="${UUID:-<no uuid>}"
             DEV_SIZE["$NAME"]="${SIZE:-Unknown}"
             DEV_MOUNTPATH["$NAME"]="$clean_mount"
+            DEV_IS_SYSTEM["$NAME"]="$sys_part"
         fi
-    done < <(lsblk -p -P -o NAME,FSTYPE,LABEL,UUID,MOUNTPOINTS,SIZE 2>/dev/null)
-
-    # Secondary check with blkid to catch any unpartitioned or newly attached drives
-    if command -v blkid &>/dev/null; then
-        for check_type in ntfs exfat vfat; do
-            if [ -n "$TARGET_FSTYPE_FILTER" ] && [ "$check_type" != "$TARGET_FSTYPE_FILTER" ]; then
-                continue
-            fi
-            while IFS= read -r dev; do
-                if [ -n "$dev" ] && [ -b "$dev" ]; then
-                    local already_found=false
-                    for existing in "${DISCOVERED_DEVICES[@]}"; do
-                        if [ "$existing" = "$dev" ]; then
-                            already_found=true
-                            break
-                        fi
-                    done
-
-                    if [ "$already_found" = false ]; then
-                        local b_label b_uuid b_size b_mount
-                        b_label=$(blkid -o value -s LABEL "$dev" 2>/dev/null || echo "")
-                        b_uuid=$(blkid -o value -s UUID "$dev" 2>/dev/null || echo "")
-                        b_size=$(lsblk -n -o SIZE "$dev" 2>/dev/null || echo "Unknown")
-                        b_mount=$(lsblk -n -o MOUNTPOINTS "$dev" 2>/dev/null | head -n 1 || echo "")
-
-                        DISCOVERED_DEVICES+=("$dev")
-                        DEV_FSTYPE["$dev"]="$check_type"
-                        DEV_LABEL["$dev"]="${b_label:-<no label>}"
-                        DEV_UUID["$dev"]="${b_uuid:-<no uuid>}"
-                        DEV_SIZE["$dev"]="$b_size"
-                        DEV_MOUNTPATH["$dev"]="$b_mount"
-                    fi
-                fi
-            done < <(blkid -t TYPE="$check_type" -o device 2>/dev/null || true)
-        done
-    fi
+    done < <(lsblk -p -P -o NAME,FSTYPE,LABEL,UUID,MOUNTPOINTS,SIZE,PARTTYPE 2>/dev/null)
 
     if [ ${#DISCOVERED_DEVICES[@]} -eq 0 ]; then
-        log_info "No NTFS, exFAT, or FAT drives found on this system."
+        log_info "No non-system NTFS, exFAT, or FAT drives found on this system."
         exit 0
     fi
 
-    log_success "Found ${#DISCOVERED_DEVICES[@]} compatible device(s)."
+    log_success "Found ${#DISCOVERED_DEVICES[@]} drive(s) to inspect."
 }
 
 # =============================================================================
-# DIRTY BIT CHECKING
+# ON-DISK DIRTY BIT CHECKING (NO STALE DMESG FALSE POSITIVES)
 # =============================================================================
+
+read_exfat_volume_flags() {
+    local dev="$1"
+    dd if="$dev" bs=1 skip=106 count=2 2>/dev/null | od -An -t u2 | tr -d ' \n' || echo ""
+}
 
 check_dirty_exfat() {
     local dev="$1"
-    local dev_basename
-    dev_basename=$(basename "$dev")
 
-    # 1. Direct inspection of VolumeFlags (Byte 106, 2 bytes) in the Volume Boot Record
+    # 1. Direct inspection of VolumeFlags (Byte 106, 2 bytes LE) in the Volume Boot Record
     # Bit 1 (0x0002) is VolumeDirty: 1 = volume is dirty, 0 = clean
     if [ -r "$dev" ]; then
         local vol_flags
-        vol_flags=$(dd if="$dev" bs=1 skip=106 count=2 2>/dev/null | od -An -t u2 | tr -d ' ' || echo "")
+        vol_flags=$(read_exfat_volume_flags "$dev")
         if [ -n "$vol_flags" ] && [[ "$vol_flags" =~ ^[0-9]+$ ]]; then
             if (( vol_flags & 2 )); then
                 echo "exFAT VolumeFlags (0x$(printf '%04x' "$vol_flags")) has VolumeDirty bit set"
@@ -321,18 +327,12 @@ check_dirty_exfat() {
         fi
     fi
 
-    # 2. Check kernel dmesg for recent exFAT mount warnings
-    if dmesg 2>/dev/null | tail -n 100 | grep -qiE "exfat.*${dev_basename}.*properly unmounted|exFAT-fs \(${dev_basename}\): Volume was not properly unmounted"; then
-        echo "Kernel exFAT-fs driver reported: Volume was not properly unmounted"
-        return 0
-    fi
-
-    # 3. Check with fsck.exfat (dry-run / check mode)
-    if command -v fsck.exfat &>/dev/null; then
+    # 2. Optional deep check with fsck.exfat -n (slow on multi-TB HDDs)
+    if [ "$DEEP_CHECK" = true ] && command -v fsck.exfat &>/dev/null; then
         local fsck_out
-        fsck_out=$(fsck.exfat -n "$dev" 2>&1 || fsck.exfat "$dev" 2>&1 || true)
+        fsck_out=$(fsck.exfat -n "$dev" 2>&1 || true)
         if echo "$fsck_out" | grep -qiE 'Volume was not properly unmounted|corrupt|dirty|errors found'; then
-            echo "fsck.exfat reported volume was not properly unmounted"
+            echo "fsck.exfat -n reported errors or unclean state"
             return 0
         fi
     fi
@@ -342,8 +342,6 @@ check_dirty_exfat() {
 
 check_dirty_ntfs() {
     local dev="$1"
-    local dev_basename
-    dev_basename=$(basename "$dev")
 
     # 1. ntfsinfo -m (reads $Volume flags directly)
     if command -v ntfsinfo &>/dev/null; then
@@ -355,18 +353,12 @@ check_dirty_ntfs() {
         fi
     fi
 
-    # 2. Check kernel dmesg for ntfs3 rejection
-    if dmesg 2>/dev/null | tail -n 100 | grep -qiE "ntfs3:.*${dev_basename}.*volume is dirty"; then
-        echo "Kernel ntfs3 reported: volume is dirty"
-        return 0
-    fi
-
-    # 3. ntfsfix -n (dry-run diagnostics)
+    # 2. ntfsfix -n (dry-run diagnostics)
     if command -v ntfsfix &>/dev/null; then
         local ntfsfix_out
         ntfsfix_out=$(ntfsfix -n "$dev" 2>&1 || true)
         if echo "$ntfsfix_out" | grep -qiE 'volume is corrupt|volume is dirty|startup data can be fixed|dirty flag is set'; then
-            echo "ntfsfix reported dirty flag or unclean shutdown"
+            echo "ntfsfix -n reported dirty flag or unclean shutdown"
             return 0
         fi
     fi
@@ -376,21 +368,13 @@ check_dirty_ntfs() {
 
 check_dirty_vfat() {
     local dev="$1"
-    local dev_basename
-    dev_basename=$(basename "$dev")
 
-    # 1. Check kernel dmesg
-    if dmesg 2>/dev/null | tail -n 100 | grep -qiE "FAT-fs.*${dev_basename}.*properly unmounted|FAT-fs.*Volume was not properly unmounted"; then
-        echo "Kernel FAT-fs reported: Volume was not properly unmounted"
-        return 0
-    fi
-
-    # 2. fsck.vfat -n check
+    # fsck.vfat -n checks the actual on-disk FAT dirty bit without modifying anything
     if command -v fsck.vfat &>/dev/null; then
         local fsck_out
         fsck_out=$(fsck.vfat -n "$dev" 2>&1 || true)
-        if echo "$fsck_out" | grep -qiE 'Dirty bit is set|Filesystem has been marked dirty|properly unmounted'; then
-            echo "fsck.vfat reported dirty bit is set"
+        if echo "$fsck_out" | grep -qiE 'Dirty bit is set|Filesystem has been marked dirty'; then
+            echo "fsck.vfat -n reported Dirty bit is set"
             return 0
         fi
     fi
@@ -435,6 +419,69 @@ check_dirty_bit() {
 # DIRTY BIT REPAIR
 # =============================================================================
 
+fast_clear_exfat_dirty_bit() {
+    local dev="$1"
+
+    log_info "Clearing exFAT VolumeDirty bit directly in primary & backup VBR..."
+
+    if command -v python3 &>/dev/null; then
+        python3 - "$dev" << 'PYEOF'
+import struct, sys
+
+dev = sys.argv[1]
+with open(dev, "r+b") as f:
+    vbr = bytearray(f.read(512))
+    if len(vbr) < 512 or vbr[3:11] != b"EXFAT   ":
+        print("Error: Not a valid exFAT Volume Boot Record", file=sys.stderr)
+        sys.exit(1)
+
+    bps_shift = vbr[108]
+    if bps_shift < 9 or bps_shift > 12:
+        print(f"Error: Unexpected BytesPerSectorShift={bps_shift}", file=sys.stderr)
+        sys.exit(1)
+    sector_size = 1 << bps_shift
+
+    flags = struct.unpack_from("<H", vbr, 106)[0]
+    new_flags = flags & ~0x0002
+    print(f"Primary VBR VolumeFlags: 0x{flags:04x} -> 0x{new_flags:04x}")
+
+    # Primary VBR (sector 0, offset 106)
+    struct.pack_into("<H", vbr, 106, new_flags)
+    f.seek(0)
+    f.write(vbr)
+
+    # Backup VBR (sector 12, offset 106)
+    backup_offset = 12 * sector_size
+    f.seek(backup_offset)
+    bvbr = bytearray(f.read(512))
+    if len(bvbr) == 512 and bvbr[3:11] == b"EXFAT   ":
+        bflags = struct.unpack_from("<H", bvbr, 106)[0]
+        bnew_flags = bflags & ~0x0002
+        print(f"Backup VBR VolumeFlags:  0x{bflags:04x} -> 0x{bnew_flags:04x}")
+        struct.pack_into("<H", bvbr, 106, bnew_flags)
+        f.seek(backup_offset)
+        f.write(bvbr)
+
+    f.flush()
+PYEOF
+    else
+        # Pure shell fallback using dd (clears bit 1 of byte 106 in sector 0)
+        local vol_flags new_flags low_byte hex_byte
+        vol_flags=$(read_exfat_volume_flags "$dev")
+        if [ -z "$vol_flags" ] || ! [[ "$vol_flags" =~ ^[0-9]+$ ]]; then
+            log_error "Could not read exFAT VolumeFlags from $dev"
+            return 1
+        fi
+        new_flags=$(( vol_flags & ~2 ))
+        low_byte=$(( new_flags & 255 ))
+        hex_byte=$(printf '\\x%02x' "$low_byte")
+        printf '%b' "$hex_byte" | dd of="$dev" bs=1 seek=106 count=1 conv=notrunc status=none
+        log_info "Updated Primary VBR VolumeFlags: 0x$(printf '%04x' "$vol_flags") -> 0x$(printf '%04x' "$new_flags")"
+    fi
+
+    sync
+}
+
 fix_drive() {
     local dev="$1"
     local fs="${DEV_FSTYPE[$dev]}"
@@ -451,7 +498,7 @@ fix_drive() {
         fi
 
         log_info "Device $dev is currently mounted at '${mountpoint}'. Unmounting for repair..."
-        if ! umount "$dev" 2>/dev/null && ! umount -l "$dev" 2>/dev/null; then
+        if ! umount "$dev" 2>/dev/null; then
             log_error "Failed to unmount $dev. Please close any files or processes accessing $mountpoint."
             return 1
         fi
@@ -459,23 +506,43 @@ fix_drive() {
     fi
 
     # Execute filesystem specific fix
-    local fix_success=false
-
     case "$fs" in
         exfat)
-            if ! command -v fsck.exfat &>/dev/null; then
-                local inst
-                inst=$(detect_package_manager fsck.exfat)
-                log_error "Missing 'fsck.exfat' (package: exfatprogs). Install with: sudo $inst"
-                return 1
+            local use_fast="$FAST_EXFAT"
+            if [ "$use_fast" = false ] && [ "$AUTO_FIX" = false ] && [ -t 0 ]; then
+                echo ""
+                echo -e "${YELLOW}Note:${NC} A full 'fsck.exfat' on a multi-TB USB drive (${DEV_SIZE[$dev]}) can take a long time."
+                echo -e "  ${GREEN}1)${NC} Fast clear (clears VolumeDirty bit in VBR in <1s, like ntfsfix -d)"
+                echo -e "  ${GREEN}2)${NC} Full fsck.exfat scan & repair (verifies all files/clusters with live progress)"
+                read -p "Choose repair mode [1=fast / 2=full] (default: 1): " -r exfat_choice
+                exfat_choice="${exfat_choice:-1}"
+                if [ "$exfat_choice" = "1" ]; then
+                    use_fast=true
+                fi
             fi
 
-            log_info "Running: fsck.exfat -y -v $dev"
-            if fsck.exfat -y -v "$dev" 2>&1 | sed 's/^/  │ /'; then
-                fix_success=true
-                log_success "fsck.exfat successfully repaired and cleared dirty flag on $dev."
+            if [ "$use_fast" = true ]; then
+                if fast_clear_exfat_dirty_bit "$dev"; then
+                    log_success "Fast-cleared exFAT dirty bit on $dev."
+                else
+                    log_error "Failed to fast-clear exFAT dirty bit on $dev."
+                    return 1
+                fi
             else
-                log_error "fsck.exfat encountered issues repairing $dev."
+                if ! command -v fsck.exfat &>/dev/null; then
+                    local inst
+                    inst=$(detect_package_manager fsck.exfat)
+                    log_error "Missing 'fsck.exfat' (package: exfatprogs). Install with: sudo $inst"
+                    return 1
+                fi
+
+                log_info "Running: fsck.exfat -y -P $dev (unbuffered live output)"
+                # Run directly without pipe buffering so progress bar updates live
+                if fsck.exfat -y -P "$dev"; then
+                    log_success "fsck.exfat successfully repaired and cleared dirty flag on $dev."
+                else
+                    log_error "fsck.exfat encountered issues repairing $dev."
+                fi
             fi
             ;;
 
@@ -488,8 +555,7 @@ fix_drive() {
             fi
 
             log_info "Running: ntfsfix -d $dev"
-            if ntfsfix -d "$dev" 2>&1 | sed 's/^/  │ /'; then
-                fix_success=true
+            if ntfsfix -d "$dev"; then
                 log_success "ntfsfix successfully cleared the dirty flag on $dev."
             else
                 log_error "ntfsfix failed to clear dirty flag on $dev."
@@ -505,8 +571,7 @@ fix_drive() {
             fi
 
             log_info "Running: fsck.vfat -a -w $dev"
-            if fsck.vfat -a -w "$dev" 2>&1 | sed 's/^/  │ /'; then
-                fix_success=true
+            if fsck.vfat -a -w "$dev"; then
                 log_success "fsck.vfat successfully repaired and cleared dirty flag on $dev."
             else
                 log_error "fsck.vfat encountered issues on $dev."
@@ -525,8 +590,8 @@ fix_drive() {
         fi
     fi
 
-    # Re-verify dirty status
-    log_info "Verifying volume status post-fix..."
+    # Re-verify on-disk dirty status
+    log_info "Verifying on-disk volume status post-fix..."
     check_dirty_bit "$dev"
     if [ "${DEV_IS_DIRTY[$dev]}" = false ]; then
         log_success "Verified: $dev is now clean!"
@@ -579,8 +644,8 @@ show_help() {
 Windows-Compatible Drive Dirty Bit Detector and Fixer (v$SCRIPT_VERSION)
 Supports: NTFS, exFAT, and VFAT/FAT32
 
-Searches for all NTFS, exFAT, and FAT drives/partitions, identifies any with the
-dirty bit / unclean unmount flag set, and repairs them cleanly.
+Searches for non-system NTFS, exFAT, and FAT drives/partitions, checks the actual
+on-disk dirty bit, and repairs/clears it cleanly.
 
 USAGE:
     sudo $SCRIPT_NAME [OPTIONS]
@@ -588,6 +653,9 @@ USAGE:
 OPTIONS:
     -c, --check, --dry-run      Check drives and report status only (do not modify)
     -f, --fix, -y, --yes        Automatically fix all dirty drives without prompting
+    --fast                      Fast-clear exFAT VolumeDirty bit in VBR (<1s, skips full scan)
+    --deep-check                Also run fsck.exfat -n during detection (slow on large HDDs)
+    --include-system            Include EFI / /boot / root system partitions in scan
     -d, --device <device>       Inspect/fix a specific device only (e.g. /dev/sda2)
     --ntfs                      Only scan NTFS drives
     --exfat                     Only scan exFAT drives
@@ -596,11 +664,10 @@ OPTIONS:
     -h, --help                  Show this help message and exit
 
 EXAMPLES:
-    sudo ./$SCRIPT_NAME                    # Interactive scan of all NTFS, exFAT, and FAT drives
+    sudo ./$SCRIPT_NAME                    # Interactive scan of data drives
     sudo ./$SCRIPT_NAME --check            # Check and report status without modifying
-    sudo ./$SCRIPT_NAME -y                 # Automatically find and fix all dirty drives
-    sudo ./$SCRIPT_NAME -d /dev/sda2       # Fix specific partition (e.g. Seagate /dev/sda2)
-    sudo ./$SCRIPT_NAME --exfat -y         # Scan and auto-fix all exFAT drives
+    sudo ./$SCRIPT_NAME -d /dev/sda2 --fast -y  # Fast-clear dirty bit on /dev/sda2
+    sudo ./$SCRIPT_NAME -y                 # Automatically fix all dirty drives
 
 EOF
     exit 0
@@ -615,6 +682,18 @@ parse_args() {
                 ;;
             -f|--fix|-y|--yes|--auto)
                 AUTO_FIX=true
+                shift
+                ;;
+            --fast)
+                FAST_EXFAT=true
+                shift
+                ;;
+            --deep-check)
+                DEEP_CHECK=true
+                shift
+                ;;
+            --include-system)
+                INCLUDE_SYSTEM=true
                 shift
                 ;;
             -d|--device)
@@ -668,7 +747,7 @@ main() {
     find_drives
 
     # Step 2: Check dirty bit on each drive
-    print_section "Checking filesystem integrity and dirty flags..."
+    print_section "Checking on-disk filesystem dirty flags..."
     local dirty_count=0
     declare -a dirty_drives=()
 
