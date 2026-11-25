@@ -27,7 +27,7 @@ readonly SERVER_IP="192.168.1.210"
 readonly SERVER_PORT="8266"
 readonly PUID="1000"
 readonly PGID="1000"
-NODE_NAME="$(hostname)-node"
+NODE_NAME="${HOSTNAME:-$(uname -n)}-node"
 
 # Path configuration
 readonly USER_HOME="$HOME"
